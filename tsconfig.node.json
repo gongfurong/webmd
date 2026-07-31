@@ -1,0 +1,22 @@
+{
+  // Node 侧 TypeScript（vite 配置、scripts）
+  // 与 tsconfig.json 分工：有 Node 类型、无 DOM；include 不与 app 重叠
+  "compilerOptions": {
+    "target": "ES2022",
+    // 仅 Node 环境，不含 DOM
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    // Node 全局类型（fs、path、process 等）
+    "types": ["node"]
+  },
+  // 只包含在 Node 里执行的文件（不与 src 重复）
+  "include": ["vite.config.ts", "scripts/**/*.ts", "config/**/*.ts", "site.config.ts"]
+}

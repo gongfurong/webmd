@@ -1,0 +1,33 @@
+# 依赖
+node_modules/
+
+# 构建产物（可重建）
+dist/
+
+# 日志与缓存
+*.log
+.npm
+.cache/
+.vite/
+
+# 本地环境
+.env
+.env.*
+!.env.example
+
+# 系统杂项
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# 可选：IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# 生成的导航索引（npm run scan / dev / build 会重写）
+public/tree.json
+
+# 旧流程遗留的 content 镜像（若仍存在，勿提交）
+public/content/

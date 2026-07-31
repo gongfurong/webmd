@@ -1,0 +1,40 @@
+{
+  "name": "webmd",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "个人 Wiki：静态 HTML + GitHub 风 Markdown",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "scripts": {
+    "dev": "tsx scripts/ensure-port.ts && vite",
+    "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build && tsx scripts/build-site.ts",
+    "search-index": "tsx -e \"import {buildSearchIndex} from './scripts/lib/search-index.ts';import fs from 'fs';import path from 'path';const c=path.join(process.cwd(),'content');const i=buildSearchIndex(c);fs.mkdirSync('public',{recursive:true});fs.writeFileSync('public/search-index.json',JSON.stringify(i));console.log('[search-index]',i.docs.length,'docs');\"",
+    "preview": "tsx scripts/ensure-port.ts && vite preview",
+    "scan": "tsx scripts/scan-content.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
+  },
+  "dependencies": {
+    "github-markdown-css": "^5.8.1",
+    "github-slugger": "^2.0.0",
+    "highlight.js": "^11.11.1",
+    "isomorphic-dompurify": "^3.20.0",
+    "katex": "^0.18.1",
+    "markdown-it": "^14.1.0",
+    "markdown-it-anchor": "^9.2.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "marked": "^18.0.7",
+    "marked-gfm-heading-id": "^4.1.4",
+    "mermaid": "^11.16.0",
+    "minisearch": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/github-slugger": "^1.3.0",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vite": "^6.3.5"
+  }
+}

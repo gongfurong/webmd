@@ -1,0 +1,5 @@
+{
+  "name": "sample",
+  "formats": ["md", "txt", "png", "jpg", "pdf", "json"],
+  "browse": "/browse/"
+}

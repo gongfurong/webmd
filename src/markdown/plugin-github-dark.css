@@ -1,0 +1,198 @@
+/**
+ * 本地 Markdown 查看器 正文深色补丁（自 content.js 抽取）
+ * 来源：https://github.com/mutsuya117/local-markdown-viewer
+ * 选择器改为 html[data-theme="dark"] 以匹配 WebMD 主题开关。
+ */
+html[data-theme="dark"] .markdown-body {
+  color: #c9d1d9;
+  background-color: #0d1117;
+}
+
+html[data-theme="dark"] .markdown-body a {
+  color: #58a6ff;
+}
+
+html[data-theme="dark"] .markdown-body h1,
+html[data-theme="dark"] .markdown-body h2 {
+  border-bottom-color: #21262d;
+}
+
+html[data-theme="dark"] .markdown-body h6 {
+  color: #8b949e;
+}
+
+html[data-theme="dark"] .markdown-body blockquote {
+  color: #8b949e;
+  border-left-color: #3b434b;
+}
+
+html[data-theme="dark"] .markdown-body code {
+  background-color: rgba(110, 118, 129, 0.4);
+}
+
+html[data-theme="dark"] .markdown-body pre {
+  background-color: #1c2128;
+}
+
+/*
+ * 关键：dark 下 .markdown-body code 有行内灰底；pre 内必须清掉，
+ * 否则多行 code 按「行盒」铺底（每行一条灰条）。浅色表已有 pre code 透明。
+ * 与插件 content.js 中 pre code.hljs 背景清理一致。
+ */
+html[data-theme="dark"] .markdown-body pre code {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  line-height: inherit;
+  word-wrap: normal;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0;
+  border-radius: 0;
+  font-size: 100%;
+}
+
+html[data-theme="dark"] .markdown-body table th {
+  background-color: #1c2128;
+  border-color: #3b434b;
+}
+
+html[data-theme="dark"] .markdown-body table td {
+  border-color: #3b434b;
+}
+
+html[data-theme="dark"] .markdown-body table tr {
+  background-color: #0d1117;
+  border-top-color: #21262d;
+}
+
+html[data-theme="dark"] .markdown-body table tr:nth-child(2n) {
+  background-color: #1c2128;
+}
+
+html[data-theme="dark"] .markdown-body hr {
+  background-color: #21262d;
+}
+
+html[data-theme="dark"] .markdown-body input[type="checkbox"] {
+  background-color: #0d1117;
+  border-color: #3b434b;
+}
+
+html[data-theme="dark"] .markdown-body input[type="checkbox"]:checked {
+  background-color: #1f6feb;
+  border-color: #1f6feb;
+}
+
+html[data-theme="dark"] .markdown-body input[type="checkbox"]:hover {
+  border-color: #58a6ff;
+}
+
+html[data-theme="dark"] .hljs {
+  color: #c9d1d9;
+  background-color: #1c2128 !important;
+}
+
+html[data-theme="dark"] .hljs,
+html[data-theme="dark"] .hljs *,
+html[data-theme="dark"] .hljs span,
+html[data-theme="dark"] .hljs > *,
+html[data-theme="dark"] pre code.hljs,
+html[data-theme="dark"] pre code.hljs *,
+html[data-theme="dark"] code.hljs,
+html[data-theme="dark"] code.hljs *,
+html[data-theme="dark"] .hljs [class*="hljs-"] {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+html[data-theme="dark"] .hljs-comment,
+html[data-theme="dark"] .hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+
+html[data-theme="dark"] .hljs-keyword,
+html[data-theme="dark"] .hljs-selector-tag,
+html[data-theme="dark"] .hljs-subst {
+  color: #ff7b72;
+}
+
+html[data-theme="dark"] .hljs-number,
+html[data-theme="dark"] .hljs-literal,
+html[data-theme="dark"] .hljs-variable,
+html[data-theme="dark"] .hljs-template-variable,
+html[data-theme="dark"] .hljs-tag .hljs-attr {
+  color: #79c0ff;
+}
+
+html[data-theme="dark"] .hljs-string,
+html[data-theme="dark"] .hljs-doctag {
+  color: #a5d6ff;
+}
+
+html[data-theme="dark"] .hljs-title,
+html[data-theme="dark"] .hljs-section,
+html[data-theme="dark"] .hljs-selector-id {
+  color: #d2a8ff;
+  font-weight: bold;
+}
+
+html[data-theme="dark"] .hljs-subst {
+  font-weight: normal;
+}
+
+html[data-theme="dark"] .hljs-type,
+html[data-theme="dark"] .hljs-class .hljs-title {
+  color: #ffa657;
+}
+
+html[data-theme="dark"] .hljs-tag,
+html[data-theme="dark"] .hljs-name,
+html[data-theme="dark"] .hljs-attribute {
+  color: #7ee787;
+  font-weight: normal;
+}
+
+html[data-theme="dark"] .hljs-regexp,
+html[data-theme="dark"] .hljs-link {
+  color: #a5d6ff;
+}
+
+html[data-theme="dark"] .hljs-symbol,
+html[data-theme="dark"] .hljs-bullet {
+  color: #ffa657;
+}
+
+html[data-theme="dark"] .hljs-built_in,
+html[data-theme="dark"] .hljs-builtin-name {
+  color: #ffa657;
+}
+
+html[data-theme="dark"] .hljs-meta {
+  color: #79c0ff;
+}
+
+html[data-theme="dark"] .hljs-deletion {
+  background-color: #490202 !important;
+  color: #ffdcd7;
+}
+
+html[data-theme="dark"] .hljs-addition {
+  background-color: #0f5323 !important;
+  color: #aff5b4;
+}
+
+html[data-theme="dark"] .hljs-emphasis {
+  font-style: italic;
+}
+
+html[data-theme="dark"] .hljs-strong {
+  font-weight: bold;
+}
+
+html[data-theme="dark"] .hljs-formula {
+  color: #79c0ff;
+}
+

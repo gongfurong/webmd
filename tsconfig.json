@@ -1,0 +1,35 @@
+{
+  // 应用 / 浏览器侧 TypeScript（行业：与 tsconfig.node 分工，不重复 include）
+  // 参考：Vite 官方模板将「页面代码」与「Node 配置」分开
+  "compilerOptions": {
+    // 编译目标：输出语法接近的 JS 版本（实际打包由 Vite 处理）
+    "target": "ES2022",
+    // 类型库：浏览器 DOM + 现代 JS
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // 使用 ES 模块
+    "module": "ESNext",
+    // 交给 Vite/打包器解析模块路径
+    "moduleResolution": "Bundler",
+    // 允许 import JSON
+    "resolveJsonModule": true,
+    // 与 Vite/esbuild 单文件转译兼容
+    "isolatedModules": true,
+    // 不单独 emit .js，由 Vite 打包
+    "noEmit": true,
+    // 严格类型检查
+    "strict": true,
+    // 跳过对 node_modules 里 .d.ts 的严格检查（加快、少噪音）
+    "skipLibCheck": true,
+    // 未使用的局部变量报错
+    "noUnusedLocals": true,
+    // 未使用的参数报错
+    "noUnusedParameters": true,
+    // switch 漏写 break 等报错
+    "noFallthroughCasesInSwitch": true,
+    // Vite 客户端类型（import.meta.env 等）
+    "types": ["vite/client"]
+  },
+  // 只包含「跑在浏览器里」的应用代码与会被前端 import 的配置
+  "include": ["src/**/*.ts", "config/**/*.ts", "site.config.ts"],
+  "exclude": ["scripts/**"]
+}

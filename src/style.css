@@ -1,0 +1,3350 @@
+/* WebMD 壳层 + 中间正文（正文 = 本地 Markdown 查看器完整样式栈） */
+@import './markdown/plugin-github-light.css';
+@import './markdown/plugin-hljs-github.min.css';
+@import './markdown/plugin-github-dark.css';
+
+:root {
+	/* —— 布局 —— */
+	--header-h: 60px;
+	--wiki-nav: 280px;
+	--wiki-toc: 240px;
+	--wiki-g-nav: 5px;
+	--wiki-g-toc: 5px;
+	--bottom-bar-h: 2.5rem;
+	/* 左文件 / 中路径 / 右大纲：统一顶栏高度 */
+	--pane-bar-h: 2.5rem;
+	/* 中栏固定模式 max：由 JS 设为 视口−左右栏；此处为首屏回退 */
+	--content-readable-max: min(100%, calc(100vw - 280px - 240px - 44px));
+
+	/* —— 色板（浅色，壳层与 GitHub 正文体系统一）—— */
+	--bg: #ffffff;
+	--bg-muted: #f6f8fa;
+	--bg-sidebar: #f6f8fa;
+	--bg-elevated: #ffffff;
+	--fg: #1f2328;
+	--fg-muted: #656d76;
+	--border: #d0d7de;
+	--border-strong: #afb8c1;
+	--accent: #0969da;
+	--accent-hover: #0550ae;
+	--accent-solid: #0969da;
+	--accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+	--accent-softer: color-mix(in srgb, var(--accent) 7%, transparent);
+	--code-bg: #f6f8fa;
+	--code-fg: #1f2328;
+	--inline-code-bg: color-mix(in srgb, var(--accent) 8%, var(--bg-muted));
+	--danger-fg: #cf222e;
+	--danger-bg: #ffebe9;
+	--shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.06);
+	--shadow: 0 12px 40px rgba(31, 35, 40, 0.14);
+	--overlay: rgba(31, 35, 40, 0.45);
+	/* 导航：文件夹≈小标题，文件略淡；图标 Win11 硬黄 */
+	--nav-active-bg: color-mix(in srgb, var(--accent) 10%, transparent);
+	--nav-active-fg: var(--accent);
+	--nav-hover-bg: color-mix(in srgb, var(--fg) 4%, transparent);
+	--nav-dir-fs: 0.875rem; /* 14px：文件夹大一号 */
+	--nav-file-fs: 0.8125rem; /* 13px：文件 */
+	--nav-item-fs: var(--nav-file-fs);
+	--nav-item-lh: 1.35;
+	--nav-item-py: 0.3rem;
+	--nav-item-px: 0.5rem;
+	--nav-label: #1f2328; /* 文件夹名：接近正文，偏标题 */
+	--nav-label-file: #656d76;
+	--nav-count: #8b949e;
+	--nav-icon-size: 1.05rem;
+	--header-bg: color-mix(in srgb, var(--bg) 92%, transparent);
+	/* Windows 11 Fluent 金黄（硬朗、饱和） */
+	--folder-back: #ffc83d;
+	--folder-tab: #ffc83d;
+	--folder-body: #ffb900;
+	--folder-gloss: #ffd978;
+	--folder-fill: #ffb900;
+	--folder-shine: #ffd978;
+	--folder-icon: #ffb900;
+	--file-icon: #605e5c;
+	--file-page: #faf9f8;
+	--file-page-edge: #c8c6c4;
+	--file-stripe: #0078d4;
+	--file-md: #0078d4;
+	--file-text: #605e5c;
+	--file-image: #ca5010;
+	--file-video: #8764b8;
+	--file-audio: #107c10;
+	--file-pdf: #d13438;
+	--home-fill: #0078d4;
+	--radius: 8px;
+	--radius-sm: 6px;
+	--radius-pill: 999px;
+
+	/* —— 字体（壳层与搜索统一）—— */
+	--font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', 'PingFang SC',
+		'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Helvetica, Arial, sans-serif,
+		'Apple Color Emoji', 'Segoe UI Emoji';
+	--font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+		'Courier New', monospace;
+	--font-size: 16px;
+	--font-size-ui: 0.8125rem;
+	--font-size-ui-sm: 0.75rem;
+	--line-height: 1.5;
+	--letter-tight: -0.01em;
+
+	font-family: var(--font-sans);
+	font-size: var(--font-size);
+	line-height: var(--line-height);
+	color: var(--fg);
+	background: var(--bg);
+	color-scheme: light;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+}
+
+/* 深色：GitHub 系，与正文 plugin-github-dark 一致 */
+html[data-theme='dark'] {
+	--bg: #0d1117;
+	--bg-muted: #161b22;
+	--bg-sidebar: #010409;
+	--bg-elevated: #161b22;
+	--fg: #e6edf3;
+	--fg-muted: #8b949e;
+	--border: #30363d;
+	--border-strong: #484f58;
+	--accent: #2f81f7;
+	--accent-hover: #58a6ff;
+	--accent-solid: #2f81f7;
+	--code-bg: #161b22;
+	--code-fg: #e6edf3;
+	--inline-code-bg: color-mix(in srgb, var(--accent) 16%, var(--bg-muted));
+	--danger-fg: #ff7b72;
+	--danger-bg: #490202;
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+	--shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+	--overlay: rgba(1, 4, 9, 0.72);
+	--nav-active-bg: color-mix(in srgb, var(--accent) 14%, transparent);
+	--nav-active-fg: var(--accent);
+	--nav-hover-bg: color-mix(in srgb, #fff 5%, transparent);
+	--nav-label: #e6edf3;
+	--nav-label-file: #8b949e;
+	--nav-count: #6e7681;
+	--header-bg: color-mix(in srgb, var(--bg) 88%, transparent);
+	/* 深色下仍保持鲜明黄 */
+	--folder-back: #f0c040;
+	--folder-tab: #f0c040;
+	--folder-body: #e3b341;
+	--folder-gloss: #f5d060;
+	--folder-fill: #e3b341;
+	--folder-shine: #f5d060;
+	--folder-icon: #e3b341;
+	--file-icon: #8b949e;
+	--file-page: #21262d;
+	--file-page-edge: #484f58;
+	--file-stripe: #58a6ff;
+	--file-md: #58a6ff;
+	--file-text: #8b949e;
+	--file-image: #db6d28;
+	--file-video: #a371f7;
+	--file-audio: #3fb950;
+	--file-pdf: #f85149;
+	--home-fill: #58a6ff;
+	color-scheme: dark;
+	color: var(--fg);
+	background: var(--bg);
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	height: 100%;
+	overflow: hidden;
+}
+
+body {
+	font-family: var(--font-sans);
+	background: var(--bg);
+	color: var(--fg);
+}
+
+/* 壳层选区；正文 .markdown-body 内由 GitHub 样式主导，勿全局覆盖 a/code */
+::selection {
+	background: color-mix(in srgb, var(--accent) 28%, transparent);
+	color: inherit;
+}
+
+/* 壳层链接：默认不用链接蓝（文件树要像本地资源管理器） */
+.app-header a,
+.wiki-toc a,
+.wiki-page-footer a,
+.home-hero a:not(.home-hero__btn),
+.wiki-breadcrumb a {
+	color: var(--accent);
+	text-underline-offset: 0.15em;
+}
+.app-header a:hover,
+.wiki-toc a:hover,
+.wiki-page-footer a:hover {
+	color: var(--accent-hover);
+}
+/* 左侧导航链接：正文色，非超链接蓝 */
+.wiki-nav a {
+	color: inherit;
+	text-decoration: none;
+}
+.wiki-nav a:hover {
+	color: inherit;
+}
+
+/* ========== 顶栏：左品牌 | 中搜索 | 右工具 ========== */
+.app-header {
+	height: var(--header-h);
+	display: grid;
+	/* 中间搜索区更宽，避免「小气」 */
+	grid-template-columns: minmax(0, 1fr) minmax(16rem, min(42rem, 52vw)) minmax(0, 1fr);
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0 1rem;
+	border-bottom: 1px solid var(--border);
+	background: var(--header-bg);
+	backdrop-filter: saturate(1.2) blur(10px);
+	-webkit-backdrop-filter: saturate(1.2) blur(10px);
+	box-shadow: var(--shadow-sm);
+	flex-shrink: 0;
+	position: relative;
+	z-index: 30;
+	font-family: var(--font-sans);
+}
+
+.header-left {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 0;
+	justify-self: start;
+}
+
+.header-center {
+	display: flex;
+	justify-content: center;
+	min-width: 0;
+	width: 100%;
+}
+
+.header-right {
+	justify-self: end;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0.35rem;
+	min-width: 2rem;
+}
+/* 顶栏图标按钮统一 */
+.header-focus-btn,
+.theme-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0;
+	width: 2.25rem;
+	height: 2.25rem;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--fg-muted);
+	line-height: 0;
+	cursor: pointer;
+	flex-shrink: 0;
+	transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.header-focus-btn:hover,
+.theme-toggle:hover {
+	color: var(--fg);
+	background: var(--nav-hover-bg);
+}
+.header-focus-btn:focus-visible,
+.theme-toggle:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+	outline-offset: 2px;
+}
+.header-focus-btn .wiki-breadcrumb__icon {
+	display: block;
+	width: 1.05rem;
+	height: 1.05rem;
+}
+.header-focus-btn .wiki-breadcrumb__icon--collapse {
+	display: none;
+}
+.header-focus-btn.is-active {
+	color: var(--accent);
+	background: var(--nav-active-bg);
+}
+.header-focus-btn.is-active .wiki-breadcrumb__icon--expand {
+	display: none;
+}
+.header-focus-btn.is-active .wiki-breadcrumb__icon--collapse {
+	display: block;
+}
+
+.theme-toggle__icon {
+	width: 1.05rem;
+	height: 1.05rem;
+}
+/* 浅色：月亮 → 切深色；深色：太阳 → 切浅色 */
+.theme-toggle__icon--sun {
+	display: none;
+}
+.theme-toggle__icon--moon {
+	display: block;
+}
+html[data-theme='dark'] .theme-toggle__icon--sun {
+	display: block;
+}
+html[data-theme='dark'] .theme-toggle__icon--moon {
+	display: none;
+}
+
+.brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	min-width: 0;
+	font-weight: 700;
+	font-size: 1.1rem;
+	letter-spacing: var(--letter-tight);
+	color: var(--fg);
+	text-decoration: none;
+	white-space: nowrap;
+	transition: color 0.15s ease;
+}
+.brand__icon {
+	flex-shrink: 0;
+	display: inline-flex;
+	line-height: 0;
+	color: var(--accent);
+}
+.brand__icon-svg {
+	display: block;
+	width: 1.15rem;
+	height: 1.15rem;
+}
+.brand__title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.brand:hover {
+	color: var(--accent);
+}
+.brand:hover .brand__icon {
+	color: var(--accent);
+}
+
+.panel-btn {
+	border: 1px solid var(--border);
+	background: var(--bg);
+	border-radius: var(--radius-sm);
+	padding: 0.35rem 0.6rem;
+	font-size: 0.8125rem;
+	cursor: pointer;
+	color: var(--fg-muted);
+	transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.panel-btn:hover {
+	color: var(--fg);
+	border-color: var(--border-strong);
+	background: var(--bg-muted);
+}
+.panel-btn--menu {
+	display: none;
+}
+
+/* ========== MiniSearch 统一搜索（对齐 starlight-vanilla） ========== */
+.webmd-search,
+.webmd-ms-search {
+	width: 100%;
+	max-width: none;
+	display: flex;
+	align-items: center;
+	justify-content: stretch;
+}
+.webmd-ms-search .ms-open {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	margin: 0;
+	padding: 0.45rem 0.9rem 0.45rem 0.95rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	background: var(--bg-muted);
+	color: var(--fg-muted);
+	font: inherit;
+	font-size: 0.9rem;
+	cursor: pointer;
+	box-shadow: var(--shadow-sm);
+	transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+	box-sizing: border-box;
+}
+.webmd-ms-search .ms-open .ms-open-label {
+	flex: 1 1 auto;
+	min-width: 0;
+	text-align: start;
+}
+.webmd-ms-search .ms-open:hover {
+	color: var(--fg);
+	border-color: var(--border-strong);
+	background: var(--bg);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.webmd-ms-search .ms-open-kbd {
+	display: none;
+	flex: 0 0 auto;
+	margin-inline-start: auto;
+	gap: 0.15rem;
+	font-size: 0.7rem;
+	opacity: 0.75;
+}
+@media (min-width: 48rem) {
+	.webmd-ms-search .ms-open-kbd {
+		display: inline-flex;
+	}
+	.webmd-ms-search .ms-open-kbd kbd {
+		padding: 0.1em 0.35em;
+		border: 1px solid var(--border);
+		border-radius: 0.25rem;
+		background: var(--bg);
+		font: inherit;
+		font-size: 0.7rem;
+	}
+}
+.webmd-ms-search .ms-dialog {
+	/* 接近全屏，与 starlight 搜索体验层体量一致 */
+	padding: 0;
+	border: none;
+	border-radius: 0.65rem;
+	width: min(98vw, 96rem);
+	max-width: 98vw;
+	height: min(88vh, 56rem);
+	max-height: 88vh;
+	margin: auto;
+	background: var(--bg);
+	color: var(--fg);
+	box-shadow: var(--shadow);
+}
+.webmd-ms-search .ms-dialog::backdrop {
+	background: var(--overlay);
+}
+.webmd-ms-search .dialog-frame {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	box-sizing: border-box;
+}
+.webmd-ms-search .ms-dialog[open] {
+	display: flex;
+	flex-direction: column;
+}
+.webmd-ms-search .ms-close-mobile {
+	display: none;
+	margin: 0.5rem 0.75rem 0 auto;
+	padding: 0.35rem 0.75rem;
+	border: 1px solid var(--border);
+	border-radius: 0.35rem;
+	background: var(--bg-muted);
+	color: var(--fg);
+	font: inherit;
+	cursor: pointer;
+}
+@media (max-width: 49.99rem) {
+	.webmd-ms-search .ms-close-mobile {
+		display: block;
+	}
+}
+.webmd-ms-search .search-shell {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	height: 100%;
+	padding: 1rem 1.15rem 1.1rem;
+	gap: 0.85rem;
+	box-sizing: border-box;
+}
+.webmd-ms-search .search-input-row {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 0.65rem;
+}
+.webmd-ms-search .ms-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	width: auto;
+	box-sizing: border-box;
+	height: 2.55rem;
+	padding: 0.45rem 0.85rem 0.45rem 2.35rem;
+	border: 1px solid var(--border);
+	border-radius: 0.5rem;
+	background: var(--bg-muted)
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%23999' stroke-width='2'%3E%3Ccircle cx='8' cy='8' r='6'/%3E%3Cpath d='M14 14l-3-3'/%3E%3C/svg%3E")
+		1rem center / 1.1rem no-repeat;
+	color: var(--fg);
+	font-size: 1.05rem;
+	font-family: inherit;
+}
+.webmd-ms-search .ms-input:focus {
+	outline: 1px solid var(--accent);
+	border-color: var(--accent);
+}
+/* 搜索工具：短文案 + title；按钮尽量贴紧（对齐主站标题栏右侧） */
+.webmd-ms-search .ms-input-tools {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	flex: 0 0 auto;
+}
+.webmd-ms-search .ms-text-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.1rem;
+	margin: 0;
+	padding: 0 0.32rem;
+	min-height: 1.7rem;
+	border: 1px solid transparent;
+	border-radius: 0.25rem;
+	background: transparent;
+	color: var(--fg-muted);
+	font: inherit;
+	font-size: 0.78rem;
+	font-weight: 650;
+	line-height: 1;
+	letter-spacing: 0;
+	text-transform: none;
+	white-space: nowrap;
+	cursor: pointer;
+	box-sizing: border-box;
+	transition:
+		color 0.12s ease,
+		border-color 0.12s ease,
+		background 0.12s ease;
+}
+.webmd-ms-search .ms-text-btn:hover:not(:disabled):not(.is-disabled) {
+	color: var(--fg);
+	border-color: var(--border);
+	background: var(--bg);
+}
+.webmd-ms-search .ms-text-btn.is-active {
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+	background: var(--nav-active-bg);
+}
+.webmd-ms-search .ms-text-btn.is-disabled,
+.webmd-ms-search .ms-text-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+.webmd-ms-search .ms-icon-btn {
+	width: 1.45rem;
+	height: 1.7rem;
+	margin: 0;
+	border-radius: 0.25rem;
+}
+.webmd-ms-search .ms-icon-btn.is-active {
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+	background: var(--nav-active-bg);
+}
+.webmd-ms-search .ms-icon-btn.is-disabled,
+.webmd-ms-search .ms-icon-btn:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+	pointer-events: none;
+}
+/* 名序箭头：降序时翻转（对齐左侧文件树） */
+.webmd-ms-search .ms-sort-btn .ms-sort-arrow {
+	display: block;
+	width: 0.85rem;
+	height: 0.85rem;
+	color: var(--accent);
+	transform-origin: 50% 50%;
+	transition: transform 0.18s ease;
+}
+.webmd-ms-search .ms-sort-btn[data-order='desc'] .ms-sort-arrow {
+	transform: rotate(180deg);
+}
+/*
+ * 分段切换（与|或、模糊|精确）
+ * 扁圆角 + 分割线 + 选中浅蓝底，干净利落
+ */
+.webmd-ms-search .ms-seg {
+	display: inline-flex;
+	align-items: stretch;
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 0;
+	height: 2rem;
+	border: 1px solid var(--border);
+	border-radius: 0.4rem;
+	background: var(--bg);
+	box-sizing: border-box;
+	overflow: hidden;
+}
+.webmd-ms-search .ms-seg.is-disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.webmd-ms-search .ms-seg__opt {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0 0.7rem;
+	min-width: 2.4rem;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	color: var(--fg-muted);
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	line-height: 1;
+	letter-spacing: 0;
+	cursor: pointer;
+	box-sizing: border-box;
+	transition:
+		color 0.12s ease,
+		background 0.12s ease;
+}
+.webmd-ms-search .ms-seg__opt + .ms-seg__opt {
+	border-inline-start: 1px solid var(--border);
+}
+.webmd-ms-search .ms-seg__opt:hover:not(:disabled):not(.is-active) {
+	color: var(--fg);
+	background: var(--bg-muted);
+}
+.webmd-ms-search .ms-seg__opt.is-active {
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+	font-weight: 700;
+}
+.webmd-ms-search .ms-seg__opt:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+	outline-offset: -2px;
+	z-index: 1;
+}
+.webmd-ms-search .ms-seg__opt:disabled {
+	cursor: not-allowed;
+}
+.webmd-ms-search .ms-seg.is-disabled .ms-seg__opt.is-active {
+	color: var(--fg-muted);
+	background: var(--bg-muted);
+}
+html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
+	background: color-mix(in srgb, var(--accent) 18%, var(--bg));
+	color: var(--accent-hover, var(--accent));
+}
+/* 三栏线分割（对齐主站 nav | 正文 | toc），可收起左右 */
+.webmd-ms-search {
+	--ms-side-w: minmax(12rem, 15rem);
+	--ms-rail-w: 2rem;
+}
+.webmd-ms-search .search-body {
+	display: grid;
+	grid-template-columns: var(--ms-side-w) minmax(0, 1fr) var(--ms-side-w);
+	grid-template-rows: minmax(0, 1fr);
+	gap: 0;
+	align-items: stretch;
+	flex: 1 1 0;
+	min-height: 0;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: 0.5rem;
+	background: var(--bg);
+	box-sizing: border-box;
+}
+.webmd-ms-search .search-body.is-left-collapsed {
+	grid-template-columns: var(--ms-rail-w) minmax(0, 1fr) var(--ms-side-w);
+}
+.webmd-ms-search .search-body.is-right-collapsed {
+	grid-template-columns: var(--ms-side-w) minmax(0, 1fr) var(--ms-rail-w);
+}
+.webmd-ms-search .search-body.is-left-collapsed.is-right-collapsed {
+	grid-template-columns: var(--ms-rail-w) minmax(0, 1fr) var(--ms-rail-w);
+}
+.webmd-ms-search .ms-panel {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	overflow: hidden;
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: var(--bg);
+	box-sizing: border-box;
+	align-self: stretch;
+}
+.webmd-ms-search .ms-panel.is-collapsed {
+	/* 收起后仅边缘条：占满格子高度，保证底栏贴底 */
+	min-height: 0;
+}
+.webmd-ms-search .ms-panel-main {
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+	overflow: hidden;
+}
+.webmd-ms-search .ms-panel-main[hidden] {
+	display: none !important;
+}
+.webmd-ms-search .ms-panel--left {
+	border-inline-end: 1px solid var(--border);
+	background: var(--bg-sidebar, var(--bg-muted));
+}
+.webmd-ms-search .ms-panel--center {
+	background: var(--bg);
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr);
+}
+.webmd-ms-search .ms-panel--right {
+	border-inline-start: 1px solid var(--border);
+	background: var(--bg-sidebar, var(--bg-muted));
+}
+/*
+ * 收起态全高边缘条：上箭头 + 中部（箭头+竖文）
+ * 整条可点展开；不再在最底部单独放一层 >>/<<
+ */
+.webmd-ms-search .ms-panel-rail {
+	display: none;
+	flex: 1 1 auto;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	align-self: stretch;
+	width: 100%;
+	height: 100%;
+	min-height: 100%;
+	margin: 0;
+	padding: 0;
+	border: none;
+	background: var(--bg-muted);
+	color: var(--fg-muted);
+	cursor: pointer;
+	box-sizing: border-box;
+	font: inherit;
+}
+.webmd-ms-search .ms-panel-rail:not([hidden]) {
+	display: flex;
+}
+.webmd-ms-search .ms-panel.is-collapsed .ms-panel-rail:not([hidden]) {
+	flex: 1 1 auto;
+	min-height: 100%;
+	height: 100%;
+}
+.webmd-ms-search .ms-panel-rail:hover {
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 8%, var(--bg-muted));
+}
+.webmd-ms-search .ms-panel-rail__head {
+	flex: 0 0 auto;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-height: 2.75rem;
+	height: 2.75rem;
+	border-bottom: 1px solid var(--border);
+}
+.webmd-ms-search .ms-panel-rail__mid {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.75rem;
+	min-height: 0;
+	padding: 0.65rem 0.1rem;
+}
+.webmd-ms-search .ms-panel-rail:hover .ms-panel-rail__head {
+	background: color-mix(in srgb, var(--accent) 6%, var(--bg-muted));
+}
+.webmd-ms-search .ms-panel-rail__chev {
+	font-size: 1.45rem;
+	font-weight: 900;
+	line-height: 1;
+	user-select: none;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	letter-spacing: -0.12em;
+	opacity: 0.95;
+}
+.webmd-ms-search .ms-panel-rail__text {
+	writing-mode: vertical-rl;
+	text-orientation: mixed;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	user-select: none;
+	font-size: 0.88rem;
+	font-weight: 800;
+	line-height: 1.2;
+}
+.webmd-ms-search .ms-pane-collapse {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0;
+	width: 1.45rem;
+	height: 1.7rem;
+	border: none;
+	border-radius: 0.25rem;
+	background: transparent;
+	color: var(--fg-muted);
+	font-size: 1.35rem;
+	font-weight: 800;
+	line-height: 1;
+	cursor: pointer;
+}
+.webmd-ms-search .ms-pane-collapse:hover {
+	background: var(--nav-hover-bg);
+	color: var(--accent);
+}
+.webmd-ms-search .ms-panel-body {
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 0.45rem 0.65rem 0.6rem;
+	/* 与站外 .thin-scrollbar 同款（见文件后部统一规则） */
+}
+.webmd-ms-search .ms-panel-label {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: nowrap;
+	gap: 0.12rem;
+	font-size: var(--font-size-ui-sm);
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--fg-muted);
+	margin: 0;
+	padding: 0.35rem 0.35rem 0.35rem 0.65rem;
+	border-bottom: 1px solid var(--border);
+	font-family: var(--font-sans);
+	min-width: 0;
+	/* 与主站 pane-bar 同系顶栏 */
+	background: var(--bg-muted);
+	box-sizing: border-box;
+}
+.webmd-ms-search .ms-panel-label-title {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	/* 三栏标题加粗、略实色（对齐「文件 / 大纲」标题感） */
+	font-weight: 800;
+	font-size: 0.9rem;
+	letter-spacing: 0.02em;
+	color: var(--nav-label, var(--fg));
+}
+.webmd-ms-search .ms-panel-label-start {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.2rem;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.webmd-ms-search .ms-panel-label-end {
+	display: inline-flex;
+	align-items: center;
+	gap: 0;
+	flex: 0 0 auto;
+	margin-inline-start: auto;
+	min-width: 0;
+}
+/* 搜索栏：滚动钮贴紧（同主站 pane-scroll-edge） */
+.webmd-ms-search .ms-panel-scroll-edge {
+	display: inline-flex;
+	align-items: center;
+	margin-inline-start: 0;
+	flex-shrink: 0;
+	gap: 0;
+}
+.webmd-ms-search .ms-panel-scroll-edge .wiki-breadcrumb__icon-btn {
+	width: 1.45rem !important;
+	height: 1.7rem !important;
+	margin: 0 !important;
+	padding: 0;
+	border-radius: 0.25rem;
+	color: var(--fg-muted);
+}
+.webmd-ms-search .ms-panel-scroll-edge .wiki-breadcrumb__icon-btn:hover {
+	color: var(--fg);
+	border-color: var(--border);
+	background: var(--bg);
+}
+
+.webmd-ms-search .ms-status-inline {
+	font-size: 0.8rem;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--fg-muted);
+}
+.webmd-ms-search .ms-center-tools {
+	display: inline-flex;
+	align-items: center;
+	gap: 0;
+	margin-inline-start: 0;
+	min-width: 0;
+}
+.webmd-ms-search .ms-panel-label-end .ms-text-btn {
+	min-height: 1.7rem;
+	padding: 0 0.28rem;
+	font-size: 0.72rem;
+	margin: 0;
+}
+.webmd-ms-search .ms-panel-label-end .ms-icon-btn {
+	width: 1.45rem !important;
+	height: 1.7rem !important;
+	margin: 0 !important;
+}
+.webmd-ms-search .ms-panel-label-end .ms-pane-collapse {
+	width: 1.45rem !important;
+	height: 1.7rem !important;
+	margin: 0 !important;
+	font-size: 1.35rem;
+}
+/* 相邻控件贴边，避免边框造成“空隙”感 */
+.webmd-ms-search .ms-panel-label-end > * + *,
+.webmd-ms-search .ms-input-tools > * + *,
+.webmd-ms-search .ms-center-tools > * + *,
+.webmd-ms-search .ms-panel-scroll-edge > * + * {
+	margin-inline-start: 0;
+}
+.webmd-ms-search .ms-panel-empty {
+	margin: 0.5rem 0 0;
+	font-size: 0.82rem;
+	color: var(--fg-muted);
+}
+.webmd-ms-search .ms-filter-block {
+	margin: 0 0 0.65rem;
+	padding-bottom: 0.55rem;
+	border-bottom: 1px solid var(--border);
+}
+.webmd-ms-search .ms-filter-block:last-child {
+	border-bottom: 0;
+}
+.webmd-ms-search .ms-filter-head {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+.webmd-ms-search .ms-group-switch {
+	width: 1.05rem;
+	height: 1.05rem;
+	margin: 0;
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+.webmd-ms-search .ms-filter-collapse {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	flex: 1;
+	margin: 0;
+	padding: 0.1rem 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
+}
+.webmd-ms-search .ms-filter-title {
+	flex: 1;
+	font-weight: 700;
+	font-size: 0.9rem;
+	color: var(--fg);
+	text-transform: none;
+	letter-spacing: 0;
+}
+.webmd-ms-search .ms-chevron {
+	width: 0.45rem;
+	height: 0.45rem;
+	border-right: 2px solid var(--fg-muted);
+	border-bottom: 2px solid var(--fg-muted);
+	transform: rotate(45deg);
+	margin-bottom: 0.15rem;
+	opacity: 0.85;
+}
+.webmd-ms-search .ms-filter-block.is-open .ms-chevron {
+	transform: rotate(225deg);
+	margin-bottom: 0;
+	margin-top: 0.2rem;
+}
+.webmd-ms-search .ms-filter-group {
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+	margin-top: 0.55rem;
+}
+.webmd-ms-search .ms-filter-group[hidden] {
+	display: none !important;
+}
+.webmd-ms-search .ms-filter-value {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: var(--font-size-ui);
+	font-family: var(--font-sans);
+	color: var(--fg-muted);
+	cursor: pointer;
+	min-width: 0;
+	padding: 0.15rem 0.2rem;
+	border-radius: var(--radius-sm);
+}
+.webmd-ms-search .ms-filter-value:hover {
+	background: var(--nav-hover-bg);
+	color: var(--fg);
+}
+.webmd-ms-search .ms-filter-value input {
+	margin: 0;
+	flex-shrink: 0;
+	accent-color: var(--accent);
+	width: 0.9rem;
+	height: 0.9rem;
+}
+/* 搜索文件夹树：与左侧导航同系图标，但可勾选 + 数量 */
+.webmd-ms-search .ms-folder-tree {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+}
+.webmd-ms-search .ms-folder-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.2rem;
+	padding-inline-start: calc(var(--ms-folder-depth, 0) * 0.85rem);
+}
+.webmd-ms-search .ms-folder-row .ms-filter-value {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+/* 搜索目录树：文件夹图标复用 .tree-icon--folder（与左侧导航同一套） */
+.webmd-ms-search .ms-folder-row .tree-icon {
+	flex-shrink: 0;
+}
+/* 展开时切换开合（对应左侧 .tree-dir[open]） */
+.webmd-ms-search .ms-folder-node.is-open > .ms-folder-row .tree-icon--folder .tree-icon__folder-closed {
+	display: none;
+}
+.webmd-ms-search .ms-folder-node.is-open > .ms-folder-row .tree-icon--folder .tree-icon__folder-open {
+	display: block;
+}
+/* 折叠在最右侧：与左侧树 chevron 同系（闭=右指，开=下指） */
+.webmd-ms-search .ms-folder-twist,
+.webmd-ms-search .ms-folder-twist-spacer {
+	flex-shrink: 0;
+	width: 1.15rem;
+	height: 1.15rem;
+	margin: 0 0 0 0.15rem;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.webmd-ms-search .ms-folder-twist {
+	cursor: pointer;
+	border-radius: 0.25rem;
+	color: var(--fg-muted);
+}
+.webmd-ms-search .ms-folder-chevron {
+	display: block;
+	width: 0.55rem;
+	height: 0.55rem;
+	position: relative;
+	box-sizing: border-box;
+}
+.webmd-ms-search .ms-folder-chevron::before {
+	content: '';
+	position: absolute;
+	inset: 0.05rem;
+	border-right: 1.75px solid currentColor;
+	border-bottom: 1.75px solid currentColor;
+	transform: rotate(-45deg); /* ▶ 收起，指向右 */
+	transition: transform 0.15s ease;
+	opacity: 0.8;
+}
+.webmd-ms-search .ms-folder-twist.is-open .ms-folder-chevron::before,
+.webmd-ms-search .ms-folder-node.is-open > .ms-folder-row .ms-folder-chevron::before {
+	transform: rotate(45deg); /* ▼ 展开，指向下 */
+	margin-top: -0.05rem;
+}
+.webmd-ms-search .ms-folder-twist:hover {
+	background: var(--nav-hover-bg);
+	color: var(--fg);
+}
+.webmd-ms-search .ms-folder-children {
+	border-left: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+	margin-left: 0.55rem;
+	padding-left: 0.15rem;
+}
+.webmd-ms-search .ms-folder-children[hidden] {
+	display: none !important;
+}
+/* 名称 + 数量紧贴（数量不顶到行尾） */
+.webmd-ms-search .ms-filter-label {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 500;
+	font-size: 0.875rem;
+	letter-spacing: 0.01em;
+	color: var(--fg);
+}
+.webmd-ms-search .ms-filter-count {
+	flex: 0 0 auto;
+	font-size: 0.8125rem;
+	color: var(--fg-muted);
+	font-variant-numeric: tabular-nums;
+	font-weight: 500;
+	opacity: 0.85;
+	margin-inline-start: 0.25em;
+	padding-inline-start: 0;
+	white-space: nowrap;
+}
+/* 非文件夹筛选项：数量仍可跟在标签后 */
+.webmd-ms-search .ms-filter-group > .ms-filter-value .ms-filter-count {
+	margin-inline-start: 0.2em;
+}
+.webmd-ms-search .ms-results {
+	list-style: none !important;
+	margin: 0 !important;
+	padding: 0 0 0.25rem !important;
+	display: flex;
+	flex-direction: column;
+	gap: 0.65rem;
+}
+.webmd-ms-search .ms-hit {
+	margin: 0 !important;
+	padding: 0 !important;
+	border-radius: 0.5rem;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	overflow: hidden;
+	list-style: none !important;
+}
+.webmd-ms-search .ms-hit-card {
+	padding: 0.75rem 0.9rem 0.85rem;
+}
+.webmd-ms-search .ms-hit-path-link {
+	display: block;
+	text-decoration: none;
+	color: inherit;
+}
+.webmd-ms-search .ms-hit-path-link:hover .ms-hit-path {
+	color: var(--accent);
+}
+.webmd-ms-search .ms-hit-path {
+	font-weight: 700;
+	font-size: 1rem;
+	color: var(--fg);
+	word-break: break-all;
+	line-height: 1.4;
+}
+.webmd-ms-search .ms-hit-sublink {
+	display: block;
+	text-decoration: none;
+	color: inherit;
+}
+.webmd-ms-search .ms-hit-sublink:hover {
+	color: var(--accent);
+}
+.webmd-ms-search .ms-hit-prose {
+	margin: 0;
+	font-size: 0.875rem;
+	font-weight: 400;
+	line-height: 1.5;
+	color: var(--fg-muted);
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	min-width: 0;
+	flex: 1;
+}
+.webmd-ms-search .ms-hit-tree {
+	margin: 0.4rem 0 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+}
+.webmd-ms-search .ms-tree-block {
+	display: flex;
+	flex-direction: column;
+	gap: 0.05rem;
+}
+.webmd-ms-search .ms-tree-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.15rem;
+	min-width: 0;
+}
+.webmd-ms-search .ms-tree-g {
+	flex-shrink: 0;
+	font-family: ui-monospace, Consolas, monospace;
+	font-size: 0.78rem;
+	line-height: 1.5;
+	color: var(--fg-muted);
+	opacity: 0.9;
+	user-select: none;
+}
+.webmd-ms-search .ms-tree-g[data-k='mid'],
+.webmd-ms-search .ms-tree-g[data-k='end'] {
+	width: 1.4em;
+}
+.webmd-ms-search .ms-tree-g[data-k='pipe'],
+.webmd-ms-search .ms-tree-g[data-k='blank'] {
+	width: 0.75em;
+	text-align: center;
+}
+.webmd-ms-search a.ms-hit-heading {
+	margin: 0;
+	font-weight: 650;
+	line-height: 1.4;
+	color: var(--fg);
+	min-width: 0;
+	flex: 1;
+}
+.webmd-ms-search a.ms-hit-heading--h1 {
+	font-size: 1rem;
+	font-weight: 700;
+}
+.webmd-ms-search a.ms-hit-heading--h2 {
+	font-size: 0.95rem;
+}
+.webmd-ms-search a.ms-hit-heading--h3 {
+	font-size: 0.9rem;
+}
+.webmd-ms-search mark {
+	color: inherit;
+	background: color-mix(in srgb, #fbbf24 55%, transparent);
+	box-shadow: inset 0 -0.12em 0 color-mix(in srgb, #f59e0b 55%, transparent);
+	font-weight: 650;
+	padding: 0.05em 0.15em;
+	border-radius: 0.2em;
+}
+/* 窄屏由 JS ResizeObserver 收栏；此处只收紧侧栏设计宽 */
+@media (max-width: 64rem) {
+	.webmd-ms-search {
+		--ms-side-w: minmax(10rem, 12rem);
+	}
+}
+@media (max-width: 49.99rem) {
+	.webmd-ms-search {
+		--ms-side-w: minmax(9rem, 11rem);
+	}
+}
+[data-search-modal-open] {
+	overflow: hidden;
+}
+
+/* ========== 桌面壳：[nav | g | center] ==========
+ * 子项必须固定 grid-column，避免 gutter display:none / 宽度 0 时
+ * 自动重排把 .wiki-center 挤进 0 宽列（收起左栏后整页空白）
+ */
+.app-shell {
+	display: grid;
+	grid-template-columns: var(--wiki-nav) var(--wiki-g-nav) minmax(0, 1fr);
+	grid-template-rows: 1fr;
+	height: calc(100vh - var(--header-h));
+	min-height: 0;
+	position: relative;
+	background: var(--bg);
+}
+
+.app-shell > .wiki-nav {
+	grid-column: 1;
+	grid-row: 1;
+}
+.app-shell > .wiki-gutter--nav {
+	grid-column: 2;
+	grid-row: 1;
+}
+.app-shell > .wiki-center {
+	grid-column: 3;
+	grid-row: 1;
+	min-width: 0;
+}
+/* 边缘钮绝对定位，不参与分栏 */
+.app-shell > .wiki-edge-btn,
+.app-shell > .wiki-rail-btn.wiki-edge-btn {
+	grid-column: 1 / -1;
+	grid-row: 1;
+	pointer-events: auto;
+}
+
+.app-shell.nav-collapsed {
+	/* 左栏 + 拖缝列宽为 0，中栏吃满；勿 display:none 拖缝（会打乱 auto-place） */
+	grid-template-columns: 0 0 minmax(0, 1fr);
+}
+.app-shell.nav-collapsed .wiki-nav {
+	visibility: hidden;
+	pointer-events: none;
+	overflow: hidden;
+}
+.app-shell.nav-collapsed .wiki-gutter--nav {
+	/* 仍占第 2 列（宽 0），禁止 display:none */
+	visibility: hidden;
+	pointer-events: none;
+}
+
+/* 中栏内：[main | g | toc] —— 同样固定列号 */
+.wiki-center {
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	overflow: hidden;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) var(--wiki-g-toc) var(--wiki-toc);
+	grid-template-rows: 1fr;
+}
+.wiki-center > .wiki-main {
+	grid-column: 1;
+	grid-row: 1;
+	min-width: 0;
+}
+.wiki-center > .wiki-gutter--toc {
+	grid-column: 2;
+	grid-row: 1;
+}
+.wiki-center > .wiki-toc {
+	grid-column: 3;
+	grid-row: 1;
+}
+
+.app-shell.toc-collapsed .wiki-center,
+.app-shell:not(.has-toc-col) .wiki-center {
+	grid-template-columns: minmax(0, 1fr) 0 0;
+}
+.app-shell.toc-collapsed .wiki-toc,
+.app-shell.toc-collapsed .wiki-gutter--toc,
+.app-shell:not(.has-toc-col) .wiki-toc,
+.app-shell:not(.has-toc-col) .wiki-gutter--toc {
+	visibility: hidden;
+	pointer-events: none;
+	overflow: hidden;
+	/* 禁止 display:none，保持列占位与固定 column 映射 */
+}
+
+.wiki-gutter {
+	cursor: col-resize;
+	touch-action: none;
+	background: transparent;
+	position: relative;
+	z-index: 3;
+}
+.wiki-gutter:hover,
+.wiki-gutter:active,
+body.is-col-resizing .wiki-gutter {
+	background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* 左栏 */
+.wiki-nav {
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	background: var(--bg-sidebar);
+	border-right: 1px solid var(--border);
+}
+
+/* 右栏大纲 */
+.wiki-toc {
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	background: var(--bg);
+	border-left: 1px solid var(--border);
+}
+
+/*
+ * 三栏统一顶栏：左 tree-top（文件）/ 中路径 / 右大纲
+ * 固定高度、不进滚动区
+ */
+.pane-bar,
+.tree-top,
+.pane-title {
+	flex: 0 0 auto;
+	box-sizing: border-box;
+	height: var(--pane-bar-h);
+	min-height: var(--pane-bar-h);
+	max-height: var(--pane-bar-h);
+	display: flex;
+	align-items: center;
+	gap: 0.12rem;
+	padding: 0 0.35rem 0 0.65rem;
+	margin: 0;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg-muted);
+	font-family: var(--font-sans);
+	font-size: var(--font-size-ui);
+	font-weight: 650;
+	line-height: 1.25;
+	color: var(--fg);
+	letter-spacing: 0;
+	text-transform: none;
+	overflow: hidden;
+}
+.pane-bar--center {
+	/* 中栏路径容器：内部 .wiki-breadcrumb 铺满 */
+	padding: 0;
+	background: var(--bg-muted);
+}
+.pane-bar--center > .wiki-breadcrumb {
+	flex: 1 1 auto;
+	min-width: 0;
+	width: 100%;
+	height: 100%;
+}
+/* 右顶「大纲」：字号/字重对齐左顶「文件」导航标题 */
+.pane-title,
+.pane-bar--toc {
+	color: var(--nav-label);
+	font-weight: 650;
+	font-size: var(--nav-dir-fs);
+	letter-spacing: -0.01em;
+	text-transform: none;
+	gap: 0.2rem;
+}
+.pane-title__icon {
+	flex-shrink: 0;
+	display: inline-flex;
+	width: 1.05rem;
+	height: 1.05rem;
+	line-height: 0;
+	color: var(--home-fill);
+}
+.pane-title__icon svg {
+	display: block;
+	width: 1.05rem;
+	height: 1.05rem;
+}
+.pane-title__icon-fill {
+	fill: color-mix(in srgb, var(--home-fill) 16%, transparent);
+	stroke: var(--home-fill);
+	stroke-width: 1;
+}
+.pane-title__icon-lines {
+	fill: none;
+	stroke: var(--home-fill);
+	stroke-width: 1.25;
+}
+.pane-title__text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 0 1 auto;
+}
+/* 标题组：仅图标+文案 */
+.pane-title-group {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.15rem;
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 100%;
+}
+/* 中间工具区（名序/混排） */
+.pane-title-tools {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	flex: 1 1 auto;
+	min-width: 0;
+	justify-content: flex-end;
+}
+/* 标题栏最右：滚到底/顶 + 收起 — 尽量贴紧 */
+.pane-title-end {
+	display: inline-flex;
+	align-items: center;
+	gap: 0;
+	flex: 0 0 auto;
+	margin-inline-start: auto;
+}
+/* 滚到底 + 回到顶（底在前）；收起在组内最右 */
+.pane-scroll-edge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0;
+	flex: 0 0 auto;
+	margin-inline-start: 0;
+}
+/* 路径栏 actions 内：跟在复制/下载后即可，不额外 auto */
+.pane-scroll-edge--trail {
+	margin-inline-start: 0;
+}
+.pane-scroll-edge-btn {
+	flex: 0 0 auto;
+	width: 1.45rem !important;
+	height: 1.7rem !important;
+	margin: 0 !important;
+	border-radius: 0.25rem;
+}
+/* 顶栏收起：放标题栏最右；« » 加大加粗，框收窄以贴紧 */
+.pane-collapse-btn {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0;
+	width: 1.45rem;
+	height: 1.7rem;
+	border: none;
+	border-radius: 0.25rem;
+	background: transparent;
+	color: var(--fg-muted);
+	font-size: 1.35rem;
+	font-weight: 800;
+	line-height: 1;
+	cursor: pointer;
+	box-sizing: border-box;
+	transition: background 0.12s ease, color 0.12s ease;
+	pointer-events: auto;
+	position: relative;
+	z-index: 2;
+}
+.pane-collapse-btn:hover {
+	background: var(--nav-hover-bg);
+	color: var(--accent);
+}
+.pane-collapse-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+	color: var(--accent);
+}
+.pane-collapse-btn > span {
+	display: block;
+	line-height: 1;
+	font-size: inherit;
+	font-weight: inherit;
+	transform: translateY(-0.05em);
+}
+
+/* 中：正文滚动 + 底部分页固定；宽度随 grid 中栏伸缩 */
+.wiki-main {
+	width: 100%;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	background: var(--bg);
+}
+/* 软导航：淡路径栏/滚动区/底栏，左侧树不动 */
+.wiki-main.is-soft-nav [data-wiki-scroll],
+.wiki-main.is-soft-nav [data-wiki-crumb],
+.wiki-main.is-soft-nav .wiki-page-footer {
+	opacity: 0.55;
+	pointer-events: none;
+	transition: opacity 0.12s ease;
+}
+
+/*
+ * 中栏滚动区（恢复简洁布局）
+ * - 自上而下正常文档流：路径 → 正文
+ * - 宽度随中栏动态铺满（无固定 max-width）
+ * - 无垂直居中；文内左对齐
+ */
+.center-scroll {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	/* 路径已移出滚动区；正文略多一点阅读余白 */
+	padding: 0.75rem 1rem 1.75rem;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.center-scroll > .mobile-toc {
+	width: 100%;
+	margin: 0 0 0.75rem;
+	box-sizing: border-box;
+}
+.center-scroll > .markdown-body {
+	width: 100%;
+	max-width: none;
+	box-sizing: border-box;
+	min-width: 0;
+}
+
+/* 文本：代码横向滚动，不撑破中栏 */
+body.is-text-page .markdown-body {
+	overflow-x: auto;
+}
+body.is-text-page .markdown-body .webmd-code,
+body.is-text-page .markdown-body pre {
+	max-width: 100%;
+}
+body.is-text-page .markdown-body table {
+	max-width: 100%;
+}
+
+.app-shell.panels-collapsed .wiki-center,
+.app-shell.panels-collapsed .wiki-main,
+.app-shell.panels-collapsed .center-scroll {
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+/* 铺满：尽量吃满视口宽度，勿再加大左右留白 */
+.app-shell.panels-collapsed .center-scroll {
+	padding-inline: 0.75rem;
+}
+
+/* ========== 文件树：顶栏固定，树体滚动 ========== */
+.file-tree {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	font-size: 0.875rem;
+	line-height: 1.4;
+	font-family: var(--font-sans);
+	font-feature-settings: 'tnum' 0;
+	letter-spacing: 0.01em;
+}
+
+/* 侧栏顶栏：文件 | 名序/混排 | 滚动+收起（不滚动） */
+.tree-top {
+	/* height/border/bg 由 .pane-bar 统一规则；右侧控件贴紧 */
+	gap: 0.1rem;
+	z-index: 2;
+	/* 保证顶栏收起 / 回顶按钮可点 */
+	pointer-events: auto;
+}
+.tree-top .pane-collapse-btn {
+	margin: 0;
+}
+.tree-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 0.4rem 0.55rem 0.85rem;
+}
+.tree-home {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	flex: 0 1 auto;
+	min-width: 0;
+	margin: 0;
+	padding: 0 0.1rem 0 0.1rem;
+	height: 100%;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	color: var(--nav-label);
+	font-weight: 650;
+	font-size: var(--nav-dir-fs);
+	line-height: 1.2;
+	box-sizing: border-box;
+	/* 固定标题：无 hover / 选中态，不可点 */
+	cursor: default;
+	user-select: none;
+	pointer-events: none;
+}
+.tree-home__icon {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.35rem;
+	height: 1.35rem;
+	line-height: 0;
+	color: var(--home-fill);
+}
+.tree-home__svg {
+	display: block;
+	width: 1.35rem;
+	height: 1.35rem;
+}
+/* 展开态：与主页 / 大纲同系蓝色（home-fill） */
+.tree-home__sheet {
+	fill: color-mix(in srgb, var(--home-fill) 14%, var(--file-page));
+	stroke: var(--home-fill);
+	stroke-width: 1.15;
+}
+.tree-home__sheet--back {
+	fill: color-mix(in srgb, var(--home-fill) 10%, var(--file-page));
+	stroke: color-mix(in srgb, var(--home-fill) 72%, var(--file-page-edge));
+	opacity: 0.95;
+}
+.tree-home__sheet--front {
+	opacity: 1;
+}
+.tree-home__fold {
+	fill: color-mix(in srgb, var(--home-fill) 18%, var(--file-page));
+	stroke: var(--home-fill);
+	stroke-width: 1.1;
+}
+.tree-home__lines {
+	fill: none;
+	stroke: var(--home-fill);
+	stroke-width: 1.35;
+	opacity: 0.9;
+}
+.tree-home__label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tree-sort-btn,
+.tree-group-btn {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.2rem;
+	margin: 0;
+	padding: 0 0.4rem;
+	height: 1.85rem;
+	min-width: 1.85rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--bg);
+	color: var(--fg-muted);
+	font: inherit;
+	font-size: var(--font-size-ui-sm);
+	font-weight: 650;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.tree-sort-btn:hover,
+.tree-group-btn:hover {
+	color: var(--fg);
+	border-color: var(--border-strong);
+	background: var(--bg-muted);
+}
+.tree-sort-btn__arrow {
+	display: block;
+	width: 0.85rem;
+	height: 0.85rem;
+	transform-origin: 50% 50%;
+	transition: transform 0.18s ease;
+	color: var(--accent);
+}
+.tree-sort-btn[data-order='desc'] .tree-sort-btn__arrow {
+	transform: rotate(180deg);
+}
+.tree-group-btn[data-mode='files-first'],
+.tree-group-btn[data-mode='dirs-first'] {
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+	background: var(--nav-active-bg);
+}
+/* 行：图标 + 名；图标略小于字号，不抢视线 */
+.tree-icon {
+	flex-shrink: 0;
+	width: var(--nav-icon-size);
+	height: var(--nav-icon-size);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	line-height: 0;
+	opacity: 1;
+}
+.tree-icon__svg {
+	display: block;
+	width: var(--nav-icon-size);
+	height: var(--nav-icon-size);
+}
+/* 文件夹：默认闭合，展开时切换 open 形态 */
+.tree-icon--folder .tree-icon__folder-open {
+	display: none;
+}
+.tree-dir[open] > .tree-dir__summary .tree-icon--folder .tree-icon__folder-closed {
+	display: none;
+}
+.tree-dir[open] > .tree-dir__summary .tree-icon--folder .tree-icon__folder-open {
+	display: block;
+}
+/* Win11 硬朗金黄：色块分明、高光干净 */
+.tree-icon--folder .tree-icon__folder-back,
+.tree-icon--folder .tree-icon__folder-tab {
+	fill: var(--folder-back, var(--folder-tab));
+}
+.tree-icon--folder .tree-icon__folder-body {
+	fill: var(--folder-body);
+}
+.tree-icon--folder .tree-icon__folder-gloss {
+	fill: var(--folder-gloss);
+	opacity: 0.42;
+}
+.tree-icon--folder {
+	/* 文件夹图标略大于文件，更醒目 */
+	width: 1.1rem;
+	height: 1.1rem;
+}
+.tree-icon--folder .tree-icon__svg {
+	width: 1.1rem;
+	height: 1.1rem;
+}
+
+/* 文件：白页 + 类型色 */
+.tree-icon--file {
+	color: var(--file-icon);
+}
+.tree-icon--file .tree-icon__page {
+	fill: var(--file-page);
+	stroke: var(--file-page-edge);
+	stroke-width: 0.85;
+}
+.tree-icon--file .tree-icon__fold {
+	fill: color-mix(in srgb, var(--file-page-edge) 18%, var(--file-page));
+	stroke: var(--file-page-edge);
+	stroke-width: 0.85;
+}
+.tree-icon--file .tree-icon__stripe {
+	stroke: var(--file-stripe);
+	stroke-width: 1.6;
+	stroke-linecap: round;
+}
+.tree-icon--file .tree-icon__frame {
+	fill: var(--file-page);
+	stroke: var(--file-page-edge);
+	stroke-width: 0.9;
+}
+.tree-icon--file .tree-icon__glyph {
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.2;
+}
+.tree-icon--file .tree-icon__glyph-fill {
+	fill: currentColor;
+	stroke: none;
+}
+.tree-icon--file .tree-icon__badge {
+	fill: currentColor;
+}
+
+/* 类型色条 / 徽章（Win11 式：形状 + 一点品牌色） */
+.tree-icon.tree-icon--markdown {
+	color: var(--file-md);
+}
+.tree-icon.tree-icon--markdown .tree-icon__stripe {
+	stroke: var(--file-md);
+}
+.tree-icon.tree-icon--text {
+	color: var(--file-text);
+}
+.tree-icon.tree-icon--text .tree-icon__stripe {
+	stroke: var(--file-text);
+}
+.tree-icon.tree-icon--image {
+	color: var(--file-image);
+}
+.tree-icon.tree-icon--video {
+	color: var(--file-video);
+}
+.tree-icon.tree-icon--audio {
+	color: var(--file-audio);
+}
+.tree-icon.tree-icon--pdf {
+	color: var(--file-pdf);
+}
+.tree-icon.tree-icon--pdf .tree-icon__stripe {
+	stroke: var(--file-pdf);
+}
+
+.tree-file.is-active .tree-icon--file .tree-icon__page {
+	fill: var(--bg);
+}
+.tree-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: inherit;
+	line-height: inherit;
+	letter-spacing: 0.005em;
+}
+.tree-count {
+	flex: 0 0 auto;
+	font-size: 0.75em;
+	font-weight: 400;
+	font-variant-numeric: tabular-nums;
+	color: var(--nav-count);
+	opacity: 1;
+	margin-inline-start: 0.28em;
+	white-space: nowrap;
+}
+.tree-dir__main {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.32rem;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+/* 折叠在右侧 */
+.tree-chevron {
+	flex-shrink: 0;
+	width: 0.9rem;
+	height: 0.9rem;
+	margin-inline-start: 0.1rem;
+	position: relative;
+	color: var(--nav-count);
+	opacity: 0.85;
+}
+.tree-chevron::before {
+	content: '';
+	position: absolute;
+	inset: 0.15rem;
+	border-right: 1.4px solid currentColor;
+	border-bottom: 1.4px solid currentColor;
+	transform: rotate(-45deg);
+	transition: transform 0.12s ease;
+	opacity: 0.75;
+}
+.tree-dir[open] > .tree-dir__summary .tree-chevron::before {
+	transform: rotate(45deg);
+	margin-top: -0.06rem;
+}
+
+.tree-dir {
+	margin-top: 0.1rem;
+}
+.tree-dir > .tree-dir__summary,
+.tree-dir > summary {
+	list-style: none;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.2rem;
+	padding: 0.32rem var(--nav-item-px);
+	border-radius: var(--radius-sm);
+	/* 文件夹 ≈ 小标题：大一号 + 加粗 */
+	font-weight: 650;
+	font-size: var(--nav-dir-fs);
+	line-height: var(--nav-item-lh);
+	color: var(--nav-label);
+	user-select: none;
+	transition: background 0.12s ease, color 0.12s ease;
+}
+.tree-dir__summary .tree-label {
+	color: inherit;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+}
+.tree-dir__summary .tree-count {
+	font-weight: 500;
+	font-size: 0.72em;
+}
+/* 当前路径祖先：主题色略强调，字重不变 */
+.tree-dir.is-on-path > .tree-dir__summary {
+	color: var(--nav-active-fg);
+}
+.tree-dir.is-on-path > .tree-dir__summary .tree-count {
+	color: color-mix(in srgb, var(--nav-active-fg) 55%, var(--nav-count));
+}
+.tree-dir > summary::-webkit-details-marker {
+	display: none;
+}
+.tree-dir > .tree-dir__summary:hover,
+.tree-dir > summary:hover {
+	background: var(--nav-hover-bg);
+	color: var(--nav-label);
+}
+.tree-dir.is-on-path > .tree-dir__summary:hover {
+	color: var(--nav-active-fg);
+}
+
+.tree-children {
+	margin: 0.06rem 0 0;
+	padding: 0 0 0 0.65rem;
+	border-left: none;
+	margin-left: 0.15rem;
+}
+
+.tree-file {
+	display: flex;
+	align-items: center;
+	gap: 0.32rem;
+	width: 100%;
+	padding: var(--nav-item-py) var(--nav-item-px);
+	margin: 0.04rem 0 0;
+	border-radius: var(--radius-sm);
+	border: none;
+	color: var(--nav-label-file) !important;
+	font-weight: 400;
+	font-size: var(--nav-file-fs);
+	line-height: var(--nav-item-lh);
+	text-decoration: none !important;
+	box-sizing: border-box;
+	transition: background 0.12s ease, color 0.12s ease;
+}
+.tree-file:hover {
+	background: var(--nav-hover-bg);
+	color: var(--nav-label) !important;
+	text-decoration: none !important;
+}
+.tree-file.is-active,
+.tree-file.is-active:hover {
+	background: var(--nav-active-bg);
+	color: var(--nav-active-fg) !important;
+	font-weight: 500;
+}
+.tree-file .tree-label {
+	color: inherit;
+	font-weight: inherit;
+}
+.tree-file .tree-icon {
+	opacity: 0.9;
+	width: var(--nav-icon-size);
+	height: var(--nav-icon-size);
+}
+.tree-file .tree-icon .tree-icon__svg {
+	width: var(--nav-icon-size);
+	height: var(--nav-icon-size);
+}
+.tree-file.is-active .tree-icon {
+	opacity: 1;
+}
+/* ========== 大纲列表（正文大纲项，保持简洁） ========== */
+.doc-toc {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+	padding: 0.4rem 0.65rem 1rem;
+	font-size: var(--font-size-ui);
+	line-height: 1.4;
+	font-family: var(--font-sans);
+}
+.doc-toc a {
+	display: block;
+	padding: 0.3rem 0.45rem;
+	border-radius: var(--radius-sm);
+	border-left: 2px solid transparent;
+	color: var(--fg-muted);
+	text-decoration: none;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	transition: color 0.12s ease, background 0.12s ease;
+}
+.doc-toc a:hover {
+	color: var(--fg);
+	background: var(--nav-hover-bg);
+}
+.doc-toc a.is-active {
+	color: var(--nav-active-fg);
+	font-weight: 600;
+	background: var(--nav-active-bg);
+	border-left-color: var(--accent);
+}
+.doc-toc a.depth-1 {
+	font-weight: 600;
+	color: var(--fg);
+	padding-left: 0.45rem;
+}
+.doc-toc a.depth-2 {
+	padding-left: 0.9rem;
+}
+.doc-toc a.depth-3 {
+	padding-left: 1.3rem;
+}
+.doc-toc a.depth-4,
+.doc-toc a.depth-5,
+.doc-toc a.depth-6 {
+	padding-left: 1.7rem;
+	font-size: 0.78rem;
+}
+.doc-toc .toc-empty {
+	padding: 0.5rem 0.4rem;
+	color: var(--fg-muted);
+}
+
+/*
+ * ========== 中间正文 = 插件渲染；唯一增量 = .webmd-code 顶栏 ==========
+ * 表格 / hr / 标题 / 行内 code / 高亮：全部由 plugin-github-*.css 负责
+ * 本块禁止改 .markdown-body 内字色、边框、pre 底色
+ */
+.center-scroll > .markdown-body {
+	box-sizing: border-box;
+	min-width: 0;
+	width: 100%;
+	max-width: none;
+	padding: 8px 0 32px !important;
+	margin: 0;
+}
+
+/* 中栏与插件正文同底，避免壳层色露边 */
+body.is-text-page .center-scroll,
+body.is-home-page .center-scroll {
+	background: #ffffff;
+}
+html[data-theme='dark'] body.is-text-page .center-scroll,
+html[data-theme='dark'] body.is-home-page .center-scroll {
+	background: #0d1117;
+}
+
+/* 标题仅 id，无可见 #；TOC 跳转保留滚动边距 */
+.markdown-body :is(h1, h2, h3, h4, h5, h6) {
+	scroll-margin-top: 1rem;
+}
+
+/*
+ * WebMD 唯一 chrome：代码 title 栏（类型 + 图标复制）
+ * 下方 pre 完全沿用插件 .markdown-body pre / pre code / .hljs
+ */
+.markdown-body .webmd-code {
+	margin: 0 0 16px;
+	padding: 0;
+	border: 1px solid #d0d7de;
+	border-radius: 8px;
+	overflow: hidden;
+	background: transparent;
+	box-shadow: 0 1px 2px rgba(31, 35, 40, 0.04);
+}
+.markdown-body .webmd-code__bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.65rem;
+	min-height: 2.35rem;
+	padding: 0.35rem 0.55rem 0.35rem 0.75rem;
+	border: 0;
+	border-bottom: 1px solid #d0d7de;
+	border-radius: 0;
+	background: linear-gradient(180deg, #f6f8fa 0%, #eef1f4 100%);
+	box-sizing: border-box;
+}
+.markdown-body .webmd-code__meta {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.55rem;
+	min-width: 0;
+}
+/* 窗口圆点：强化「标题栏」感 */
+.markdown-body .webmd-code__dots {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.28rem;
+	flex-shrink: 0;
+}
+.markdown-body .webmd-code__dots span {
+	display: block;
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: #d0d7de;
+}
+.markdown-body .webmd-code__dots span:nth-child(1) {
+	background: #ff5f57;
+}
+.markdown-body .webmd-code__dots span:nth-child(2) {
+	background: #febc2e;
+}
+.markdown-body .webmd-code__dots span:nth-child(3) {
+	background: #28c840;
+}
+.markdown-body .webmd-code__title {
+	font-size: 0.75rem;
+	font-weight: 650;
+	line-height: 1.2;
+	letter-spacing: 0.02em;
+	color: #57606a;
+	font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+		monospace;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* 图标复制：与路径栏一致，title/aria 作提示 */
+.markdown-body .webmd-code__copy {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0;
+	width: 1.85rem;
+	height: 1.85rem;
+	border: 1px solid transparent;
+	border-radius: 6px;
+	background: transparent;
+	color: #656d76;
+	cursor: pointer;
+	line-height: 0;
+	transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.markdown-body .webmd-code__copy:hover {
+	color: #0969da;
+	background: rgba(9, 105, 218, 0.08);
+	border-color: rgba(9, 105, 218, 0.22);
+}
+.markdown-body .webmd-code__copy:focus-visible {
+	outline: 2px solid rgba(9, 105, 218, 0.45);
+	outline-offset: 1px;
+}
+.markdown-body .webmd-code__icon {
+	display: block;
+	width: 0.9rem;
+	height: 0.9rem;
+}
+.markdown-body .webmd-code__icon--check {
+	display: none;
+}
+.markdown-body .webmd-code__copy.is-copied {
+	color: #1a7f37;
+	background: rgba(26, 127, 55, 0.1);
+	border-color: rgba(26, 127, 55, 0.28);
+}
+.markdown-body .webmd-code__copy.is-copied .webmd-code__icon--copy {
+	display: none;
+}
+.markdown-body .webmd-code__copy.is-copied .webmd-code__icon--check {
+	display: block;
+}
+.markdown-body .webmd-code__copy.is-failed {
+	color: #cf222e;
+	background: rgba(207, 34, 46, 0.08);
+	border-color: rgba(207, 34, 46, 0.25);
+}
+html[data-theme='dark'] .markdown-body .webmd-code__copy.is-failed {
+	color: #ff7b72;
+	background: rgba(248, 81, 73, 0.12);
+	border-color: rgba(248, 81, 73, 0.3);
+}
+/* 有顶栏时：pre 贴合顶栏，去掉外层重复圆角（外框由 .webmd-code 承担） */
+.markdown-body .webmd-code > pre {
+	margin: 0 !important;
+	border-radius: 0 !important;
+	border: 0 !important;
+}
+
+html[data-theme='dark'] .markdown-body .webmd-code {
+	border-color: #3b434b;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+html[data-theme='dark'] .markdown-body .webmd-code__bar {
+	border-bottom-color: #3b434b;
+	background: linear-gradient(180deg, #21262d 0%, #161b22 100%);
+}
+html[data-theme='dark'] .markdown-body .webmd-code__dots span {
+	background: #484f58;
+}
+html[data-theme='dark'] .markdown-body .webmd-code__dots span:nth-child(1) {
+	background: #ff5f57;
+}
+html[data-theme='dark'] .markdown-body .webmd-code__dots span:nth-child(2) {
+	background: #febc2e;
+}
+html[data-theme='dark'] .markdown-body .webmd-code__dots span:nth-child(3) {
+	background: #28c840;
+}
+html[data-theme='dark'] .markdown-body .webmd-code__title {
+	color: #8b949e;
+}
+html[data-theme='dark'] .markdown-body .webmd-code__copy {
+	color: #8b949e;
+	background: transparent;
+	border-color: transparent;
+}
+html[data-theme='dark'] .markdown-body .webmd-code__copy:hover {
+	color: #58a6ff;
+	background: rgba(88, 166, 255, 0.12);
+	border-color: rgba(88, 166, 255, 0.28);
+}
+html[data-theme='dark'] .markdown-body .webmd-code__copy.is-copied {
+	color: #3fb950;
+	background: rgba(63, 185, 80, 0.12);
+	border-color: rgba(63, 185, 80, 0.3);
+}
+
+/*
+ * Mermaid 容器：跟站点主题
+ * 图本身由 mermaid theme default|dark 绘制（见 client.ts）
+ */
+.markdown-body .mermaid {
+	margin: 1rem 0;
+	padding: 0.75rem 1rem;
+	overflow-x: auto;
+	text-align: center;
+	background: #ffffff;
+	border: 1px solid #d0d7de;
+	border-radius: 6px;
+}
+.markdown-body .mermaid svg {
+	max-width: 100%;
+	height: auto;
+}
+html[data-theme='dark'] .markdown-body .mermaid {
+	background: #0d1117;
+	border-color: #3b434b;
+}
+
+/* KaTeX */
+.markdown-body .katex {
+	font-size: 1.1em;
+}
+.markdown-body .katex-display {
+	margin: 1em 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
+/* 站内媒体/嵌入（非插件 MD 能力，布局约束） */
+.markdown-body .webmd-embed {
+	margin: 1rem 0;
+	width: 100%;
+}
+.markdown-body img,
+.markdown-body video,
+.markdown-body .media-video {
+	max-width: 100%;
+	max-height: min(70vh, calc(100vh - var(--header-h) - 6rem));
+	width: auto;
+	height: auto;
+	object-fit: contain;
+}
+.markdown-body .webmd-embed img,
+.markdown-body .webmd-embed video {
+	border: 1px solid #d0d7de;
+	border-radius: 6px;
+}
+html[data-theme='dark'] .markdown-body .webmd-embed img,
+html[data-theme='dark'] .markdown-body .webmd-embed video {
+	border-color: #3b434b;
+}
+.markdown-body .webmd-embed audio,
+.markdown-body .media-audio {
+	width: 100%;
+	max-width: 28rem;
+	display: block;
+}
+
+/*
+ * 全页媒体舞台（图/视频/音频）
+ * 路径仍在顶部；媒体在剩余区域内水平 + 垂直居中，等比 contain
+ */
+.media-stage {
+	/* height:0 + flex:1 让 flex 子项拿到确定高度，max-height:% 才生效 */
+	flex: 1 1 auto;
+	height: 0;
+	min-height: 0;
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center; /* 水平居中 */
+	justify-content: center; /* 垂直居中 */
+	margin: 0;
+	padding: 0.25rem 0;
+	box-sizing: border-box;
+}
+.media-stage .media-solo,
+.media-stage img.media-solo,
+.media-stage video.media-solo {
+	display: block;
+	/* 限制在舞台内，保持比例 */
+	max-width: 100%;
+	max-height: 100%;
+	width: auto;
+	height: auto;
+	object-fit: contain;
+	margin: 0 auto;
+	border-radius: 0.5rem;
+	background: #0000;
+	flex-shrink: 1;
+}
+.media-stage--video .media-solo {
+	background: #000;
+}
+.media-stage--audio {
+	justify-content: center;
+	align-items: center;
+	padding: 1rem;
+	gap: 0.75rem;
+}
+.media-stage--audio .media-audio {
+	width: min(100%, 28rem);
+}
+.media-stage__caption {
+	margin: 0;
+	font-size: 0.8125rem;
+	color: var(--fg-muted);
+	text-align: center;
+}
+
+/* 图/视频/音频全页：路径已在 pane-bar；滚动区整块做媒体舞台 */
+body.is-image-page .center-scroll,
+body.is-video-page .center-scroll,
+body.is-audio-page .center-scroll {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	min-height: 0;
+	padding: 0;
+}
+body.is-image-page .center-scroll > .markdown-body,
+body.is-video-page .center-scroll > .markdown-body,
+body.is-audio-page .center-scroll > .markdown-body {
+	flex: 1 1 auto;
+	height: 0; /* 同 media-stage，保证剩余高度可计算 */
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	padding: 0 !important;
+}
+body.is-image-page .markdown-body > .media-stage,
+body.is-video-page .markdown-body > .media-stage,
+body.is-audio-page .markdown-body > .media-stage {
+	flex: 1 1 auto;
+	height: 0;
+	min-height: 0;
+	width: 100%;
+}
+body.is-image-page .markdown-body > :not(.media-stage),
+body.is-video-page .markdown-body > :not(.media-stage),
+body.is-audio-page .markdown-body > :not(.media-stage) {
+	display: none;
+}
+
+/*
+ * PDF 预览 — 对齐 starlight PdfEmbed + custom.css 媒体舞台
+ * 中栏：面包屑固定高度，pdf-shell 吃满剩余高度
+ */
+.pdf-shell {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1 1 auto;
+	margin: 0 !important;
+	padding: 0 !important;
+	align-items: stretch;
+}
+.pdf-frame {
+	width: 100% !important;
+	height: 100% !important;
+	flex: 1 1 auto;
+	min-height: 12rem;
+	max-height: none !important;
+	border: 1px solid var(--border);
+	border-radius: 0.4rem;
+	background: #525659;
+}
+.pdf-status,
+.pdf-error {
+	padding: 1rem;
+	border-radius: 0.5rem;
+	background: var(--bg-muted);
+	color: var(--fg-muted);
+	font-size: 0.875rem;
+}
+.pdf-error {
+	color: var(--danger-fg);
+	background: var(--danger-bg);
+}
+script[type='application/pdf-base64'] {
+	display: none !important;
+}
+
+/* PDF：路径在 pane-bar，预览铺满滚动区剩余高度 */
+body.is-pdf-page .center-scroll {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	min-height: 0;
+	padding: 0.5rem 0.75rem 0.75rem;
+}
+body.is-pdf-page .center-scroll > .markdown-body {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	padding: 0 !important;
+}
+body.is-pdf-page .markdown-body > .pdf-shell {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+body.is-pdf-page .markdown-body > :not(.pdf-shell) {
+	display: none;
+}
+body.is-pdf-page .pdf-frame {
+	min-height: 0;
+}
+
+body.is-col-resizing,
+body.is-col-resizing * {
+	cursor: col-resize !important;
+	user-select: none !important;
+}
+body.is-col-resizing iframe,
+body.is-col-resizing video {
+	pointer-events: none !important;
+}
+
+/* ========== 路径栏：嵌入统一顶栏，无独立卡片框 ========== */
+.wiki-breadcrumb {
+	margin: 0;
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 0.4rem 0.55rem;
+	padding: 0 0.65rem;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	font-size: var(--font-size-ui);
+	line-height: 1.25;
+	color: var(--fg-muted);
+	box-sizing: border-box;
+	box-shadow: none;
+	min-width: 0;
+	overflow: hidden;
+}
+.wiki-breadcrumb__trail {
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 0.1rem 0;
+	min-width: 0;
+	flex: 1 1 auto;
+	overflow: hidden;
+}
+.wiki-breadcrumb__home {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.7rem;
+	height: 1.7rem;
+	margin: 0;
+	border-radius: 0.35rem;
+	color: var(--fg-muted);
+	text-decoration: none;
+	flex-shrink: 0;
+	transition: color 0.12s, background 0.12s;
+}
+.wiki-breadcrumb__home:hover {
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.wiki-breadcrumb__home.is-current {
+	color: var(--fg);
+	pointer-events: none;
+}
+.wiki-breadcrumb__home-icon {
+	display: block;
+	width: 0.95rem;
+	height: 0.95rem;
+}
+
+/* ========== 站级主页 ========== */
+.home-hero {
+	max-width: 48rem;
+	margin: 0.75rem auto 2rem;
+	padding: 0.75rem 0 1rem;
+}
+.home-hero__title {
+	margin: 0 0 0.55rem;
+	font-size: clamp(1.85rem, 3.2vw, 2.4rem);
+	font-weight: 750;
+	letter-spacing: var(--letter-tight);
+	line-height: 1.2;
+	color: var(--fg);
+}
+.home-hero__desc {
+	margin: 0 0 1.35rem;
+	font-size: 1.08rem;
+	line-height: 1.65;
+	color: var(--fg-muted);
+}
+.home-hero__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.6rem;
+	margin-bottom: 1.85rem;
+}
+.home-hero__btn {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.55rem 1.05rem;
+	border-radius: var(--radius-sm);
+	border: 1px solid var(--border);
+	background: var(--bg);
+	color: var(--fg);
+	font-weight: 600;
+	font-size: 0.9rem;
+	text-decoration: none;
+	box-shadow: var(--shadow-sm);
+	transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.home-hero__btn:hover {
+	border-color: var(--border-strong);
+	background: var(--bg-muted);
+	color: var(--fg);
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+.home-hero__btn--primary {
+	background: var(--accent-solid);
+	border-color: transparent;
+	color: #fff;
+}
+.home-hero__btn--primary:hover {
+	background: var(--accent-hover);
+	border-color: transparent;
+	color: #fff;
+	filter: none;
+}
+.home-hero__cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+	gap: 0.9rem;
+}
+.home-card {
+	padding: 1.1rem 1.15rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg-elevated);
+	box-shadow: var(--shadow-sm);
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.home-card:hover {
+	border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+.home-card h2 {
+	margin: 0 0 0.45rem;
+	font-size: 1.02rem;
+	font-weight: 700;
+	letter-spacing: var(--letter-tight);
+	color: var(--fg);
+}
+.home-card p {
+	margin: 0;
+	font-size: 0.9rem;
+	line-height: 1.55;
+	color: var(--fg-muted);
+}
+.home-card code,
+.home-hero kbd {
+	font-size: 0.85em;
+	font-family: var(--font-mono);
+}
+.home-hero kbd {
+	padding: 0.1em 0.4em;
+	border: 1px solid var(--border);
+	border-radius: 0.3rem;
+	background: var(--bg-muted);
+	box-shadow: inset 0 -1px 0 var(--border);
+}
+.wiki-breadcrumb__sep {
+	margin: 0 0.28rem;
+	color: var(--fg-muted);
+	opacity: 0.45;
+	font-weight: 400;
+	user-select: none;
+}
+.wiki-breadcrumb__seg {
+	color: var(--fg-muted);
+	max-width: 9rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wiki-breadcrumb__current {
+	color: var(--fg);
+	font-weight: 650;
+	max-width: min(22rem, 62vw);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wiki-breadcrumb__meta {
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.3rem;
+	flex: 0 0 auto;
+}
+.wiki-breadcrumb__chip {
+	display: inline-block;
+	padding: 0.12rem 0.45rem;
+	border-radius: 999px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	color: var(--fg-muted);
+	font-size: 0.72rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.35;
+}
+.wiki-breadcrumb__actions {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 0;
+	margin-inline-start: auto;
+}
+.wiki-breadcrumb__icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0;
+	width: 1.5rem;
+	height: 1.7rem;
+	border: 1px solid transparent;
+	border-radius: 0.25rem;
+	background: transparent;
+	color: var(--fg-muted);
+	line-height: 0;
+	text-decoration: none;
+	cursor: pointer;
+	flex-shrink: 0;
+	transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.wiki-breadcrumb__icon-btn:hover {
+	color: var(--fg);
+	border-color: var(--border);
+	background: var(--bg);
+}
+.wiki-breadcrumb__icon-btn:active {
+	transform: translateY(0.5px);
+}
+.wiki-breadcrumb__icon {
+	display: block;
+	width: 0.9rem;
+	height: 0.9rem;
+}
+.wiki-breadcrumb__icon--check {
+	display: none;
+}
+.wiki-breadcrumb__icon-btn.is-copied {
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+	background: var(--nav-active-bg);
+}
+/* 回到顶部：点击瞬间反馈 */
+.wiki-breadcrumb__icon-btn.is-acted {
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+	background: var(--nav-active-bg);
+}
+.wiki-breadcrumb__icon-btn.is-copied .wiki-breadcrumb__icon:not(.wiki-breadcrumb__icon--check) {
+	display: none;
+}
+.wiki-breadcrumb__icon-btn.is-copied .wiki-breadcrumb__icon--check {
+	display: block;
+}
+
+/*
+ * 内容宽度按钮图标：只跟 html[data-content-width] 走
+ * （侧栏开合/软导航会换按钮 DOM，不能依赖按钮上的 is-fixed 类，否则会像“被自动切换”）
+ */
+.wiki-breadcrumb__width-btn .wiki-breadcrumb__icon--content-fixed {
+	display: none;
+}
+html[data-content-width='fixed'] .wiki-breadcrumb__width-btn .wiki-breadcrumb__icon--content-fill {
+	display: none;
+}
+html[data-content-width='fixed'] .wiki-breadcrumb__width-btn .wiki-breadcrumb__icon--content-fixed {
+	display: block;
+}
+html[data-content-width='fixed'] .wiki-breadcrumb__width-btn {
+	color: var(--accent);
+}
+html[data-content-width='fill'] .wiki-breadcrumb__width-btn .wiki-breadcrumb__icon--content-fixed {
+	display: none;
+}
+html[data-content-width='fill'] .wiki-breadcrumb__width-btn .wiki-breadcrumb__icon--content-fill {
+	display: block;
+}
+
+/*
+ * 中栏正文宽度
+ * - fill：吃满当前中栏
+ * - fixed：max = 视口−左右栏设计宽；中栏因收起一侧/两侧变宽时
+ *   正文不超过该 max，并在中栏内水平居中（与收起几个侧栏无关）
+ */
+.center-scroll > .markdown-body,
+.center-scroll > .mobile-toc {
+	width: 100%;
+	max-width: none;
+	margin-inline: 0;
+	box-sizing: border-box;
+	transition: max-width 0.18s ease, margin 0.18s ease;
+}
+
+/* 固定：滚动区用 flex 居中子项，避免 width:100% 在变宽中栏里贴满/贴左 */
+html[data-content-width='fixed'] .center-scroll {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+html[data-content-width='fixed'] .center-scroll > .markdown-body,
+html[data-content-width='fixed'] .center-scroll > .mobile-toc,
+html[data-content-width='fixed'] .app-shell .center-scroll > .markdown-body,
+html[data-content-width='fixed'] .app-shell.panels-collapsed .center-scroll > .markdown-body,
+html[data-content-width='fixed'] .app-shell.nav-collapsed .center-scroll > .markdown-body,
+html[data-content-width='fixed'] .app-shell.toc-collapsed .center-scroll > .markdown-body {
+	/* 不超过锁定 max；中栏更窄时仍可 100% 跟着缩 */
+	width: 100%;
+	max-width: min(100%, var(--content-readable-max)) !important;
+	margin-inline: auto;
+	align-self: center;
+	box-sizing: border-box;
+}
+html[data-content-width='fixed'] .center-scroll .home-hero {
+	max-width: min(100%, var(--content-readable-max));
+	width: 100%;
+	margin-inline: auto;
+}
+/* 媒体/PDF：同样锁 max + 居中，同时吃满列高 */
+html[data-content-width='fixed'] body.is-image-page .center-scroll,
+html[data-content-width='fixed'] body.is-video-page .center-scroll,
+html[data-content-width='fixed'] body.is-audio-page .center-scroll,
+html[data-content-width='fixed'] body.is-pdf-page .center-scroll {
+	align-items: center;
+}
+html[data-content-width='fixed'] body.is-image-page .center-scroll > .markdown-body,
+html[data-content-width='fixed'] body.is-video-page .center-scroll > .markdown-body,
+html[data-content-width='fixed'] body.is-audio-page .center-scroll > .markdown-body,
+html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-body {
+	max-width: min(100%, var(--content-readable-max)) !important;
+	width: 100%;
+	margin-inline: auto;
+	align-self: center;
+	height: 100%;
+	min-height: 0;
+}
+
+
+/* ========== 底部分页（固定在中栏底） ========== */
+.wiki-page-footer {
+	flex: 0 0 auto;
+	background: var(--bg-muted);
+	z-index: 4;
+}
+.wiki-pager {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	height: var(--bottom-bar-h);
+	/* 1px 淡分隔；两侧按钮自带底避免 hover 连成一片 */
+	column-gap: 1px;
+	background: color-mix(in srgb, var(--border) 45%, var(--bg-muted));
+}
+.wiki-pager__btn {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	height: var(--bottom-bar-h);
+	padding: 0 0.9rem;
+	text-decoration: none;
+	color: var(--fg-muted);
+	font-size: var(--font-size-ui);
+	font-weight: 600;
+	font-family: var(--font-sans);
+	min-width: 0;
+	border-top: 1px solid var(--border);
+	background: var(--bg-muted);
+	box-sizing: border-box;
+	transition: background 0.12s ease, color 0.12s ease;
+}
+.wiki-pager__btn:hover {
+	background: var(--nav-hover-bg);
+	color: var(--accent);
+}
+.wiki-pager__btn--prev {
+	justify-content: flex-start;
+}
+.wiki-pager__btn--next {
+	justify-content: flex-end;
+}
+.wiki-pager--single .wiki-pager__btn--next {
+	grid-column: 2;
+}
+.wiki-pager__text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.wiki-pager__chevron {
+	flex: 0 0 auto;
+	font-size: 1.35rem;
+	font-weight: 700;
+	line-height: 1;
+}
+.wiki-pager__slot {
+	display: block;
+	height: var(--bottom-bar-h);
+	border-top: 1px solid var(--border);
+	background: var(--bg-muted);
+}
+
+/* 展开态：侧栏底部收起 — 与 .wiki-pager__btn 同一套常态/hover */
+.wiki-collapse-btn {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.4rem;
+	width: 100%;
+	height: var(--bottom-bar-h);
+	margin: 0;
+	padding: 0 0.9rem;
+	border: none;
+	border-top: 1px solid var(--border);
+	background: transparent;
+	box-sizing: border-box;
+	cursor: pointer;
+	color: var(--fg-muted);
+	font-size: var(--font-size-ui);
+	font-weight: 600;
+	font-family: var(--font-sans);
+	line-height: 1;
+	transition: background 0.12s ease, color 0.12s ease;
+}
+.wiki-collapse-btn > span {
+	flex: 0 0 auto;
+	font-size: 1.55rem;
+	font-weight: 800;
+	line-height: 1;
+}
+.wiki-collapse-btn:hover {
+	background: var(--nav-hover-bg);
+	color: var(--accent);
+}
+.wiki-collapse-btn:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+	color: var(--accent);
+}
+.wiki-collapse-btn:active {
+	background: var(--nav-hover-bg);
+	color: var(--accent);
+}
+
+/*
+ * 收起态：左右全高长条
+ * - 顶部：闭合态图标
+ * - 中部：>> / << 展开提示
+ * - 底部：同样展开提示（对齐展开态底栏高度，上中下都能点）
+ */
+:root {
+	--rail-w: 2.5rem;
+}
+
+.wiki-rail-btn.wiki-edge-btn {
+	position: absolute;
+	z-index: 22;
+	top: 0;
+	bottom: 0;
+	width: var(--rail-w);
+	height: auto;
+	margin: 0;
+	padding: 0;
+	border: none;
+	background: var(--bg-muted);
+	color: var(--fg-muted);
+	cursor: pointer;
+	display: none;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	transition:
+		background 0.12s ease,
+		color 0.12s ease;
+}
+.wiki-rail-btn.wiki-edge-btn:not([hidden]) {
+	display: flex;
+}
+.wiki-rail-btn.wiki-edge-btn:hover {
+	background: color-mix(in srgb, var(--accent) 10%, var(--bg-muted));
+	color: var(--accent);
+}
+/* 顶部图标区：与 pane-bar 同高 */
+.wiki-rail-btn__head {
+	flex: 0 0 var(--pane-bar-h);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg-muted);
+	box-sizing: border-box;
+}
+.wiki-rail-btn.wiki-edge-btn:hover .wiki-rail-btn__head {
+	background: color-mix(in srgb, var(--accent) 8%, var(--bg-muted));
+}
+.wiki-rail-btn__glyph {
+	display: block;
+	width: 1.25rem;
+	height: 1.25rem;
+}
+/* 收起「文件」：仍为叠放多页，中性灰（无蓝色；展开顶栏才用 home-fill） */
+.wiki-rail-btn__glyph--files.wiki-rail-btn__glyph--closed .wiki-rail-btn__sheet {
+	fill: var(--file-page);
+	stroke: var(--file-page-edge);
+	stroke-width: 1.15;
+}
+.wiki-rail-btn__glyph--files.wiki-rail-btn__glyph--closed .wiki-rail-btn__sheet--back {
+	opacity: 0.92;
+}
+.wiki-rail-btn__glyph--files.wiki-rail-btn__glyph--closed .wiki-rail-btn__sheet--front {
+	opacity: 1;
+}
+.wiki-rail-btn__glyph--files.wiki-rail-btn__glyph--closed .wiki-rail-btn__fold {
+	fill: color-mix(in srgb, var(--file-page-edge) 16%, var(--file-page));
+	stroke: var(--file-page-edge);
+	stroke-width: 1.1;
+}
+.wiki-rail-btn__glyph--files.wiki-rail-btn__glyph--closed .wiki-rail-btn__lines {
+	fill: none;
+	stroke: var(--fg-muted);
+	stroke-width: 1.35;
+	opacity: 0.85;
+}
+.wiki-rail-btn.wiki-edge-btn:hover
+	.wiki-rail-btn__glyph--files.wiki-rail-btn__glyph--closed
+	.wiki-rail-btn__lines {
+	stroke: var(--accent);
+	opacity: 1;
+}
+/* 收起「大纲」：同形页+三横线，中性灰（展开顶栏才用 home-fill 蓝） */
+.wiki-rail-btn__glyph--toc.wiki-rail-btn__glyph--closed .wiki-rail-btn__toc-page {
+	fill: color-mix(in srgb, var(--fg-muted) 10%, var(--file-page));
+	stroke: var(--file-page-edge);
+	stroke-width: 1.15;
+}
+.wiki-rail-btn__glyph--toc.wiki-rail-btn__glyph--closed .wiki-rail-btn__toc-lines {
+	fill: none;
+	stroke: var(--fg-muted);
+	stroke-width: 1.25;
+	opacity: 0.9;
+}
+.wiki-rail-btn.wiki-edge-btn:hover .wiki-rail-btn__glyph--closed .wiki-rail-btn__sheet,
+.wiki-rail-btn.wiki-edge-btn:hover .wiki-rail-btn__glyph--closed .wiki-rail-btn__fold {
+	stroke: var(--accent);
+}
+.wiki-rail-btn.wiki-edge-btn:hover
+	.wiki-rail-btn__glyph--toc.wiki-rail-btn__glyph--closed
+	.wiki-rail-btn__toc-page,
+.wiki-rail-btn.wiki-edge-btn:hover
+	.wiki-rail-btn__glyph--toc.wiki-rail-btn__glyph--closed
+	.wiki-rail-btn__toc-lines {
+	stroke: var(--accent);
+}
+.wiki-rail-btn.wiki-edge-btn:hover
+	.wiki-rail-btn__glyph--toc.wiki-rail-btn__glyph--closed
+	.wiki-rail-btn__toc-lines {
+	opacity: 1;
+}
+/* 中部展开提示 */
+.wiki-rail-btn__mid {
+	flex: 1 1 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 0;
+}
+/* 底部展开：与展开态 wiki-collapse-btn 同高，视觉可点 */
+.wiki-rail-btn__foot {
+	flex: 0 0 var(--bottom-bar-h, 2.5rem);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-top: 1px solid var(--border);
+	background: var(--bg-muted);
+	box-sizing: border-box;
+}
+.wiki-rail-btn.wiki-edge-btn:hover .wiki-rail-btn__foot {
+	background: color-mix(in srgb, var(--accent) 8%, var(--bg-muted));
+	color: var(--accent);
+}
+.wiki-rail-btn__chev {
+	font-size: 1.2rem;
+	font-weight: 900;
+	letter-spacing: -0.1em;
+	line-height: 1;
+	user-select: none;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	opacity: 0.95;
+}
+.wiki-rail-btn__icon {
+	font-size: 0.85rem;
+	font-weight: 800;
+	letter-spacing: -0.08em;
+	line-height: 1;
+	user-select: none;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.wiki-edge-btn--nav {
+	left: 0;
+	border-inline-end: 1px solid var(--border);
+}
+.wiki-edge-btn--toc {
+	right: 0;
+	border-inline-start: 1px solid var(--border);
+}
+
+/* 收起时中栏给长条让位 */
+.app-shell.nav-edge-visible .wiki-main {
+	padding-inline-start: var(--rail-w);
+}
+.app-shell.toc-edge-visible .wiki-main {
+	padding-inline-end: var(--rail-w);
+}
+
+/*
+ * 全站统一细滚动条（站外导航/正文/大纲 + 搜索弹层三栏）
+ * 凡可纵向滚动区域均挂此选择器，避免内外两套粗细/颜色
+ */
+.thin-scrollbar,
+.tree-body,
+.center-scroll,
+.doc-toc,
+.mobile-toc__nav,
+.webmd-ms-search .ms-panel-body,
+.webmd-ms-search .ms-results {
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in srgb, var(--fg-muted) 45%, transparent) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar,
+.tree-body::-webkit-scrollbar,
+.center-scroll::-webkit-scrollbar,
+.doc-toc::-webkit-scrollbar,
+.mobile-toc__nav::-webkit-scrollbar,
+.webmd-ms-search .ms-panel-body::-webkit-scrollbar,
+.webmd-ms-search .ms-results::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+.thin-scrollbar::-webkit-scrollbar-track,
+.tree-body::-webkit-scrollbar-track,
+.center-scroll::-webkit-scrollbar-track,
+.doc-toc::-webkit-scrollbar-track,
+.mobile-toc__nav::-webkit-scrollbar-track,
+.webmd-ms-search .ms-panel-body::-webkit-scrollbar-track,
+.webmd-ms-search .ms-results::-webkit-scrollbar-track {
+	background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb,
+.tree-body::-webkit-scrollbar-thumb,
+.center-scroll::-webkit-scrollbar-thumb,
+.doc-toc::-webkit-scrollbar-thumb,
+.mobile-toc__nav::-webkit-scrollbar-thumb,
+.webmd-ms-search .ms-panel-body::-webkit-scrollbar-thumb,
+.webmd-ms-search .ms-results::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--fg-muted) 35%, transparent);
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb:hover,
+.tree-body::-webkit-scrollbar-thumb:hover,
+.center-scroll::-webkit-scrollbar-thumb:hover,
+.doc-toc::-webkit-scrollbar-thumb:hover,
+.mobile-toc__nav::-webkit-scrollbar-thumb:hover,
+.webmd-ms-search .ms-panel-body::-webkit-scrollbar-thumb:hover,
+.webmd-ms-search .ms-results::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--fg-muted) 55%, transparent);
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
+
+/* ========== 移动 TOC ========== */
+.mobile-toc {
+	display: none;
+	margin: 0 0 0.75rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg-muted);
+}
+.mobile-toc__summary {
+	cursor: pointer;
+	padding: 0.5rem 0.75rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--fg-muted);
+	list-style: none;
+}
+.mobile-toc__summary::-webkit-details-marker {
+	display: none;
+}
+.mobile-toc__nav {
+	display: flex;
+	flex-direction: column;
+	padding: 0.25rem 0.5rem 0.65rem;
+	max-height: 40vh;
+	overflow: auto;
+	border-top: 1px solid var(--border);
+}
+.mobile-toc__nav a {
+	display: block;
+	padding: 0.28rem 0.45rem;
+	border-radius: var(--radius);
+	color: var(--fg-muted);
+	text-decoration: none;
+	font-size: 0.8125rem;
+}
+.mobile-toc__nav a:hover,
+.mobile-toc__nav a.is-active {
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.mobile-toc__nav a.depth-2 {
+	padding-left: 0.85rem;
+}
+.mobile-toc__nav a.depth-3 {
+	padding-left: 1.25rem;
+}
+
+.mobile-nav-backdrop {
+	display: none;
+}
+
+/* 中等宽：藏 TOC，用 mobile-toc */
+@media (max-width: 900px) {
+	.wiki-center {
+		grid-template-columns: minmax(0, 1fr) 0 0 !important;
+	}
+	.wiki-toc,
+	.wiki-gutter--toc {
+		display: none !important;
+	}
+	.wiki-edge-btn--toc {
+		display: none !important;
+	}
+	.mobile-toc {
+		display: block;
+	}
+}
+
+/* 手机：抽屉导航 */
+@media (max-width: 640px) {
+	.app-header {
+		grid-template-columns: auto 1fr auto;
+		padding: 0 0.65rem;
+	}
+	.app-shell {
+		grid-template-columns: minmax(0, 1fr) !important;
+	}
+	.wiki-gutter {
+		display: none !important;
+	}
+	.wiki-edge-btn {
+		display: none !important;
+	}
+	.panel-btn--menu {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 2.25rem;
+	}
+	.wiki-nav {
+		position: fixed !important;
+		top: var(--header-h);
+		left: 0;
+		bottom: 0;
+		width: min(86vw, 320px) !important;
+		z-index: 40;
+		transform: translateX(-105%);
+		transition: transform 0.18s ease;
+		box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+		visibility: visible !important;
+		pointer-events: auto !important;
+		border-right: 1px solid var(--border);
+	}
+	body.mobile-nav-open .wiki-nav {
+		transform: translateX(0);
+	}
+	.mobile-nav-backdrop {
+		display: block;
+		position: fixed;
+		inset: var(--header-h) 0 0 0;
+		z-index: 35;
+		background: rgba(31, 35, 40, 0.35);
+	}
+	.mobile-nav-backdrop[hidden] {
+		display: none !important;
+	}
+	.center-scroll {
+		padding: 0.55rem 0.85rem 1rem;
+	}
+	.wiki-collapse-btn--nav,
+	.wiki-collapse-btn--toc,
+	.pane-collapse-btn {
+		display: none !important;
+	}
+}
+
+@media print {
+	.app-header,
+	.wiki-nav,
+	.wiki-toc,
+	.wiki-gutter,
+	.wiki-edge-btn,
+	.wiki-rail-btn,
+	.wiki-collapse-btn,
+	.wiki-page-footer,
+	.mobile-toc,
+	.webmd-search,
+	.panel-btn {
+		display: none !important;
+	}
+	.app-shell,
+	.wiki-center {
+		display: block !important;
+		height: auto !important;
+	}
+	.wiki-main,
+	.center-scroll {
+		overflow: visible !important;
+		height: auto !important;
+	}
+	html,
+	body {
+		overflow: visible !important;
+		height: auto !important;
+	}
+}

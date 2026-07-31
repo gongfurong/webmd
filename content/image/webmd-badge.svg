@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="280" viewBox="0 0 640 280" role="img" aria-label="WebMD SVG sample">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ddf4ff"/>
+      <stop offset="100%" stop-color="#f6f8fa"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="280" rx="16" fill="url(#bg)" stroke="#d0d7de" stroke-width="2"/>
+  <circle cx="96" cy="140" r="48" fill="#0969da" opacity="0.15"/>
+  <circle cx="96" cy="140" r="28" fill="#0969da"/>
+  <text x="96" y="148" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" font-size="18" font-weight="700" fill="#ffffff">SVG</text>
+  <text x="170" y="120" font-family="Segoe UI, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1f2328">image/webmd-badge.svg</text>
+  <text x="170" y="156" font-family="Segoe UI, system-ui, sans-serif" font-size="16" fill="#656d76">项目原先无 SVG 样例 · 供 WebMD 图片管线测试</text>
+  <text x="170" y="190" font-family="Consolas, monospace" font-size="13" fill="#0969da">kind=image · embed via virtual markdown</text>
+</svg>
