@@ -201,8 +201,6 @@ function applyLayout(s: LayoutState) {
 	const narrow = isNarrowViewport();
 	// ≤tocHideBelow：左右都改上层抽屉，grid 不再为侧栏留列
 	const drawerUi = isDrawerViewport();
-	// 兼容旧名：大纲抽屉与 drawerUi 同断点
-	const narrowTocUi = drawerUi;
 	// 右栏大纲：仅宽屏分栏模式可「常驻展开」；抽屉模式不占列
 	const tocAvailable = !drawerUi && isTocBreakpoint();
 	const navOpen = !drawerUi && !s.navCollapsed;
@@ -284,13 +282,6 @@ function applyLayout(s: LayoutState) {
 		updateContentReadableMax(s);
 		refreshAllMiddleEllipsis();
 	});
-}
-
-/**
- * @deprecated 与 isDrawerViewport 同义（大纲/文件均用上层抽屉）
- */
-function isNarrowTocViewport(): boolean {
-	return isDrawerViewport();
 }
 
 function syncDrawerBackdrop() {
