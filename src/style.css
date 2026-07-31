@@ -2698,6 +2698,12 @@ body.is-file-page .markdown-body > .webmd-code > pre {
 	filter: brightness(1.06);
 	color: #fff !important;
 }
+a[download].is-downloading,
+.wiki-breadcrumb__icon-btn.is-downloading,
+.pdf-tb-btn.is-downloading {
+	opacity: 0.55;
+	pointer-events: none;
+}
 .file-unsupported__open {
 	border: 1px solid var(--border);
 	background: var(--bg-elevated, var(--bg));

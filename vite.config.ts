@@ -212,17 +212,22 @@ function sendContentFile(
 	const stat = fs.statSync(filePath);
 	const size = stat.size;
 	const type = CONTENT_TYPES[ext] || 'application/octet-stream';
+	const rawUrl = req.url || '';
+	const wantDownload = /[?&](dl|download)=1(?:&|$)/.test(rawUrl);
+	const baseName = path.basename(filePath);
+	const asciiName = baseName.replace(/[^\w.\u4e00-\u9fff-]+/g, '_') || 'download';
+	const disposition = wantDownload ? 'attachment' : ext === '.pdf' ? 'inline' : 'inline';
 
 	res.setHeader('Content-Type', type);
 	res.setHeader('Accept-Ranges', 'bytes');
 	res.setHeader('Cache-Control', 'public, max-age=0');
-	if (ext === '.pdf') {
-		const name = path.basename(filePath).replace(/[^\w.\u4e00-\u9fff-]+/g, '_');
+	res.setHeader('X-Content-Type-Options', 'nosniff');
+	// PDF 默认 inline 便于预览；?dl=1 强制 attachment（客户端下载兜底）
+	if (ext === '.pdf' || wantDownload) {
 		res.setHeader(
 			'Content-Disposition',
-			`inline; filename="${name}"; filename*=UTF-8''${encodeURIComponent(path.basename(filePath))}`,
+			`${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(baseName)}`,
 		);
-		res.setHeader('X-Content-Type-Options', 'nosniff');
 	}
 
 	if (req.method === 'HEAD') {

@@ -2785,12 +2785,17 @@ function bindPdfEmbeds() {
 			blobUrl = URL.createObjectURL(blob);
 			root.dataset.blobUrl = blobUrl;
 			if (dl) {
-				// Office 预览：下载始终指向原件；真 PDF 可用 blob 本地保存
+				// 下载链优先同源 /content/ 原件（手机对 blob: + download 支持差）
 				const officeSrc = root.dataset.officeSrc || '';
+				const fileSrc = root.dataset.pdfSrc || '';
 				if (officeSrc) {
 					dl.href = officeSrc;
 					dl.download = name || 'document';
 					dl.title = '下载原文件';
+				} else if (fileSrc) {
+					dl.href = fileSrc;
+					dl.download = name.endsWith('.pdf') ? name : `${name}.pdf`;
+					dl.title = '下载 PDF';
 				} else {
 					dl.href = blobUrl;
 					dl.download = name.endsWith('.pdf') ? name : `${name}.pdf`;
@@ -3460,12 +3465,111 @@ function bindViewPersistence() {
 	});
 }
 
+/**
+ * 手机端（尤其 iOS）常忽略 a[download]，PDF 还会直接打开预览。
+ * 统一：fetch → Blob → 触发下载；支持分享时走系统「存储到文件」。
+ */
+async function forceDownloadFile(url: string, filename: string): Promise<void> {
+	const name = (filename || 'download').replace(/[/\\?%*:|"<>]/g, '_').trim() || 'download';
+	let abs = url;
+	try {
+		abs = new URL(url, location.href).href;
+	} catch {
+		/* keep url */
+	}
+
+	const res = await fetch(abs, { credentials: 'same-origin', cache: 'no-cache' });
+	if (!res.ok) throw new Error(`HTTP ${res.status}`);
+	const blob = await res.blob();
+
+	// Web Share 带文件：iOS/Android 可「存储到文件 / 分享」
+	try {
+		const file = new File([blob], name, {
+			type: blob.type || 'application/octet-stream',
+		});
+		const nav = navigator as Navigator & {
+			canShare?: (data?: ShareData) => boolean;
+			share?: (data: ShareData) => Promise<void>;
+		};
+		if (typeof nav.canShare === 'function' && nav.canShare({ files: [file] }) && nav.share) {
+			await nav.share({ files: [file], title: name });
+			return;
+		}
+	} catch (e) {
+		// 用户取消分享：视为完成，勿再弹下载
+		if (e instanceof Error && e.name === 'AbortError') return;
+	}
+
+	// 通用：Blob URL + download（Chrome/Android 较稳）
+	const objectUrl = URL.createObjectURL(blob);
+	try {
+		const a = document.createElement('a');
+		a.href = objectUrl;
+		a.download = name;
+		a.rel = 'noopener';
+		a.style.display = 'none';
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+	} finally {
+		window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+	}
+}
+
+function bindForceDownloads() {
+	document.addEventListener(
+		'click',
+		(ev) => {
+			const t = ev.target as HTMLElement | null;
+			if (!t) return;
+			const a = t.closest('a[download]') as HTMLAnchorElement | null;
+			if (!a || a.getAttribute('aria-disabled') === 'true') return;
+			// 仅处理站内 / 相对下载
+			const href = a.getAttribute('href');
+			if (!href || href.startsWith('mailto:') || href.startsWith('javascript:')) return;
+			let url: URL;
+			try {
+				url = new URL(a.href, location.href);
+			} catch {
+				return;
+			}
+			if (url.origin !== location.origin && !href.startsWith('blob:')) return;
+
+			const filename =
+				a.getAttribute('download') ||
+				decodeURIComponent(url.pathname.split('/').pop() || '') ||
+				'download';
+
+			ev.preventDefault();
+			ev.stopPropagation();
+
+			const prevLabel = a.getAttribute('aria-label') || '';
+			a.setAttribute('aria-busy', 'true');
+			a.classList.add('is-downloading');
+			void forceDownloadFile(url.href, filename)
+				.catch(() => {
+					// 兜底：带 dl=1 让开发服尽量 attachment（静态托管仍可能预览）
+					const fallback = new URL(url.href);
+					if (!fallback.searchParams.has('dl')) fallback.searchParams.set('dl', '1');
+					window.open(fallback.href, '_blank', 'noopener');
+				})
+				.finally(() => {
+					a.removeAttribute('aria-busy');
+					a.classList.remove('is-downloading');
+					if (prevLabel) a.setAttribute('aria-label', prevLabel);
+				});
+		},
+		true,
+	);
+}
+
 bindTheme();
 bindToggles();
 bindGutters();
 bindCodeCopy();
 bindContentWidth();
 bindBreadcrumbActions();
+bindForceDownloads();
 bindMiddleEllipsis();
 bindFocusRead();
 bindFileTreeSort();
