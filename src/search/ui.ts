@@ -54,22 +54,39 @@ const SHELL = `
 </button>
 <dialog class="ms-dialog" aria-label="搜索">
 	<div class="dialog-frame">
-		<button type="button" class="ms-close-mobile" data-close-modal title="关闭搜索" aria-label="关闭">关闭</button>
+		<!-- 窗体标题栏：关窗键在右上角（像系统窗口） -->
+		<header class="ms-titlebar">
+			<span class="ms-titlebar__title">搜索</span>
+			<div class="ms-titlebar__tools" role="toolbar" aria-label="搜索选项">
+				<div class="ms-seg" data-match-mode data-mode="fuzzy" role="group" aria-label="匹配模式" title="精确=整段一致不拆词；模糊=宽松。大小写由旁侧选项决定">
+					<button type="button" class="ms-seg__opt" data-match-mode-opt="strict" title="精确：内容须整段一致（不拆词），大小写见旁侧" aria-pressed="false">精确</button>
+					<button type="button" class="ms-seg__opt is-active" data-match-mode-opt="fuzzy" title="模糊：宽松匹配" aria-pressed="true">模糊</button>
+				</div>
+				<div class="ms-seg ms-seg--case" data-case-mode data-mode="ignore" role="group" aria-label="大小写" title="是否区分英文字母大小写（与精确/模糊正交）">
+					<button type="button" class="ms-seg__opt is-active" data-case-mode-opt="ignore" title="忽略大小写：Abc 与 abc 相同" aria-label="忽略大小写" aria-pressed="true"><span class="ms-case-glyph" aria-hidden="true"><span class="ms-case-glyph__A">A</span><span class="ms-case-glyph__a">a</span></span></button>
+					<button type="button" class="ms-seg__opt" data-case-mode-opt="sensitive" title="区分大小写：Abc 与 abc 不同" aria-label="区分大小写" aria-pressed="false"><span class="ms-case-glyph ms-case-glyph--strict" aria-hidden="true"><span class="ms-case-glyph__A">A</span><span class="ms-case-glyph__neq">≠</span><span class="ms-case-glyph__a">a</span></span></button>
+				</div>
+				<div class="ms-seg" data-token-mode data-mode="string" role="group" aria-label="串或词" title="串=可作子串命中；词=须独立词界（主要对英文；中文仍按串）">
+					<button type="button" class="ms-seg__opt is-active" data-token-mode-opt="string" title="串：可包含在更长单词/句子中（cat→category）" aria-pressed="true">串</button>
+					<button type="button" class="ms-seg__opt" data-token-mode-opt="word" title="词：须为独立英文词（cat 不匹配 category）；中文无词界，仍按串" aria-pressed="false">词</button>
+				</div>
+				<div class="ms-seg" data-combine data-mode="OR" role="group" aria-label="多词组合" title="多词：与=全部命中，或=任一命中（精确模式下不可用）">
+					<button type="button" class="ms-seg__opt" data-combine-mode="AND" title="与：全部命中" aria-pressed="false">与</button>
+					<button type="button" class="ms-seg__opt is-active" data-combine-mode="OR" title="或：任一命中" aria-pressed="true">或</button>
+				</div>
+			</div>
+			<div class="ms-titlebar__controls" role="group" aria-label="窗口控制">
+				<button type="button" class="ms-caption-btn ms-caption-btn--close" data-close-modal title="关闭" aria-label="关闭">
+					<span class="ms-caption-btn__x" aria-hidden="true"></span>
+				</button>
+			</div>
+		</header>
 		<div class="search-shell">
 			<div class="search-input-row">
 				<input type="search" class="ms-input" data-search-input placeholder="搜索文档…" autocomplete="off" enterkeyhint="search" />
-				<div class="ms-input-tools">
-					<div class="ms-seg" data-combine data-mode="OR" role="group" aria-label="多词组合" title="多词组合：与=全部命中，或=任一命中（精确模式下不可用）">
-						<button type="button" class="ms-seg__opt" data-combine-mode="AND" title="与：全部命中" aria-pressed="false">与</button>
-						<button type="button" class="ms-seg__opt is-active" data-combine-mode="OR" title="或：任一命中" aria-pressed="true">或</button>
-					</div>
-					<div class="ms-seg" data-match-mode data-mode="fuzzy" role="group" aria-label="匹配模式" title="匹配模式：精确=不拆词、大小写敏感；模糊=宽松（精确时与/或不可用）">
-						<button type="button" class="ms-seg__opt" data-match-mode-opt="strict" title="精确：不拆词、大小写敏感" aria-pressed="false">精确</button>
-						<button type="button" class="ms-seg__opt is-active" data-match-mode-opt="fuzzy" title="模糊：宽松匹配" aria-pressed="true">模糊</button>
-					</div>
-				</div>
 			</div>
 			<div class="search-body" data-search-body>
+				<button type="button" class="ms-drawer-backdrop" data-ms-drawer-backdrop hidden aria-label="关闭筛选面板"></button>
 				<aside class="ms-panel ms-panel--left" data-ms-panel="left" aria-label="搜索筛选器">
 					<div class="ms-panel-main">
 						<div class="ms-panel-label">
@@ -84,14 +101,11 @@ const SHELL = `
 						</div>
 						<div class="ms-panel-body thin-scrollbar" data-left-body data-ms-scroll="left"></div>
 					</div>
-					<button type="button" class="ms-panel-rail" data-ms-expand="left" title="展开搜索筛选" aria-label="展开搜索筛选" hidden>
-						<span class="ms-panel-rail__head" aria-hidden="true"><span class="ms-panel-rail__chev">&gt;&gt;</span></span>
-						<span class="ms-panel-rail__mid" aria-hidden="true"><span class="ms-panel-rail__chev">&gt;&gt;</span><span class="ms-panel-rail__text">筛选</span></span>
-					</button>
 				</aside>
 				<section class="ms-panel ms-panel--center" aria-label="搜索结果">
 					<div class="ms-panel-label ms-panel-label--center">
 						<div class="ms-panel-label-start">
+							<button type="button" class="ms-pane-expand" data-ms-expand="left" title="展开搜索筛选" aria-label="展开搜索筛选" hidden><span aria-hidden="true">&gt;&gt;</span></button>
 							<span class="ms-panel-label-title">搜索结果</span>
 							<span class="ms-status-inline" data-status></span>
 						</div>
@@ -103,6 +117,7 @@ const SHELL = `
 								<button type="button" class="${MS_TEXT_BTN}" data-files-only aria-pressed="false" title="只显示文件路径，不展开命中标题/段落" aria-label="仅文件：关">仅文件</button>
 							</div>
 							${scrollEdgeHtml('center')}
+							<button type="button" class="ms-pane-expand" data-ms-expand="right" title="展开结果筛选" aria-label="展开结果筛选" hidden><span aria-hidden="true">&lt;&lt;</span></button>
 						</div>
 					</div>
 					<div class="ms-panel-body thin-scrollbar" data-ms-scroll="center"><ul class="ms-results" data-results></ul></div>
@@ -121,10 +136,6 @@ const SHELL = `
 						</div>
 						<div class="ms-panel-body thin-scrollbar" data-right-body data-ms-scroll="right"></div>
 					</div>
-					<button type="button" class="ms-panel-rail" data-ms-expand="right" title="展开结果筛选" aria-label="展开结果筛选" hidden>
-						<span class="ms-panel-rail__head" aria-hidden="true"><span class="ms-panel-rail__chev">&lt;&lt;</span></span>
-						<span class="ms-panel-rail__mid" aria-hidden="true"><span class="ms-panel-rail__text">筛选</span><span class="ms-panel-rail__chev">&lt;&lt;</span></span>
-					</button>
 				</aside>
 			</div>
 		</div>
@@ -153,19 +164,34 @@ export function mountSearch(mount: HTMLElement) {
 	const filesOnlyBtn = root.querySelector<HTMLButtonElement>('[data-files-only]')!;
 	const matchModeSeg = root.querySelector<HTMLElement>('[data-match-mode]')!;
 	const combineToggle = root.querySelector<HTMLElement>('[data-combine]')!;
+	const caseModeSeg = root.querySelector<HTMLElement>('[data-case-mode]')!;
+	const tokenModeSeg = root.querySelector<HTMLElement>('[data-token-mode]')!;
 	const combineOpts = () =>
 		[...combineToggle.querySelectorAll<HTMLButtonElement>('[data-combine-mode]')];
 	const matchModeOpts = () =>
 		[...matchModeSeg.querySelectorAll<HTMLButtonElement>('[data-match-mode-opt]')];
+	const caseModeOpts = () =>
+		[...caseModeSeg.querySelectorAll<HTMLButtonElement>('[data-case-mode-opt]')];
+	const tokenModeOpts = () =>
+		[...tokenModeSeg.querySelectorAll<HTMLButtonElement>('[data-token-mode-opt]')];
 	const pathSortBtn = root.querySelector<HTMLButtonElement>('[data-path-sort]')!;
 	const modKey = root.querySelector<HTMLElement>('[data-mod-key]');
 	const searchBody = root.querySelector<HTMLElement>('[data-search-body]')!;
 	const leftPanel = root.querySelector<HTMLElement>('[data-ms-panel="left"]')!;
 	const rightPanel = root.querySelector<HTMLElement>('[data-ms-panel="right"]')!;
 
-	/* —— 左右栏收起/展开；宽度不足时优先收右再收左 —— */
-	const MS_BREAK_RIGHT = 1020; // < 此宽自动收右
-	const MS_BREAK_LEFT = 760; // < 此宽再自动收左
+	/*
+	 * 布局模式判定（只看视口宽高，不区分设备）：
+	 * - 窄屏 narrow：宽度不足，或矮视口 → 全屏 + 侧栏抽屉 + 互斥
+	 * - 宽屏 wide：居中卡片 + 三栏 + 按宽度自动收栏
+	 *
+	 * 与 CSS 中 @media (max-width: 49.99rem), (max-height: 32rem) and (max-width: 56rem) 对齐
+	 * 宽度够但高度矮时靠 max-height，避免误用宽屏三栏把内容挤没。
+	 */
+	const MS_BREAK_RIGHT = 1020;
+	const MS_BREAK_LEFT = 760;
+	const MS_NARROW_MQ =
+		'(max-width: 49.99rem), (max-height: 32rem) and (max-width: 56rem)';
 	const paneUi = {
 		left: {
 			collapsed: false,
@@ -179,29 +205,58 @@ export function mountSearch(mount: HTMLElement) {
 		},
 	};
 
+	const isNarrowSearch = () =>
+		typeof matchMedia === 'function' && matchMedia(MS_NARROW_MQ).matches;
+
+	const drawerBackdrop = root.querySelector<HTMLElement>('[data-ms-drawer-backdrop]');
+
 	const applyPaneCollapse = () => {
 		const L = paneUi.left.collapsed;
 		const R = paneUi.right.collapsed;
+		const narrow = isNarrowSearch();
+		const drawerOpen = narrow && (!L || !R);
+		root.classList.toggle('is-narrow-search', narrow);
+		dialog.classList.toggle('is-narrow-search', narrow);
 		searchBody.classList.toggle('is-left-collapsed', L);
 		searchBody.classList.toggle('is-right-collapsed', R);
+		searchBody.classList.toggle('has-drawer-open', drawerOpen);
 		leftPanel.classList.toggle('is-collapsed', L);
 		rightPanel.classList.toggle('is-collapsed', R);
-		const leftRail = leftPanel.querySelector<HTMLElement>('[data-ms-expand="left"]');
-		const rightRail = rightPanel.querySelector<HTMLElement>('[data-ms-expand="right"]');
-		const leftMain = leftPanel.querySelector<HTMLElement>('.ms-panel-main');
-		const rightMain = rightPanel.querySelector<HTMLElement>('.ms-panel-main');
-		if (leftRail) leftRail.hidden = !L;
-		if (rightRail) rightRail.hidden = !R;
-		if (leftMain) leftMain.hidden = L;
-		if (rightMain) rightMain.hidden = R;
+		// 收起后不占位；中间结果栏永不 hidden
+		leftPanel.hidden = L;
+		rightPanel.hidden = R;
+		// 中间栏始终可见（侧栏 hidden 后靠固定 grid-column 占结果列）
+		const centerPanel = root.querySelector<HTMLElement>('.ms-panel--center');
+		if (centerPanel) {
+			centerPanel.hidden = false;
+			centerPanel.classList.remove('is-collapsed');
+		}
+		if (drawerBackdrop) drawerBackdrop.hidden = !drawerOpen;
+		const expandLeft = root.querySelector<HTMLElement>('[data-ms-expand="left"]');
+		const expandRight = root.querySelector<HTMLElement>('[data-ms-expand="right"]');
+		if (expandLeft) expandLeft.hidden = !L;
+		if (expandRight) expandRight.hidden = !R;
 		leftPanel.setAttribute('aria-expanded', L ? 'false' : 'true');
 		rightPanel.setAttribute('aria-expanded', R ? 'false' : 'true');
 	};
 
 	const recomputeAutoPanes = () => {
-		const w = searchBody.clientWidth || dialog.clientWidth || 0;
+		const w = searchBody.clientWidth || dialog.clientWidth || window.innerWidth || 0;
 		if (w <= 0) return;
-		// 宽度不够优先收右，再收左；用户钉开/钉收可覆盖，直到宽度回宽清掉钉开
+
+		// —— 窄屏：默认双收，互斥钉开 ——
+		if (isNarrowSearch()) {
+			if (!paneUi.left.userForcedExpanded) paneUi.left.collapsed = true;
+			if (!paneUi.right.userForcedExpanded) paneUi.right.collapsed = true;
+			if (!paneUi.left.collapsed && !paneUi.right.collapsed) {
+				paneUi.right.collapsed = true;
+				paneUi.right.userForcedExpanded = false;
+			}
+			applyPaneCollapse();
+			return;
+		}
+
+		// —— 宽屏：按宽度自动收右 → 收左 ——
 		if (w < MS_BREAK_RIGHT) {
 			if (!paneUi.right.userForcedExpanded) paneUi.right.collapsed = true;
 		} else {
@@ -230,6 +285,13 @@ export function mountSearch(mount: HTMLElement) {
 			} else {
 				paneUi[side].userForcedExpanded = true;
 				paneUi[side].userForcedCollapsed = false;
+				// 仅窄屏：互斥，展开一侧时收起另一侧
+				if (isNarrowSearch()) {
+					const other = side === 'left' ? 'right' : 'left';
+					paneUi[other].collapsed = true;
+					paneUi[other].userForcedExpanded = false;
+					paneUi[other].userForcedCollapsed = false;
+				}
 			}
 		}
 		applyPaneCollapse();
@@ -240,6 +302,13 @@ export function mountSearch(mount: HTMLElement) {
 		const el =
 			t instanceof Element ? t : t instanceof Node ? t.parentElement : null;
 		if (!el) return;
+		// 窄屏抽屉遮罩：点空白关闭当前展开的筛选
+		if (el.closest('[data-ms-drawer-backdrop]') && root.contains(el)) {
+			ev.preventDefault();
+			if (!paneUi.left.collapsed) setPaneCollapsed('left', true, true);
+			if (!paneUi.right.collapsed) setPaneCollapsed('right', true, true);
+			return;
+		}
 		const collapseBtn = el.closest(
 			'[data-ms-collapse]',
 		) as HTMLElement | null;
@@ -267,6 +336,14 @@ export function mountSearch(mount: HTMLElement) {
 			? new ResizeObserver(() => recomputeAutoPanes())
 			: null;
 	paneRo?.observe(searchBody);
+	paneRo?.observe(dialog);
+	// 视口宽高变化时重新判定窄屏 / 宽屏
+	window.addEventListener('orientationchange', () => {
+		window.setTimeout(() => recomputeAutoPanes(), 100);
+	});
+	window.addEventListener('resize', () => {
+		recomputeAutoPanes();
+	});
 	const msScrollEl = (pane: string): HTMLElement | null =>
 		root.querySelector<HTMLElement>(`[data-ms-scroll="${pane}"]`);
 
@@ -348,9 +425,13 @@ export function mountSearch(mount: HTMLElement) {
 	let rightFormat = new Set<string>();
 	let rightFolder = new Set<string>();
 	let filesOnly = false;
-	/** 匹配模式互斥：模糊（宽松）↔ 精确（不拆词、大小写敏感）；精确时与/或置灰 */
+	/** 匹配：模糊（宽松）↔ 精确（不拆词）；精确时与/或置灰。大小写单独选项 */
 	let matchMode: 'fuzzy' | 'strict' = 'fuzzy';
 	let combineMode: 'AND' | 'OR' = 'OR';
+	/** ignore=忽略大小写（默认）；sensitive=区分大小写 */
+	let caseMode: 'ignore' | 'sensitive' = 'ignore';
+	/** string=串/子串（默认）；word=词边界（主要英文） */
+	let tokenMode: 'string' | 'word' = 'string';
 	let pathSort: 'asc' | 'desc' = 'asc';
 	let lastBaseHits: SearchHit[] = [];
 	let debounceTimer: number | null = null;
@@ -371,7 +452,7 @@ export function mountSearch(mount: HTMLElement) {
 		const strict = matchMode === 'strict';
 		combineToggle.dataset.mode = combineMode;
 		combineToggle.title = strict
-			? '精确模式下「与/或」不可用（整段原样匹配，不拆词）'
+			? '精确模式下「与/或」不可用（整段匹配、不拆词）'
 			: '多词组合：与=全部命中，或=任一命中';
 		combineToggle.classList.toggle('is-disabled', strict);
 		combineToggle.setAttribute('aria-disabled', strict ? 'true' : 'false');
@@ -385,12 +466,42 @@ export function mountSearch(mount: HTMLElement) {
 	};
 	syncCombineBtn();
 
+	const syncCaseModeBtn = () => {
+		const ignore = caseMode === 'ignore';
+		caseModeSeg.dataset.mode = caseMode;
+		caseModeSeg.title = ignore
+			? '大小写：Aa 忽略 · Abc 与 abc 相同'
+			: '大小写：A≠a 区分 · Abc 与 abc 不同';
+		caseModeOpts().forEach((btn) => {
+			const mode = btn.getAttribute('data-case-mode-opt');
+			const on = mode === caseMode;
+			btn.classList.toggle('is-active', on);
+			btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+		});
+	};
+	syncCaseModeBtn();
+
+	const syncTokenModeBtn = () => {
+		const asWord = tokenMode === 'word';
+		tokenModeSeg.dataset.mode = tokenMode;
+		tokenModeSeg.title = asWord
+			? '词：英文须独立词界（cat≠category）；中文仍按串'
+			: '串：可作任意子串命中（cat→category）';
+		tokenModeOpts().forEach((btn) => {
+			const mode = btn.getAttribute('data-token-mode-opt');
+			const on = mode === tokenMode;
+			btn.classList.toggle('is-active', on);
+			btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+		});
+	};
+	syncTokenModeBtn();
+
 	const syncMatchModeBtn = () => {
 		const fuzzy = matchMode === 'fuzzy';
 		matchModeSeg.dataset.mode = matchMode;
 		matchModeSeg.title = fuzzy
-			? '匹配模式：模糊 · 宽松匹配（精确时与/或不可用）'
-			: '匹配模式：精确 · 不拆词、大小写敏感（精确时与/或不可用）';
+			? '匹配：模糊 · 宽松（精确时与/或不可用；大小写见旁侧）'
+			: '匹配：精确 · 整段一致不拆词（大小写见旁侧；与/或不可用）';
 		matchModeOpts().forEach((btn) => {
 			const mode = btn.getAttribute('data-match-mode-opt');
 			const on = mode === matchMode;
@@ -448,13 +559,35 @@ export function mountSearch(mount: HTMLElement) {
 		if (document.body.contains(el) && !dialogFrame.contains(el)) closeModal();
 	};
 
+	const setSearchModalLock = (on: boolean) => {
+		document.body.toggleAttribute('data-search-modal-open', on);
+		document.documentElement.toggleAttribute('data-search-modal-open', on);
+		if (!on) {
+			document.body.style.removeProperty('touch-action');
+			document.documentElement.style.removeProperty('touch-action');
+			document.documentElement.style.removeProperty('overflow');
+			// 关闭搜索后把 document 滚回 0，避免窄屏顶栏被带出视口
+			try {
+				window.scrollTo(0, 0);
+			} catch {
+				/* ignore */
+			}
+			document.documentElement.scrollTop = 0;
+			document.body.scrollTop = 0;
+		}
+	};
+
 	const openModal = (event?: MouseEvent) => {
 		event?.stopPropagation();
+		// 打开前关掉可能挡住的抽屉
+		document.body.classList.remove('nav-drawer-open', 'toc-drawer-open');
+		const backdrop = document.querySelector<HTMLElement>('[data-wiki-backdrop]');
+		if (backdrop) backdrop.hidden = true;
 		dialog.showModal();
-		document.body.toggleAttribute('data-search-modal-open', true);
+		setSearchModalLock(true);
 		input.focus();
 		window.setTimeout(() => window.addEventListener('click', onWindowClick), 0);
-		// 量宽：窄屏优先收右再收左
+		// 量宽：窄视口优先收右再收左
 		requestAnimationFrame(() => recomputeAutoPanes());
 		window.setTimeout(() => recomputeAutoPanes(), 50);
 	};
@@ -462,8 +595,12 @@ export function mountSearch(mount: HTMLElement) {
 	openBtn.addEventListener('click', openModal);
 	closeBtn.addEventListener('click', closeModal);
 	dialog.addEventListener('close', () => {
-		document.body.toggleAttribute('data-search-modal-open', false);
+		setSearchModalLock(false);
 		window.removeEventListener('click', onWindowClick);
+	});
+	// Esc / 异常关闭也清锁
+	dialog.addEventListener('cancel', () => {
+		setSearchModalLock(false);
 	});
 	resultsEl.addEventListener('click', (event) => {
 		const t = event.target;
@@ -855,6 +992,8 @@ export function mountSearch(mount: HTMLElement) {
 			fuzzy: matchMode === 'fuzzy',
 			combine: combineMode,
 			strict: matchMode === 'strict',
+			caseSensitive: caseMode === 'sensitive',
+			wholeWord: tokenMode === 'word',
 		});
 		resetRightFromHits(lastBaseHits);
 		renderResults(prepareDisplayHits(), q);
@@ -1011,6 +1150,36 @@ export function mountSearch(mount: HTMLElement) {
 		if (combineMode === next) return;
 		combineMode = next;
 		syncCombineBtn();
+		scheduleLeft();
+	});
+	caseModeSeg.addEventListener('click', (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		const t = e.target;
+		const el =
+			t instanceof Element ? t : t instanceof Node ? t.parentElement : null;
+		const opt = el?.closest?.('[data-case-mode-opt]') as HTMLButtonElement | null;
+		if (!opt || !caseModeSeg.contains(opt)) return;
+		const next = opt.getAttribute('data-case-mode-opt');
+		if (next !== 'ignore' && next !== 'sensitive') return;
+		if (caseMode === next) return;
+		caseMode = next;
+		syncCaseModeBtn();
+		scheduleLeft();
+	});
+	tokenModeSeg.addEventListener('click', (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		const t = e.target;
+		const el =
+			t instanceof Element ? t : t instanceof Node ? t.parentElement : null;
+		const opt = el?.closest?.('[data-token-mode-opt]') as HTMLButtonElement | null;
+		if (!opt || !tokenModeSeg.contains(opt)) return;
+		const next = opt.getAttribute('data-token-mode-opt');
+		if (next !== 'string' && next !== 'word') return;
+		if (tokenMode === next) return;
+		tokenMode = next;
+		syncTokenModeBtn();
 		scheduleLeft();
 	});
 	pathSortBtn.addEventListener('click', (e) => {

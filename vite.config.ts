@@ -19,7 +19,8 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const contentDir = path.join(root, 'content');
 
 const port = Number(process.env.PORT) || 18087;
-const host = process.env.HOST || '127.0.0.1';
+// 默认 0.0.0.0：同 Wi‑Fi 手机可访问；仅本机可设 HOST=127.0.0.1
+const host = process.env.HOST || '0.0.0.0';
 
 function runScan(): void {
 	const script = path.join(root, 'scripts/scan-content.ts');
@@ -39,6 +40,34 @@ function webmdPlugin() {
 		},
 		configureServer(server: import('vite').ViteDevServer) {
 			server.watcher.add(contentDir);
+
+			// content 变更 = 重新制作内容侧：重扫树 + 视频封面抽帧（与 build 同源）
+			let rescanTimer: ReturnType<typeof setTimeout> | null = null;
+			const contentRoot = path.resolve(contentDir);
+			const scheduleRescan = (file?: string) => {
+				if (file) {
+					const norm = path.resolve(file);
+					if (
+						norm !== contentRoot &&
+						!norm.startsWith(contentRoot + path.sep)
+					) {
+						return;
+					}
+				}
+				if (rescanTimer) clearTimeout(rescanTimer);
+				rescanTimer = setTimeout(() => {
+					rescanTimer = null;
+					try {
+						console.log('[site] content 变更 → 重扫 / 视频封面');
+						runScan();
+					} catch (e) {
+						console.error('[site] rescan failed', e);
+					}
+				}, 400);
+			};
+			server.watcher.on('add', scheduleRescan);
+			server.watcher.on('unlink', scheduleRescan);
+			server.watcher.on('change', scheduleRescan);
 
 			// MiniSearch 索引（dev 每次现算）
 			server.middlewares.use((req, res, next) => {
@@ -79,6 +108,9 @@ function webmdPlugin() {
 					rawUrl.endsWith('.jpeg') ||
 					rawUrl.endsWith('.webp') ||
 					rawUrl.endsWith('.gif') ||
+					rawUrl.endsWith('.mp4') ||
+					rawUrl.endsWith('.webm') ||
+					rawUrl.endsWith('.mp3') ||
 					rawUrl.endsWith('.woff') ||
 					rawUrl.endsWith('.woff2')
 				) {
@@ -117,14 +149,20 @@ function webmdPlugin() {
 				}
 			});
 
-			// 原始 content 文件
+			// 原始 content 文件（含 _Res_* 内封面；音视频需 Range）
 			server.middlewares.use((req, res, next) => {
 				const raw = req.url?.split('?')[0] || '';
 				if (!raw.startsWith('/content/')) return next();
 				let rel = decodeURIComponent(raw.replace(/^\/content\/?/, ''));
 				rel = path.normalize(rel).replace(/^(\.\.(\/|\\|$))+/, '');
 				const filePath = path.join(contentDir, rel);
-				if (!filePath.startsWith(contentDir)) {
+				// Windows 路径前缀比较：统一大小写与分隔符
+				const rootNorm = path.resolve(contentDir);
+				const fileNorm = path.resolve(filePath);
+				if (
+					fileNorm !== rootNorm &&
+					!fileNorm.startsWith(rootNorm + path.sep)
+				) {
 					res.statusCode = 403;
 					res.end('Forbidden');
 					return;
@@ -134,35 +172,96 @@ function webmdPlugin() {
 					res.end('Not found');
 					return;
 				}
-				const ext = path.extname(filePath).toLowerCase();
-				const types: Record<string, string> = {
-					'.md': 'text/markdown; charset=utf-8',
-					'.txt': 'text/plain; charset=utf-8',
-					'.json': 'application/json; charset=utf-8',
-					'.svg': 'image/svg+xml',
-					'.png': 'image/png',
-					'.jpg': 'image/jpeg',
-					'.jpeg': 'image/jpeg',
-					'.gif': 'image/gif',
-					'.webp': 'image/webp',
-					'.mp4': 'video/mp4',
-					'.webm': 'video/webm',
-					'.mp3': 'audio/mpeg',
-					'.pdf': 'application/pdf',
-				};
-				res.setHeader('Content-Type', types[ext] || 'application/octet-stream');
-				if (ext === '.pdf') {
-					const name = path.basename(filePath).replace(/[^\w.\u4e00-\u9fff-]+/g, '_');
-					res.setHeader(
-						'Content-Disposition',
-						`inline; filename="${name}"; filename*=UTF-8''${encodeURIComponent(path.basename(filePath))}`,
-					);
-					res.setHeader('X-Content-Type-Options', 'nosniff');
-				}
-				fs.createReadStream(filePath).pipe(res);
+				sendContentFile(req, res, filePath);
 			});
 		},
 	};
+}
+
+const CONTENT_TYPES: Record<string, string> = {
+	'.md': 'text/markdown; charset=utf-8',
+	'.txt': 'text/plain; charset=utf-8',
+	'.json': 'application/json; charset=utf-8',
+	'.svg': 'image/svg+xml',
+	'.png': 'image/png',
+	'.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg',
+	'.gif': 'image/gif',
+	'.webp': 'image/webp',
+	'.mp4': 'video/mp4',
+	'.webm': 'video/webm',
+	'.ogv': 'video/ogg',
+	'.mov': 'video/quicktime',
+	'.mp3': 'audio/mpeg',
+	'.wav': 'audio/wav',
+	'.ogg': 'audio/ogg',
+	'.m4a': 'audio/mp4',
+	'.pdf': 'application/pdf',
+};
+
+/**
+ * 静态 content 发送：Content-Length + Accept-Ranges + 可选 206。
+ * 浏览器 <video>/<audio> 依赖 Range 拉元数据与 seek；整文件 200 无 CL 时常卡在 00:00。
+ */
+function sendContentFile(
+	req: import('http').IncomingMessage,
+	res: import('http').ServerResponse,
+	filePath: string,
+): void {
+	const ext = path.extname(filePath).toLowerCase();
+	const stat = fs.statSync(filePath);
+	const size = stat.size;
+	const type = CONTENT_TYPES[ext] || 'application/octet-stream';
+
+	res.setHeader('Content-Type', type);
+	res.setHeader('Accept-Ranges', 'bytes');
+	res.setHeader('Cache-Control', 'public, max-age=0');
+	if (ext === '.pdf') {
+		const name = path.basename(filePath).replace(/[^\w.\u4e00-\u9fff-]+/g, '_');
+		res.setHeader(
+			'Content-Disposition',
+			`inline; filename="${name}"; filename*=UTF-8''${encodeURIComponent(path.basename(filePath))}`,
+		);
+		res.setHeader('X-Content-Type-Options', 'nosniff');
+	}
+
+	if (req.method === 'HEAD') {
+		res.setHeader('Content-Length', String(size));
+		res.statusCode = 200;
+		res.end();
+		return;
+	}
+
+	const range = req.headers.range;
+	if (range) {
+		// bytes=start-end | bytes=start-
+		const m = /^bytes=(\d*)-(\d*)$/.exec(range);
+		if (!m) {
+			res.statusCode = 416;
+			res.setHeader('Content-Range', `bytes */${size}`);
+			res.end();
+			return;
+		}
+		let start = m[1] === '' ? 0 : parseInt(m[1], 10);
+		let end = m[2] === '' ? size - 1 : parseInt(m[2], 10);
+		if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= size) {
+			res.statusCode = 416;
+			res.setHeader('Content-Range', `bytes */${size}`);
+			res.end();
+			return;
+		}
+		end = Math.min(end, size - 1);
+		const chunk = end - start + 1;
+		res.statusCode = 206;
+		res.setHeader('Content-Range', `bytes ${start}-${end}/${size}`);
+		res.setHeader('Content-Length', String(chunk));
+		fs.createReadStream(filePath, { start, end }).pipe(res);
+		return;
+	}
+
+	res.statusCode = 200;
+	res.setHeader('Content-Length', String(size));
+	fs.createReadStream(filePath).pipe(res);
 }
 
 export default defineConfig({

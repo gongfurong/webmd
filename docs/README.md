@@ -4,7 +4,7 @@
 
 | 文档 | 内容 |
 |------|------|
-| [content-and-res-rules.md](./content-and-res-rules.md) | Content 真相、`_res` 资源目录、目录角色说明 |
+| [content-and-res-rules.md](./content-and-res-rules.md) | Content 真相、`_Res_*`、CSV/Excel/Office 预览约定 |
 | [cloudflare-pages.md](./cloudflare-pages.md) | Cloudflare Pages：Node 版本、构建命令、输出目录、FAQ |
 | 根目录 [`site.config.ts`](../site.config.ts) | 站点主配置入口（身份、功能开关，汇总 config/*） |
 | [`config/layout.ts`](../config/layout.ts) | 左/中/右栏默认宽度等 |

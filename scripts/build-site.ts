@@ -10,6 +10,9 @@ import { pageOutDir } from './lib/scan';
 import { getTreeAndFiles, renderFilePage, renderSiteHome } from './lib/render-page';
 import { render404Page, renderTreeHtml } from './lib/template';
 import { buildSearchIndex } from './lib/search-index';
+import { prepareAllVideoPosters } from './lib/video-poster';
+import { prepareAllOfficePreviews } from './lib/office-preview';
+import { prepareAllExcelCsvs } from './lib/spreadsheet-preview';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const contentDir = path.join(root, site.content.root);
@@ -34,6 +37,30 @@ function main() {
 	if (!fs.existsSync(distDir)) fs.mkdirSync(distDir, { recursive: true });
 
 	const { tree, files } = getTreeAndFiles(contentDir);
+	// 重建静态站：与 scan 同一制作管线（抽帧 / Excel→CSV / Word·PPT→PDF；不覆盖已有）
+	const posters = prepareAllVideoPosters(contentDir, files);
+	if (posters.skippedNoFfmpeg) {
+		console.log('[site] 视频封面：无 ffmpeg，跳过抽帧');
+	} else if (posters.tried) {
+		console.log(
+			`[site] 视频封面：检查 ${posters.tried} 个，新生成 ${posters.generated} 个`,
+		);
+	}
+	const excelCsv = prepareAllExcelCsvs(contentDir, files);
+	if (excelCsv.tried) {
+		console.log(
+			`[site] Excel→CSV：检查 ${excelCsv.tried} 个，新写 ${excelCsv.written} 个 sheet`,
+		);
+	}
+	const office = prepareAllOfficePreviews(contentDir, files);
+	if (office.skippedNoSoffice) {
+		console.log('[site] Office→PDF：无 LibreOffice，跳过（Word/PPT）');
+	} else if (office.tried) {
+		console.log(
+			`[site] Office→PDF：检查 ${office.tried} 个，新生成 ${office.generated} 个`,
+		);
+	}
+
 	fs.mkdirSync(publicDir, { recursive: true });
 	const treeJson = JSON.stringify(tree, null, 2);
 	fs.writeFileSync(path.join(distDir, 'tree.json'), treeJson, 'utf8');
@@ -41,6 +68,7 @@ function main() {
 
 	const distContent = path.join(distDir, 'content');
 	if (fs.existsSync(distContent)) fs.rmSync(distContent, { recursive: true, force: true });
+	// 含 _Res_*（封面/附件不进树，但需可访问）
 	fs.cpSync(contentDir, distContent, { recursive: true });
 	console.log('[ssg] content/ → dist/content/');
 

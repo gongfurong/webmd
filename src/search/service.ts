@@ -184,6 +184,10 @@ export class SearchService {
 			query.combine === 'OR' || query.combine === 'AND'
 				? query.combine
 				: 'AND';
+		/** 默认忽略大小写；与精确/模糊正交 */
+		const caseSensitive = query.caseSensitive === true;
+		/** 词模式：主要约束拉丁词边界；中文仍按串 */
+		const wholeWord = query.wholeWord === true;
 		const terms = strict ? [q] : splitQueryTerms(q);
 		if (!terms.length) return [];
 
@@ -244,7 +248,7 @@ export class SearchService {
 
 		const hits: SearchHit[] = [];
 		for (const doc of candidateDocs) {
-			// 完全匹配：原样包含，忽略模糊/与或
+			// 精确：整段包含（不拆词）；模糊/与或仅在非精确时生效；大小写单独控制
 			let fileHit: boolean;
 			let titleHit: boolean;
 			let abstractHit: boolean;
@@ -252,27 +256,60 @@ export class SearchService {
 			if (strict) {
 				fileHit =
 					scopes.file &&
-					(literalMatches(doc.file, q) || literalMatches(doc.path, q));
+					(literalMatches(doc.file, q, caseSensitive, wholeWord) ||
+						literalMatches(doc.path, q, caseSensitive, wholeWord));
 				titleHit =
 					scopes.title &&
-					(literalMatches(doc.h1, q) ||
-						literalMatches(doc.h2, q) ||
-						literalMatches(doc.h3, q));
+					(literalMatches(doc.h1, q, caseSensitive, wholeWord) ||
+						literalMatches(doc.h2, q, caseSensitive, wholeWord) ||
+						literalMatches(doc.h3, q, caseSensitive, wholeWord));
 				abstractHit =
-					scopes.abstract && literalMatches(doc.abstract || '', q);
-				bodyHit = scopes.body && literalMatches(doc.body, q);
+					scopes.abstract &&
+					literalMatches(doc.abstract || '', q, caseSensitive, wholeWord);
+				bodyHit =
+					scopes.body &&
+					literalMatches(doc.body, q, caseSensitive, wholeWord);
 			} else {
 				fileHit =
 					scopes.file &&
-					fieldsMatchTerms([doc.file, doc.path], q, matchMode, combine);
+					fieldsMatchTerms(
+						[doc.file, doc.path],
+						q,
+						matchMode,
+						combine,
+						caseSensitive,
+						wholeWord,
+					);
 				titleHit =
 					scopes.title &&
-					fieldsMatchTerms([doc.h1, doc.h2, doc.h3], q, matchMode, combine);
+					fieldsMatchTerms(
+						[doc.h1, doc.h2, doc.h3],
+						q,
+						matchMode,
+						combine,
+						caseSensitive,
+						wholeWord,
+					);
 				abstractHit =
 					scopes.abstract &&
-					fieldMatches(doc.abstract || '', q, matchMode, combine);
+					fieldMatches(
+						doc.abstract || '',
+						q,
+						matchMode,
+						combine,
+						caseSensitive,
+						wholeWord,
+					);
 				bodyHit =
-					scopes.body && fieldMatches(doc.body, q, matchMode, combine);
+					scopes.body &&
+					fieldMatches(
+						doc.body,
+						q,
+						matchMode,
+						combine,
+						caseSensitive,
+						wholeWord,
+					);
 			}
 			if (!fileHit && !titleHit && !abstractHit && !bodyHit) continue;
 
@@ -282,12 +319,36 @@ export class SearchService {
 
 			const textHit = (text: string) =>
 				strict
-					? literalMatches(text, q)
-					: fieldMatches(text, q, matchMode, combine);
+					? literalMatches(text, q, caseSensitive, wholeWord)
+					: fieldMatches(
+							text,
+							q,
+							matchMode,
+							combine,
+							caseSensitive,
+							wholeWord,
+						);
 			const hl = (text: string) =>
-				highlightText(text, q, matchMode, combine, strict);
+				highlightText(
+					text,
+					q,
+					matchMode,
+					combine,
+					strict,
+					caseSensitive,
+					wholeWord,
+				);
 			const ex = (text: string) =>
-				excerptHighlight(text, q, PROSE_EXCERPT_RADIUS, matchMode, combine, strict);
+				excerptHighlight(
+					text,
+					q,
+					PROSE_EXCERPT_RADIUS,
+					matchMode,
+					combine,
+					strict,
+					caseSensitive,
+					wholeWord,
+				);
 
 			// 标题命中（h1–h3）
 			const titleSlugSet = new Set<string>();

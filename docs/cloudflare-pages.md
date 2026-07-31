@@ -50,11 +50,12 @@ Pages 会优先使用 `NODE_VERSION`，其次 `.nvmrc` / `.node-version`。
 `npm run build` 大致为：
 
 1. TypeScript 检查  
-2. Vite 打包客户端（`dist/assets/*`）  
-3. SSG：把 `content/` 打成完整 HTML → `dist/`  
+2. Vite 打包客户端（`dist/assets/*`；`buildStart` 会跑 `scan-content`：树、视频封面、**Excel→CSV**、Word/PPT→PDF）  
+3. SSG（`build-site`）：再跑同一套预生成 → 把 `content/`（含 `_Res_*`）与完整 HTML 写入 `dist/`  
 4. 写出 `search-index.json`、`tree.json`、`404.html` 等  
 
-线上访问的是静态 HTML + JS/CSS，**不需要** Workers / SSR。
+线上访问的是静态 HTML + JS/CSS，**不需要** Workers / SSR。  
+**Cloudflare 构建机**通常没有 LibreOffice：Word/PPT 预览需本机预生成后提交 `_Res_*/preview.pdf`，或在 CI 安装 LO；**Excel→CSV 只需 Node**，Pages 上可自动导出。
 
 ## 产物目录
 

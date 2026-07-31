@@ -1,0 +1,8 @@
+﻿类型,预览方式,说明
+Markdown,正文渲染,GitHub 风 Markdown
+PDF,PDF.js 阅读器,工具栏 + 缩略图分页
+CSV,HTML 表格,源文件直接表格预览
+Excel (.xlsx),导出 CSV → HTML 表,每 sheet 一个 CSV，页签切换
+Word (.docx),LibreOffice → PDF,保持打印版式
+PowerPoint (.pptx),LibreOffice → PDF,一页一幻灯
+图片 / 音视频,浏览器原生,站内全页预览

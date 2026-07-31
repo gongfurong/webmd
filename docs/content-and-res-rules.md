@@ -12,17 +12,51 @@
 
 ---
 
-## 2. 资源目录：`_res` / `_Res` / …（大小写不敏感）
+## 2. 资源目录：`_Res_` 前缀 / 旧名 `_res`（大小写不敏感）
 
 ### 2.1 命名
 
 | 规则 | 说明 |
 |------|------|
-| 目录名匹配 | 去掉大小写后等于 `res`，且**以单个下划线 `_` 开头** |
-| 合法示例 | `_res`、`_Res`、`_RES`、`_rEs` |
-| 不匹配 | `res`（无下划线）、`resources`、`_resource`、`my_res` |
+| 完整前缀 | 忽略大小写后以 **`_res_`** 开头（推荐） |
+| 兼容旧名 | 目录名恰好为 `_res` / `_Res` / `_RES` |
+| 合法示例 | `_Res_demo`、`_res_MyVideo`、`_RES_foo.mp4`、`_res` |
+| 不匹配 | `res`、`resources`、`_resource`、`my_res`（无此前缀） |
 
-> 实现时：`name.length >= 2 && name[0] === '_' && name.slice(1).toLowerCase() === 'res'`
+> 实现：`lower === '_res' || lower.startsWith('_res_')`
+
+### 2.1.1 旁路资源夹（全站统一命名）
+
+**规范名（新生成一律）**：`_Res_` + **完整文件名（含扩展名）**
+
+```
+content/video/
+  foo.mp4
+  _Res_foo.mp4/poster.jpg              ← ffmpeg 抽帧（制作站点时）
+
+content/notes/
+  sample.csv                           ← 源 CSV：页面直接 HTML 表（无需转换）
+  sample.xlsx
+  _Res_sample.xlsx/
+    Demo.csv                           ← 每 sheet 一个 CSV（SheetJS，制作站点时）
+    说明.csv
+    _sheets.json                       ← 原 sheet 顺序（默认打开第一个）
+  sample.docx
+  _Res_sample.docx/preview.pdf         ← LibreOffice（Word/PPT；制作站点时）
+```
+
+| 源类型 | 制作站点时 | 页面预览 | 本机依赖 |
+|--------|------------|----------|----------|
+| **CSV** | 无 | 直接嵌入 **HTML 表** | 无 |
+| **Excel** | → `_Res_*.xlsx/*.csv` | CSV → **HTML 表**（页签） | Node/SheetJS（随仓库） |
+| **Word / PPT** | → `preview.pdf` | **PDF.js** | 可选 LibreOffice |
+| **视频** | → `poster.jpg` | `<video poster>` | 可选 ffmpeg |
+| **PDF** | 无 | PDF.js | 无 |
+
+- 入口脚本：`npm run scan`、**`npm run dev`**（vite `buildStart` + content 变更重扫）、**`npm run build`**（`build-site` + 同 scan 逻辑）
+- 查找优先完整文件名夹；兼容旧名 `_Res_<无扩展名>`（只读）
+- **不覆盖**已有有效资源；重生成请先删对应文件再 scan/build
+- 无 ffmpeg / 无 LibreOffice：对应步骤跳过；手塞资源仍绑定
 
 ### 2.2 扫描语义（自上而下）
 

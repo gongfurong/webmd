@@ -30,7 +30,10 @@ npm run preview   # 预览 dist
 | 中 GitHub 风 md（`github-markdown-css` + hljs） | ✅ 表/删除线/任务列表/锚点 |
 | 右大纲 + 滚动高亮 | ✅ |
 | 窄屏「本页大纲」+ 抽屉导航 | ✅ |
-| 多格式（图/音视频/pdf/文本/代码） | ✅ 嵌入页内；PDF Blob 预览 |
+| 多格式（图/音视频/pdf/文本/代码） | ✅ 嵌入页内 |
+| CSV / Excel | ✅ CSV→HTML 表；xlsx→CSV→HTML 表（scan/build/dev） |
+| Word / PPT | ✅ LibreOffice→PDF + PDF.js（有 LO 时预生成） |
+| PDF | ✅ PDF.js 阅读器 |
 | 路径面包屑 | ✅ |
 | 上一页 / 下一页 | ✅ |
 | 栏宽拖拽 + 收起展开 | ✅ localStorage |
@@ -56,10 +59,23 @@ content/           # 内容真相
 src/client.ts      # 静态页交互
 src/style.css      # 布局 + GitHub md 微调
 scripts/build-site.ts
-scripts/lib/       # scan / markdown / template / render-page
+scripts/scan-content.ts   # 制作站点公共入口（树 + 封面 + Excel→CSV + Office→PDF）
+scripts/lib/              # scan / markdown / spreadsheet-preview / office-preview / …
 dist/              # 发布产物
 docs/              # 项目设计文档（非访客 wiki）
 ```
+
+### 制作站点时预览资源（与 dev/build 同源）
+
+| 步骤 | 何时跑 | 产出 |
+|------|--------|------|
+| 扫盘写 `tree.json` | scan / dev 启动 / content 变更 / build | `public/tree.json` |
+| 视频封面 | 同上，有 **ffmpeg** | `_Res_*.mp4/poster.jpg` |
+| **Excel→CSV** | 同上，**不依赖** LibreOffice | `_Res_*.xlsx/*.csv` |
+| Word/PPT→PDF | 同上，有 **LibreOffice** | `_Res_*.docx/preview.pdf` 等 |
+| 页面渲染 | dev 请求 / SSG | CSV/xlsx→HTML 表；PDF/Office→PDF.js |
+
+访客与线上静态托管**不需要**安装 LibreOffice / ffmpeg。
 
 ## 部署 Cloudflare Pages
 

@@ -1,0 +1,20 @@
+{
+	"name": "WebMD",
+	"short_name": "WebMD",
+	"description": "个人 Wiki：content 为真相，GitHub 风渲染",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "any",
+	"background_color": "#ffffff",
+	"theme_color": "#ffffff",
+	"lang": "zh-CN",
+	"icons": [
+		{
+			"src": "/icon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any maskable"
+		}
+	]
+}

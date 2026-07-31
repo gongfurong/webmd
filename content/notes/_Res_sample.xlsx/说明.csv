@@ -1,0 +1,4 @@
+﻿说明
+Demo 工作表内容与 content/notes/sample.csv 保持一致（UTF-8）。
+处理链：xlsx → _Res_sample.xlsx/*.csv（UTF-8）→ HTML 表格。
+本页为附注，不参与与 sample.csv 的对照。

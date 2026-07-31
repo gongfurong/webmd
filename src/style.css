@@ -14,7 +14,8 @@
 	/* 左文件 / 中路径 / 右大纲：统一顶栏高度 */
 	--pane-bar-h: 2.5rem;
 	/* 中栏固定模式 max：由 JS 设为 视口−左右栏；此处为首屏回退 */
-	--content-readable-max: min(100%, calc(100vw - 280px - 240px - 44px));
+	/* 固定版心默认跟中栏走；JS 会按 .center-scroll 实测宽度更新，避免 100vw 估算过窄导致左侧假空白 */
+	--content-readable-max: 100%;
 
 	/* —— 色板（浅色，壳层与 GitHub 正文体系统一）—— */
 	--bg: #ffffff;
@@ -157,17 +158,55 @@ html[data-theme='dark'] {
 	box-sizing: border-box;
 }
 
-html,
-body {
+html {
 	margin: 0;
 	height: 100%;
+	/* iOS 地址栏：优先动态视口，避免 100vh 过高导致整页“卡住”滑丢顶栏 */
+	height: 100dvh;
+	max-height: 100dvh;
 	overflow: hidden;
+	overscroll-behavior: none;
+	/* 阻止 document 被 scrollIntoView / 橡皮筋带跑 */
+	position: relative;
 }
 
 body {
+	margin: 0;
 	font-family: var(--font-sans);
 	background: var(--bg);
 	color: var(--fg);
+}
+/*
+ * 顶栏 + 主壳纵向 flex。
+ * body 固定在视口内：窄屏常见“整页被滚走 → 看不到 header / 页面卡住”由此避免。
+ */
+body.wiki-body {
+	display: flex;
+	flex-direction: column;
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	/* 100dvh：随 Safari 地址栏显隐伸缩；svh 作回退 */
+	height: 100%;
+	height: 100svh;
+	height: 100dvh;
+	max-height: 100svh;
+	max-height: 100dvh;
+	min-height: 0;
+	overflow: hidden;
+	overscroll-behavior: none;
+	/* 底部 Home 条 / 安全区 */
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	box-sizing: border-box;
+	/* 建立层叠上下文，header 始终盖住抽屉/遮罩 */
+	isolation: isolate;
+}
+/* 从主屏幕打开（standalone）时几乎无浏览器栏，用满屏 */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+	body.wiki-body {
+		/* 状态栏已用 black-translucent，顶栏继续吃 safe-area */
+		min-height: 100dvh;
+	}
 }
 
 /* 壳层选区；正文 .markdown-body 内由 GitHub 样式主导，勿全局覆盖 a/code */
@@ -201,22 +240,35 @@ body {
 
 /* ========== 顶栏：左品牌 | 中搜索 | 右工具 ========== */
 .app-header {
-	height: var(--header-h);
+	/* 刘海屏安全区：用 min-height 允许内容区固定，避免 height+padding 双算搞乱壳高度 */
+	min-height: var(--header-h);
+	height: auto;
+	padding-top: env(safe-area-inset-top, 0px);
+	/* 内容行高至少 --header-h，总高度 = 安全区 + 内容行 */
 	display: grid;
 	/* 中间搜索区更宽，避免「小气」 */
 	grid-template-columns: minmax(0, 1fr) minmax(16rem, min(42rem, 52vw)) minmax(0, 1fr);
 	align-items: center;
 	gap: 0.75rem;
-	padding: 0 1rem;
+	padding-inline: 1rem;
+	padding-bottom: 0;
 	border-bottom: 1px solid var(--border);
 	background: var(--header-bg);
 	backdrop-filter: saturate(1.2) blur(10px);
 	-webkit-backdrop-filter: saturate(1.2) blur(10px);
 	box-shadow: var(--shadow-sm);
-	flex-shrink: 0;
+	flex: 0 0 auto;
+	/* 始终压在内容/抽屉/遮罩之上 */
 	position: relative;
-	z-index: 30;
+	z-index: 100;
 	font-family: var(--font-sans);
+	box-sizing: border-box;
+}
+/* 保证顶栏内容行高度稳定（不含 safe-area，safe-area 在 padding-top） */
+.app-header > .header-left,
+.app-header > .header-center,
+.app-header > .header-right {
+	min-height: var(--header-h);
 }
 
 .header-left {
@@ -241,10 +293,23 @@ body {
 	justify-content: flex-end;
 	gap: 0.35rem;
 	min-width: 2rem;
+	/* 大纲永远是顶栏最右侧控件 */
+}
+.header-right__tools {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	flex: 0 0 auto;
+}
+.header-right > .panel-btn--toc {
+	order: 99;
+	flex: 0 0 auto;
+	margin-inline-start: 0.1rem;
 }
 /* 顶栏图标按钮统一 */
 .header-focus-btn,
-.theme-toggle {
+.theme-toggle,
+.header-github {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -259,17 +324,25 @@ body {
 	line-height: 0;
 	cursor: pointer;
 	flex-shrink: 0;
+	text-decoration: none;
 	transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 .header-focus-btn:hover,
-.theme-toggle:hover {
+.theme-toggle:hover,
+.header-github:hover {
 	color: var(--fg);
 	background: var(--nav-hover-bg);
 }
 .header-focus-btn:focus-visible,
-.theme-toggle:focus-visible {
+.theme-toggle:focus-visible,
+.header-github:focus-visible {
 	outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
 	outline-offset: 2px;
+}
+.header-github__icon {
+	display: block;
+	width: 1.1rem;
+	height: 1.1rem;
 }
 .header-focus-btn .wiki-breadcrumb__icon {
 	display: block;
@@ -363,6 +436,68 @@ html[data-theme='dark'] .theme-toggle__icon--moon {
 .panel-btn--menu {
 	display: none;
 }
+/* 窄屏顶栏：文件 / 大纲 — 与宽屏侧栏标题同系图标 */
+.panel-btn--menu,
+.panel-btn--toc {
+	align-items: center;
+	justify-content: center;
+	min-width: 2.35rem;
+	width: 2.35rem;
+	height: 2.35rem;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--fg-muted);
+	cursor: pointer;
+	line-height: 0;
+}
+.panel-btn--menu:hover,
+.panel-btn--toc:hover {
+	color: var(--fg);
+	background: var(--nav-hover-bg);
+}
+.panel-btn--toc {
+	display: none; /* ≤900px 显示，放 header 最右 */
+}
+.panel-btn__glyph {
+	display: block;
+	width: 1.25rem;
+	height: 1.25rem;
+}
+/* 文件：叠放文档（同 .tree-home） */
+.panel-btn__sheet {
+	fill: color-mix(in srgb, var(--home-fill) 14%, var(--file-page, #fff));
+	stroke: var(--home-fill);
+	stroke-width: 1.1;
+}
+.panel-btn__sheet--back {
+	fill: color-mix(in srgb, var(--home-fill) 10%, var(--file-page, #fff));
+	stroke: color-mix(in srgb, var(--home-fill) 72%, var(--file-page-edge, #c8c6c4));
+	opacity: 0.95;
+}
+.panel-btn__fold {
+	fill: color-mix(in srgb, var(--home-fill) 18%, var(--file-page, #fff));
+	stroke: var(--home-fill);
+	stroke-width: 1.05;
+}
+.panel-btn__lines {
+	fill: none;
+	stroke: var(--home-fill);
+	stroke-width: 1.3;
+	opacity: 0.9;
+}
+/* 大纲：白页+横线（同 .pane-title__icon） */
+.panel-btn__toc-fill {
+	fill: color-mix(in srgb, var(--home-fill) 16%, transparent);
+	stroke: var(--home-fill);
+	stroke-width: 1;
+}
+.panel-btn__toc-lines {
+	fill: none;
+	stroke: var(--home-fill);
+	stroke-width: 1.25;
+}
 
 /* ========== MiniSearch 统一搜索（对齐 starlight-vanilla） ========== */
 .webmd-search,
@@ -423,19 +558,38 @@ html[data-theme='dark'] .theme-toggle__icon--moon {
 		font-size: 0.7rem;
 	}
 }
+/*
+ * 搜索弹层
+ * - 宽屏：水平居中卡片，顶边钉在视口顶部（不落在站点 header 下）
+ * - 窄屏：全屏铺满（见下方 max-width 断点）
+ */
 .webmd-ms-search .ms-dialog {
-	/* 接近全屏，与 starlight 搜索体验层体量一致 */
 	padding: 0;
 	border: none;
-	border-radius: 0.65rem;
-	width: min(98vw, 96rem);
-	max-width: 98vw;
-	height: min(88vh, 56rem);
-	max-height: 88vh;
-	margin: auto;
+	border-radius: 0 0 0.65rem 0.65rem; /* 贴顶：只保留底圆角 */
+	width: min(96rem, calc(100vw - 3rem));
+	max-width: calc(100vw - 3rem);
+	/* 从视口顶向下占高，底边略留白 */
+	height: min(56rem, calc(100vh - 1rem));
+	max-height: calc(100vh - 1rem);
+	height: min(56rem, calc(100dvh - 1rem));
+	max-height: calc(100dvh - 1rem);
+	margin: 0 auto;
 	background: var(--bg);
 	color: var(--fg);
-	box-shadow: var(--shadow);
+	box-shadow: var(--shadow), 0 16px 48px color-mix(in srgb, #000 12%, transparent);
+}
+.webmd-ms-search .ms-dialog[open] {
+	display: flex;
+	flex-direction: column;
+	position: fixed;
+	/* 水平居中；顶边钉死视口顶 */
+	left: 50%;
+	right: auto;
+	top: 0;
+	bottom: auto;
+	transform: translateX(-50%);
+	margin: 0;
 }
 .webmd-ms-search .ms-dialog::backdrop {
 	background: var(--overlay);
@@ -443,29 +597,184 @@ html[data-theme='dark'] .theme-toggle__icon--moon {
 .webmd-ms-search .dialog-frame {
 	display: flex;
 	flex-direction: column;
+	flex: 1 1 auto;
 	height: 100%;
 	min-height: 0;
 	box-sizing: border-box;
+	overflow: hidden;
+	border-radius: inherit;
 }
-.webmd-ms-search .ms-dialog[open] {
-	display: flex;
-	flex-direction: column;
-}
-.webmd-ms-search .ms-close-mobile {
-	display: none;
-	margin: 0.5rem 0.75rem 0 auto;
-	padding: 0.35rem 0.75rem;
-	border: 1px solid var(--border);
-	border-radius: 0.35rem;
+/*
+ * 标题栏：宽屏略矮于主站顶栏；窄屏全屏时与 --header-h 对齐
+ */
+.webmd-ms-search .ms-titlebar {
+	--ms-caption-h: 2.5rem;
+	--ms-close-red: #c42b1c;
+	--ms-close-red-press: #b22a1b;
+	flex: 0 0 auto;
+	display: grid;
+	/* 左标题 | 中选项 | 右关闭 */
+	grid-template-columns: minmax(2.5rem, auto) minmax(0, 1fr) auto;
+	align-items: center;
+	height: var(--ms-caption-h);
+	min-height: var(--ms-caption-h);
+	max-height: var(--ms-caption-h);
+	padding: 0 0 0 1rem;
+	margin: 0;
+	border-bottom: 1px solid var(--border);
 	background: var(--bg-muted);
-	color: var(--fg);
-	font: inherit;
-	cursor: pointer;
+	box-sizing: border-box;
+	user-select: none;
+	gap: 0.5rem;
 }
-@media (max-width: 49.99rem) {
-	.webmd-ms-search .ms-close-mobile {
-		display: block;
-	}
+.webmd-ms-search .ms-titlebar__title {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	min-width: 0;
+	font-size: 0.875rem;
+	font-weight: 650;
+	letter-spacing: 0.01em;
+	color: var(--fg);
+	white-space: nowrap;
+}
+/* 标题栏正中：精确/模糊 · 大小写 · 串/词 · 与/或 */
+.webmd-ms-search .ms-titlebar__tools {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-wrap: wrap;
+	/* 组与组之间再拉开一些 */
+	gap: 1.35rem;
+	min-width: 0;
+	justify-self: center;
+	max-width: 100%;
+}
+.webmd-ms-search .ms-titlebar__tools .ms-seg {
+	height: 1.75rem;
+	flex: 0 0 auto;
+}
+.webmd-ms-search .ms-titlebar__tools .ms-seg__opt {
+	padding: 0 0.45rem;
+	min-width: 1.85rem;
+	font-size: 0.72rem;
+}
+/* 大小写：用 Aa / A≠a 图形标识，比「忽略|区分」更直观 */
+.webmd-ms-search .ms-seg--case .ms-seg__opt {
+	min-width: 2.15rem;
+	padding: 0 0.4rem;
+	font-variant-numeric: normal;
+}
+.webmd-ms-search .ms-case-glyph {
+	display: inline-flex;
+	align-items: baseline;
+	justify-content: center;
+	gap: 0.02em;
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: 0.02em;
+	user-select: none;
+}
+.webmd-ms-search .ms-case-glyph__A {
+	font-size: 0.85em;
+	/* 大写略醒目 */
+	font-weight: 800;
+}
+.webmd-ms-search .ms-case-glyph__a {
+	font-size: 0.78em;
+	font-weight: 650;
+	/* 忽略态：与 A 同色，表示等价 */
+	opacity: 0.92;
+}
+.webmd-ms-search .ms-case-glyph--strict .ms-case-glyph__A {
+	font-size: 0.82em;
+}
+.webmd-ms-search .ms-case-glyph--strict .ms-case-glyph__a {
+	font-size: 0.72em;
+	/* 区分态：小写略淡，强调大小写不同 */
+	opacity: 0.75;
+	font-weight: 600;
+}
+.webmd-ms-search .ms-case-glyph__neq {
+	font-size: 0.62em;
+	font-weight: 700;
+	margin: 0 0.06em;
+	opacity: 0.85;
+	/* ≠ 垂直居中一点 */
+	transform: translateY(-0.05em);
+}
+.webmd-ms-search .ms-seg--case .ms-seg__opt.is-active .ms-case-glyph__A,
+.webmd-ms-search .ms-seg--case .ms-seg__opt.is-active .ms-case-glyph__a {
+	color: inherit;
+}
+.webmd-ms-search .ms-seg--case .ms-seg__opt.is-active .ms-case-glyph--strict .ms-case-glyph__neq {
+	color: inherit;
+	opacity: 1;
+}
+.webmd-ms-search .ms-titlebar__controls {
+	display: flex;
+	align-items: stretch;
+	flex: 0 0 auto;
+	justify-self: end;
+	height: 100%;
+}
+/* 单颗关闭键：宽约 46px、贴顶贴右、直角（Win 标题栏） */
+.webmd-ms-search .ms-caption-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0;
+	padding: 0;
+	width: 2.875rem; /* ~46px */
+	min-width: 2.875rem;
+	height: 100%;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	color: var(--fg);
+	cursor: default;
+	box-sizing: border-box;
+	-webkit-tap-highlight-color: transparent;
+	transition: background 0.06s linear, color 0.06s linear;
+}
+.webmd-ms-search .ms-caption-btn__x {
+	position: relative;
+	display: block;
+	width: 10px;
+	height: 10px;
+}
+.webmd-ms-search .ms-caption-btn__x::before,
+.webmd-ms-search .ms-caption-btn__x::after {
+	content: '';
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 12px;
+	height: 1px;
+	background: currentColor;
+}
+.webmd-ms-search .ms-caption-btn__x::before {
+	transform: translate(-50%, -50%) rotate(45deg);
+}
+.webmd-ms-search .ms-caption-btn__x::after {
+	transform: translate(-50%, -50%) rotate(-45deg);
+}
+.webmd-ms-search .ms-caption-btn--close:hover,
+.webmd-ms-search .ms-caption-btn--close:focus-visible {
+	background: var(--ms-close-red);
+	color: #fff;
+	outline: none;
+}
+.webmd-ms-search .ms-caption-btn--close:active {
+	background: var(--ms-close-red-press);
+	color: #fff;
+}
+html[data-theme='dark'] .webmd-ms-search .ms-titlebar {
+	background: color-mix(in srgb, var(--bg-muted) 92%, #000);
+}
+html[data-theme='dark'] .webmd-ms-search .ms-caption-btn {
+	color: #eee;
 }
 .webmd-ms-search .search-shell {
 	display: flex;
@@ -477,16 +786,270 @@ html[data-theme='dark'] .theme-toggle__icon--moon {
 	gap: 0.85rem;
 	box-sizing: border-box;
 }
+/* 搜索框行：选项已上移标题栏，此处整行给输入框 */
 .webmd-ms-search .search-input-row {
 	flex: 0 0 auto;
 	display: flex;
 	align-items: center;
-	gap: 0.65rem;
+	min-width: 0;
+}
+/*
+ * 窄屏搜索布局（与 JS MS_NARROW_MQ 一致）：
+ * - 宽度 ≤ 50rem
+ * - 或：高度 ≤ 32rem 且宽度 ≤ 56rem（矮视口，避免误用宽屏三栏）
+ */
+@media (max-width: 49.99rem), (max-height: 32rem) and (max-width: 56rem) {
+	.webmd-ms-search .ms-dialog {
+		width: 100%;
+		max-width: none;
+		height: 100%;
+		max-height: none;
+		margin: 0;
+		border-radius: 0;
+		box-shadow: none;
+	}
+	.webmd-ms-search .ms-dialog[open] {
+		inset: 0;
+		left: 0;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		width: 100%;
+		width: 100dvw;
+		height: 100%;
+		height: 100dvh;
+		max-width: none;
+		max-height: none;
+		transform: none;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		/* 防止 iOS 地址栏导致 100vh 溢出 */
+		overflow: hidden;
+	}
+	.webmd-ms-search .dialog-frame {
+		border-radius: 0;
+		flex: 1 1 auto;
+		min-height: 0;
+		height: 100%;
+		overflow: hidden;
+	}
+	.webmd-ms-search .ms-titlebar {
+		--ms-caption-h: var(--header-h);
+		padding-inline-start: 0.85rem;
+		background: var(--header-bg, var(--bg-muted));
+		backdrop-filter: saturate(1.2) blur(10px);
+		-webkit-backdrop-filter: saturate(1.2) blur(10px);
+		flex-shrink: 0;
+		/* 窄屏：标题可略挤，选项优先居中可换行 */
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		height: auto;
+		min-height: var(--ms-caption-h);
+		max-height: none;
+		padding-block: 0.2rem;
+	}
+	.webmd-ms-search .ms-titlebar__title {
+		font-size: 0.9375rem;
+		font-weight: 700;
+	}
+	.webmd-ms-search .ms-titlebar__tools {
+		gap: 1rem;
+	}
+	.webmd-ms-search .ms-titlebar__tools .ms-seg__opt {
+		padding: 0 0.35rem;
+		font-size: 0.68rem;
+		min-width: 1.65rem;
+	}
+	.webmd-ms-search .ms-titlebar__controls {
+		align-self: stretch;
+	}
+	.webmd-ms-search .ms-caption-btn {
+		width: 3.25rem;
+		min-width: 3.25rem;
+		cursor: pointer;
+	}
+	.webmd-ms-search .ms-caption-btn__x {
+		width: 12px;
+		height: 12px;
+	}
+	.webmd-ms-search .ms-caption-btn__x::before,
+	.webmd-ms-search .ms-caption-btn__x::after {
+		width: 14px;
+		height: 1.25px;
+	}
+	/* 关键高度链：标题栏 + 工具行固定，body 吃剩余高度并可滚动 */
+	.webmd-ms-search .search-shell {
+		flex: 1 1 auto;
+		min-height: 0;
+		height: auto;
+		padding: 0.65rem 0.75rem 0.75rem;
+		gap: 0.55rem;
+		overflow: hidden;
+	}
+	.webmd-ms-search .search-input-row {
+		flex: 0 0 auto;
+		gap: 0.35rem;
+	}
+	.webmd-ms-search .ms-seg__opt {
+		padding: 0 0.5rem;
+		min-width: 2rem;
+		font-size: 0.75rem;
+	}
+	/*
+	 * 结果区始终全宽；筛选从左右滑出盖在上层（主页文件导航同思路）
+	 */
+	.webmd-ms-search .search-body,
+	.webmd-ms-search .search-body.is-left-collapsed,
+	.webmd-ms-search .search-body.is-right-collapsed,
+	.webmd-ms-search .search-body.is-left-collapsed.is-right-collapsed {
+		display: grid !important;
+		grid-template-columns: minmax(0, 1fr) !important;
+		grid-template-rows: minmax(0, 1fr);
+		position: relative;
+		flex: 1 1 auto;
+		min-width: 0;
+		min-height: 0;
+		overflow: hidden;
+	}
+	.webmd-ms-search .ms-panel--center {
+		grid-column: 1;
+		grid-row: 1;
+		width: 100%;
+		min-width: 0;
+		min-height: 0;
+		height: 100%;
+		max-height: 100%;
+		z-index: 1;
+		overflow: hidden;
+	}
+	.webmd-ms-search .ms-panel--center .ms-panel-body {
+		min-height: 0;
+		flex: 1 1 auto;
+	}
+	/* 遮罩：点空白收起抽屉 */
+	.webmd-ms-search .ms-drawer-backdrop {
+		display: none;
+		position: absolute;
+		inset: 0;
+		z-index: 12;
+		margin: 0;
+		padding: 0;
+		border: none;
+		background: rgba(31, 35, 40, 0.38);
+		cursor: pointer;
+	}
+	.webmd-ms-search .search-body.has-drawer-open .ms-drawer-backdrop:not([hidden]) {
+		display: block;
+	}
+	.webmd-ms-search .ms-panel--left:not([hidden]),
+	.webmd-ms-search .ms-panel--right:not([hidden]) {
+		display: flex !important;
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		z-index: 20;
+		width: min(80vw, 20rem);
+		max-width: min(80vw, 20rem);
+		height: auto;
+		max-height: none;
+		min-height: 0;
+		min-width: 0;
+		box-shadow: 0 0 24px rgba(0, 0, 0, 0.18);
+		background: var(--bg-sidebar, var(--bg-muted));
+	}
+	.webmd-ms-search .ms-panel--left:not([hidden]) {
+		left: 0;
+		right: auto;
+		border-inline-end: 1px solid var(--border);
+		border-inline-start: none;
+		border-bottom: none;
+		animation: ms-drawer-in-left 0.18s ease;
+	}
+	.webmd-ms-search .ms-panel--right:not([hidden]) {
+		right: 0;
+		left: auto;
+		border-inline-start: 1px solid var(--border);
+		border-inline-end: none;
+		border-bottom: none;
+		animation: ms-drawer-in-right 0.18s ease;
+	}
+	@keyframes ms-drawer-in-left {
+		from {
+			transform: translateX(-105%);
+		}
+		to {
+			transform: translateX(0);
+		}
+	}
+	@keyframes ms-drawer-in-right {
+		from {
+			transform: translateX(105%);
+		}
+		to {
+			transform: translateX(0);
+		}
+	}
+	.webmd-ms-search .ms-status-inline {
+		flex: 0 1 auto;
+		min-width: 0;
+		max-width: 6.5rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.webmd-ms-search .ms-panel-label--center .ms-panel-label-start {
+		min-width: 0;
+		overflow: hidden;
+	}
+	.webmd-ms-search .ms-hit-path {
+		overflow-wrap: anywhere;
+		word-break: normal;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.webmd-ms-search .ms-hit-prose,
+	.webmd-ms-search .ms-hit-sublink {
+		overflow-wrap: anywhere;
+		word-break: normal;
+	}
+}
+
+/* 横屏矮视口：再压一点标题/工具行，给结果列表留高度 */
+@media (max-height: 32rem) and (max-width: 56rem) {
+	.webmd-ms-search .ms-titlebar {
+		--ms-caption-h: 2.25rem;
+	}
+	.webmd-ms-search .search-shell {
+		padding: 0.45rem 0.6rem 0.55rem;
+		gap: 0.4rem;
+	}
+	.webmd-ms-search .ms-input {
+		height: 2.15rem;
+		font-size: 0.95rem;
+	}
+	.webmd-ms-search .ms-seg {
+		height: 1.85rem;
+	}
+	.webmd-ms-search .ms-panel-label {
+		/* 与 --ms-panel-label-h 可略矮 */
+		height: 2.25rem;
+		min-height: 2.25rem;
+		max-height: 2.25rem;
+	}
+	.webmd-ms-search {
+		--ms-panel-label-h: 2.25rem;
+	}
+}
+
+/* 宽屏默认：遮罩不出现 */
+.webmd-ms-search .ms-drawer-backdrop {
+	display: none;
 }
 .webmd-ms-search .ms-input {
 	flex: 1 1 auto;
 	min-width: 0;
-	width: auto;
+	width: 100%;
 	box-sizing: border-box;
 	height: 2.55rem;
 	padding: 0.45rem 0.85rem 0.45rem 2.35rem;
@@ -503,12 +1066,20 @@ html[data-theme='dark'] .theme-toggle__icon--moon {
 	outline: 1px solid var(--accent);
 	border-color: var(--accent);
 }
-/* 搜索工具：短文案 + title；按钮尽量贴紧（对齐主站标题栏右侧） */
 .webmd-ms-search .ms-input-tools {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.4rem;
+	gap: 0;
 	flex: 0 0 auto;
+}
+.webmd-ms-search .ms-input-tools--start {
+	justify-self: start;
+}
+.webmd-ms-search .ms-input-tools--end {
+	justify-self: end;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.15rem;
 }
 .webmd-ms-search .ms-text-btn {
 	display: inline-flex;
@@ -656,9 +1227,16 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 .webmd-ms-search {
 	--ms-side-w: minmax(12rem, 15rem);
 	--ms-rail-w: 2rem;
+	/* 三栏标题行统一高度（展开标题栏 = 收起条顶栏） */
+	--ms-panel-label-h: 2.5rem;
 }
 .webmd-ms-search .search-body {
 	display: grid;
+	/*
+	 * 三列固定：左筛选 | 结果 | 右筛选。
+	 * 子项必须写死 grid-column，否则侧栏 display:none 后
+	 * 中间栏会 auto-place 进第 1 列（宽为 0）→ 三栏「全没了」。
+	 */
 	grid-template-columns: var(--ms-side-w) minmax(0, 1fr) var(--ms-side-w);
 	grid-template-rows: minmax(0, 1fr);
 	gap: 0;
@@ -671,14 +1249,9 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	background: var(--bg);
 	box-sizing: border-box;
 }
-.webmd-ms-search .search-body.is-left-collapsed {
-	grid-template-columns: var(--ms-rail-w) minmax(0, 1fr) var(--ms-side-w);
-}
-.webmd-ms-search .search-body.is-right-collapsed {
-	grid-template-columns: var(--ms-side-w) minmax(0, 1fr) var(--ms-rail-w);
-}
-.webmd-ms-search .search-body.is-left-collapsed.is-right-collapsed {
-	grid-template-columns: var(--ms-rail-w) minmax(0, 1fr) var(--ms-rail-w);
+.webmd-ms-search .ms-panel.is-collapsed,
+.webmd-ms-search .ms-panel[hidden] {
+	display: none !important;
 }
 .webmd-ms-search .ms-panel {
 	display: flex;
@@ -710,95 +1283,79 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	display: none !important;
 }
 .webmd-ms-search .ms-panel--left {
+	grid-column: 1;
+	grid-row: 1;
 	border-inline-end: 1px solid var(--border);
 	background: var(--bg-sidebar, var(--bg-muted));
 }
 .webmd-ms-search .ms-panel--center {
+	grid-column: 2;
+	grid-row: 1;
 	background: var(--bg);
 	display: grid;
 	grid-template-rows: auto minmax(0, 1fr);
+	min-width: 0;
 }
 .webmd-ms-search .ms-panel--right {
+	grid-column: 3;
+	grid-row: 1;
 	border-inline-start: 1px solid var(--border);
 	background: var(--bg-sidebar, var(--bg-muted));
 }
-/*
- * 收起态全高边缘条：上箭头 + 中部（箭头+竖文）
- * 整条可点展开；不再在最底部单独放一层 >>/<<
- */
-.webmd-ms-search .ms-panel-rail {
-	display: none;
-	flex: 1 1 auto;
-	flex-direction: column;
-	align-items: stretch;
-	justify-content: flex-start;
-	align-self: stretch;
-	width: 100%;
-	height: 100%;
-	min-height: 100%;
+/* 双侧都收起：只剩一列，中间栏占满 */
+.webmd-ms-search .search-body.is-left-collapsed.is-right-collapsed {
+	grid-template-columns: minmax(0, 1fr);
+}
+.webmd-ms-search .search-body.is-left-collapsed.is-right-collapsed .ms-panel--center {
+	grid-column: 1;
+}
+/* 仅收左：中=1 右=2（列定义已是 0 | 1fr | side）— 仍用 2/3 会错位，改为按可见列 */
+.webmd-ms-search .search-body.is-left-collapsed:not(.is-right-collapsed) {
+	grid-template-columns: minmax(0, 1fr) var(--ms-side-w);
+}
+.webmd-ms-search .search-body.is-left-collapsed:not(.is-right-collapsed) .ms-panel--center {
+	grid-column: 1;
+}
+.webmd-ms-search .search-body.is-left-collapsed:not(.is-right-collapsed) .ms-panel--right {
+	grid-column: 2;
+}
+/* 仅收右：左=1 中=2 */
+.webmd-ms-search .search-body.is-right-collapsed:not(.is-left-collapsed) {
+	grid-template-columns: var(--ms-side-w) minmax(0, 1fr);
+}
+.webmd-ms-search .search-body.is-right-collapsed:not(.is-left-collapsed) .ms-panel--left {
+	grid-column: 1;
+}
+.webmd-ms-search .search-body.is-right-collapsed:not(.is-left-collapsed) .ms-panel--center {
+	grid-column: 2;
+}
+/* 收起后：在「搜索结果」标题栏两侧展开，无全高竖条 */
+.webmd-ms-search .ms-pane-expand {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	margin: 0;
 	padding: 0;
+	width: 1.55rem;
+	height: 1.65rem;
 	border: none;
-	background: var(--bg-muted);
+	border-radius: 0.25rem;
+	background: transparent;
 	color: var(--fg-muted);
-	cursor: pointer;
-	box-sizing: border-box;
-	font: inherit;
-}
-.webmd-ms-search .ms-panel-rail:not([hidden]) {
-	display: flex;
-}
-.webmd-ms-search .ms-panel.is-collapsed .ms-panel-rail:not([hidden]) {
-	flex: 1 1 auto;
-	min-height: 100%;
-	height: 100%;
-}
-.webmd-ms-search .ms-panel-rail:hover {
-	color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 8%, var(--bg-muted));
-}
-.webmd-ms-search .ms-panel-rail__head {
-	flex: 0 0 auto;
-	flex-shrink: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	box-sizing: border-box;
-	min-height: 2.75rem;
-	height: 2.75rem;
-	border-bottom: 1px solid var(--border);
-}
-.webmd-ms-search .ms-panel-rail__mid {
-	flex: 1 1 auto;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 0.75rem;
-	min-height: 0;
-	padding: 0.65rem 0.1rem;
-}
-.webmd-ms-search .ms-panel-rail:hover .ms-panel-rail__head {
-	background: color-mix(in srgb, var(--accent) 6%, var(--bg-muted));
-}
-.webmd-ms-search .ms-panel-rail__chev {
-	font-size: 1.45rem;
+	font-size: 1.2rem;
 	font-weight: 900;
 	line-height: 1;
-	user-select: none;
+	letter-spacing: -0.1em;
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-	letter-spacing: -0.12em;
-	opacity: 0.95;
+	cursor: pointer;
 }
-.webmd-ms-search .ms-panel-rail__text {
-	writing-mode: vertical-rl;
-	text-orientation: mixed;
-	letter-spacing: 0.18em;
-	text-transform: uppercase;
-	user-select: none;
-	font-size: 0.88rem;
-	font-weight: 800;
-	line-height: 1.2;
+.webmd-ms-search .ms-pane-expand[hidden] {
+	display: none !important;
+}
+.webmd-ms-search .ms-pane-expand:hover {
+	background: var(--nav-hover-bg);
+	color: var(--accent);
 }
 .webmd-ms-search .ms-pane-collapse {
 	flex: 0 0 auto;
@@ -842,7 +1399,11 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	text-transform: uppercase;
 	color: var(--fg-muted);
 	margin: 0;
-	padding: 0.35rem 0.35rem 0.35rem 0.65rem;
+	padding: 0 0.35rem 0 0.65rem;
+	/* 与收起条顶栏同高 */
+	height: var(--ms-panel-label-h);
+	min-height: var(--ms-panel-label-h);
+	max-height: var(--ms-panel-label-h);
 	border-bottom: 1px solid var(--border);
 	font-family: var(--font-sans);
 	min-width: 0;
@@ -905,6 +1466,7 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	letter-spacing: 0;
 	text-transform: none;
 	color: var(--fg-muted);
+	white-space: nowrap;
 }
 .webmd-ms-search .ms-center-tools {
 	display: inline-flex;
@@ -914,21 +1476,25 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	min-width: 0;
 }
 .webmd-ms-search .ms-panel-label-end .ms-text-btn {
-	min-height: 1.7rem;
+	min-height: 1.65rem;
+	max-height: 1.65rem;
 	padding: 0 0.28rem;
 	font-size: 0.72rem;
 	margin: 0;
 }
 .webmd-ms-search .ms-panel-label-end .ms-icon-btn {
 	width: 1.45rem !important;
-	height: 1.7rem !important;
+	height: 1.65rem !important;
 	margin: 0 !important;
 }
 .webmd-ms-search .ms-panel-label-end .ms-pane-collapse {
 	width: 1.45rem !important;
-	height: 1.7rem !important;
+	height: 1.65rem !important;
 	margin: 0 !important;
 	font-size: 1.35rem;
+}
+.webmd-ms-search .ms-panel-scroll-edge .wiki-breadcrumb__icon-btn {
+	height: 1.65rem !important;
 }
 /* 相邻控件贴边，避免边框造成“空隙”感 */
 .webmd-ms-search .ms-panel-label-end > * + *,
@@ -1170,7 +1736,7 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	font-weight: 700;
 	font-size: 1rem;
 	color: var(--fg);
-	word-break: break-all;
+	word-break: break-word;
 	line-height: 1.4;
 }
 .webmd-ms-search .ms-hit-sublink {
@@ -1266,8 +1832,14 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 		--ms-side-w: minmax(9rem, 11rem);
 	}
 }
-[data-search-modal-open] {
-	overflow: hidden;
+/* 搜索打开时锁滚动（html+body）；关闭时必须清掉，见 client/search ui */
+html[data-search-modal-open],
+body[data-search-modal-open],
+html:has(body[data-search-modal-open]) {
+	overflow: hidden !important;
+	/* 防止 iOS 滚动穿透把底层页面顶走 */
+	overscroll-behavior: none;
+	touch-action: none;
 }
 
 /* ========== 桌面壳：[nav | g | center] ==========
@@ -1278,10 +1850,21 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	display: grid;
 	grid-template-columns: var(--wiki-nav) var(--wiki-g-nav) minmax(0, 1fr);
 	grid-template-rows: 1fr;
-	height: calc(100vh - var(--header-h));
+	/*
+	 * 只靠 flex 吃满 header 以下剩余空间。
+	 * 不要写死 calc(100dvh - header)：窄屏 header 含 safe-area / 实际高度与变量不一致时，
+	 * 固定高度会把整页撑出视口，表现为“卡住 / 顶栏被顶没”。
+	 */
+	flex: 1 1 auto;
 	min-height: 0;
+	height: auto;
+	max-height: none;
 	position: relative;
 	background: var(--bg);
+	/*
+	 * 勿设 z-index：会形成层叠上下文，把内部 position:fixed 的
+	 * 文件/大纲抽屉整层压在 .drawer-backdrop 下面 → 发灰且点不到。
+	 */
 }
 
 .app-shell > .wiki-nav {
@@ -1422,9 +2005,12 @@ body.is-col-resizing .wiki-gutter {
 	overflow: hidden;
 }
 .pane-bar--center {
-	/* 中栏路径容器：内部 .wiki-breadcrumb 铺满 */
+	/* 中栏路径容器：内部 .wiki-breadcrumb 铺满；允许路径弹层溢出 */
 	padding: 0;
 	background: var(--bg-muted);
+	overflow: visible;
+	position: relative;
+	z-index: 6;
 }
 .pane-bar--center > .wiki-breadcrumb {
 	flex: 1 1 auto;
@@ -1589,13 +2175,16 @@ body.is-col-resizing .wiki-gutter {
 	min-height: 0;
 	overflow: auto;
 	overscroll-behavior: contain;
+	/* 禁止 CSS smooth：与软导航复用同一容器时会把 scrollTop 滚飞成空白页 */
+	scroll-behavior: auto;
+	-webkit-overflow-scrolling: touch;
 	/* 路径已移出滚动区；正文略多一点阅读余白 */
 	padding: 0.75rem 1rem 1.75rem;
 	width: 100%;
 	box-sizing: border-box;
 }
 
-.center-scroll > .mobile-toc {
+.center-scroll > .inline-toc {
 	width: 100%;
 	margin: 0 0 0.75rem;
 	box-sizing: border-box;
@@ -1617,6 +2206,81 @@ body.is-text-page .markdown-body pre {
 }
 body.is-text-page .markdown-body table {
 	max-width: 100%;
+}
+
+/*
+ * 非 Markdown 文件预览：wiki-main / center-scroll 仍吃满中栏格子
+ * 正文宽度由「固定/铺满」统一控制（见下方 data-content-width），不再强制文件页永远 100%
+ */
+body.is-file-page .wiki-main,
+body.is-pdf-page .wiki-main,
+body.is-media-page .wiki-main,
+body.is-source-page .wiki-main {
+	min-width: 0;
+	width: 100%;
+}
+/*
+ * 非 Markdown：路径栏已在 pane-bar；center-scroll 零内边距
+ * （版心夹紧与居中只作用在 > .markdown-body，不作用在 scroll 容器）
+ */
+body.is-file-page .center-scroll,
+body.is-pdf-page .center-scroll,
+body.is-media-page .center-scroll,
+body.is-image-page .center-scroll,
+body.is-video-page .center-scroll,
+body.is-audio-page .center-scroll,
+body.is-source-page .center-scroll {
+	padding: 0 !important;
+	width: 100%;
+	max-width: none;
+	box-sizing: border-box;
+}
+/* 文件页默认：贴齐；铺满模式强制全宽。固定模式由通用版心规则覆盖 max/margin */
+body.is-file-page .center-scroll > .markdown-body,
+body.is-pdf-page .center-scroll > .markdown-body,
+body.is-media-page .center-scroll > .markdown-body,
+body.is-image-page .center-scroll > .markdown-body,
+body.is-video-page .center-scroll > .markdown-body,
+body.is-audio-page .center-scroll > .markdown-body,
+body.is-source-page .center-scroll > .markdown-body,
+body.is-binary-page .center-scroll > .markdown-body {
+	width: 100%;
+	max-width: none;
+	margin: 0;
+	padding: 0 !important;
+	box-sizing: border-box;
+	align-self: stretch;
+}
+html[data-content-width='fill'] body.is-file-page .center-scroll > .markdown-body,
+html[data-content-width='fill'] body.is-pdf-page .center-scroll > .markdown-body,
+html[data-content-width='fill'] body.is-media-page .center-scroll > .markdown-body,
+html[data-content-width='fill'] body.is-image-page .center-scroll > .markdown-body,
+html[data-content-width='fill'] body.is-video-page .center-scroll > .markdown-body,
+html[data-content-width='fill'] body.is-audio-page .center-scroll > .markdown-body,
+html[data-content-width='fill'] body.is-source-page .center-scroll > .markdown-body,
+html[data-content-width='fill'] body.is-binary-page .center-scroll > .markdown-body {
+	width: 100% !important;
+	max-width: none !important;
+	margin-inline: 0 !important;
+	align-self: stretch;
+}
+/* 源码/文本：代码块贴满中栏，无外边距 */
+body.is-source-page .markdown-body > .webmd-code,
+body.is-file-page .markdown-body > .webmd-code {
+	width: 100% !important;
+	max-width: none !important;
+	margin: 0 !important;
+	border-radius: 0 !important;
+	border-left: none !important;
+	border-right: none !important;
+	box-sizing: border-box;
+}
+body.is-source-page .markdown-body > .webmd-code > pre,
+body.is-file-page .markdown-body > .webmd-code > pre {
+	width: 100%;
+	max-width: none;
+	max-height: none;
+	box-sizing: border-box;
 }
 
 .app-shell.panels-collapsed .wiki-center,
@@ -1734,7 +2398,8 @@ body.is-text-page .markdown-body table {
 }
 
 .tree-sort-btn,
-.tree-group-btn {
+.tree-group-btn,
+.tree-accordion-btn {
 	flex: 0 0 auto;
 	display: inline-flex;
 	align-items: center;
@@ -1756,10 +2421,17 @@ body.is-text-page .markdown-body table {
 	transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 }
 .tree-sort-btn:hover,
-.tree-group-btn:hover {
+.tree-group-btn:hover,
+.tree-accordion-btn:hover {
 	color: var(--fg);
 	border-color: var(--border-strong);
 	background: var(--bg-muted);
+}
+.tree-accordion-btn.is-on,
+.tree-accordion-btn[data-on='1'] {
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+	background: var(--nav-active-bg);
 }
 .tree-sort-btn__arrow {
 	display: block;
@@ -1890,6 +2562,260 @@ body.is-text-page .markdown-body table {
 }
 .tree-icon.tree-icon--pdf .tree-icon__stripe {
 	stroke: var(--file-pdf);
+}
+.tree-icon.tree-icon--docx,
+.tree-icon.tree-icon--doc {
+	color: #2b579a;
+}
+.tree-icon.tree-icon--docx .tree-icon__stripe,
+.tree-icon.tree-icon--doc .tree-icon__stripe {
+	stroke: #2b579a;
+}
+.tree-icon.tree-icon--xlsx,
+.tree-icon.tree-icon--xls {
+	color: #217346;
+}
+.tree-icon.tree-icon--xlsx .tree-icon__stripe,
+.tree-icon.tree-icon--xls .tree-icon__stripe {
+	stroke: #217346;
+}
+.tree-icon.tree-icon--pptx,
+.tree-icon.tree-icon--ppt {
+	color: #c43e1c;
+}
+.tree-icon.tree-icon--pptx .tree-icon__stripe,
+.tree-icon.tree-icon--ppt .tree-icon__stripe {
+	stroke: #c43e1c;
+}
+
+/* 通用文件 / Office：无在线预览状态卡 */
+/* 无法在线预览：统一下载卡（zip / 缺预览的 Office / 其它二进制） */
+.file-unsupported {
+	max-width: 28rem;
+	margin: 2.5rem auto;
+	padding: 1.75rem 1.5rem 1.5rem;
+	border: 1px solid var(--border);
+	border-radius: 0.85rem;
+	background: var(--bg-elevated, var(--bg));
+	text-align: center;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.file-unsupported__badge {
+	display: inline-block;
+	min-width: 3.2rem;
+	padding: 0.28rem 0.65rem;
+	border-radius: 0.4rem;
+	font-size: 0.75rem;
+	font-weight: 800;
+	letter-spacing: 0.04em;
+	color: #fff;
+	background: #656d76;
+}
+.file-unsupported[data-file-ext='docx'] .file-unsupported__badge,
+.file-unsupported[data-file-ext='doc'] .file-unsupported__badge {
+	background: #2b579a;
+}
+.file-unsupported[data-file-ext='xlsx'] .file-unsupported__badge,
+.file-unsupported[data-file-ext='xls'] .file-unsupported__badge,
+.file-unsupported[data-file-ext='ods'] .file-unsupported__badge {
+	background: #217346;
+}
+.file-unsupported[data-file-ext='pptx'] .file-unsupported__badge,
+.file-unsupported[data-file-ext='ppt'] .file-unsupported__badge {
+	background: #c43e1c;
+}
+.file-unsupported[data-file-ext='zip'] .file-unsupported__badge,
+.file-unsupported[data-file-ext='7z'] .file-unsupported__badge,
+.file-unsupported[data-file-ext='rar'] .file-unsupported__badge,
+.file-unsupported[data-file-ext='gz'] .file-unsupported__badge,
+.file-unsupported[data-file-ext='tar'] .file-unsupported__badge {
+	background: #9a6700;
+}
+.file-unsupported__title {
+	margin: 0.9rem 0 0.35rem;
+	font-size: 1.15rem;
+	font-weight: 650;
+}
+.file-unsupported__name {
+	margin: 0.25rem 0 0.5rem;
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: var(--fg);
+	word-break: break-all;
+	line-height: 1.4;
+}
+.file-unsupported__desc,
+.file-unsupported__meta {
+	margin: 0.35rem 0;
+	font-size: 0.875rem;
+	color: var(--fg-muted);
+	line-height: 1.55;
+}
+.file-unsupported__actions {
+	margin: 1.25rem auto 0;
+	width: 100%;
+	max-width: 14rem;
+	display: flex;
+	flex-direction: column;
+	flex-wrap: nowrap;
+	gap: 0.55rem;
+	justify-content: center;
+	align-items: stretch;
+	text-align: center;
+	padding: 0;
+	box-sizing: border-box;
+}
+.markdown-body .file-unsupported__actions {
+	margin-top: 1.25rem;
+	margin-bottom: 0;
+	margin-left: auto;
+	margin-right: auto;
+}
+.file-unsupported__dl,
+.file-unsupported__open {
+	display: flex !important;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	padding: 0.55rem 1.15rem;
+	border-radius: 0.5rem;
+	font-weight: 600;
+	font-size: 0.9rem;
+	line-height: 1.25;
+	text-align: center;
+	text-decoration: none !important;
+	float: none !important;
+	margin: 0 !important;
+}
+.file-unsupported__dl {
+	background: var(--accent, #0969da);
+	border: 1px solid transparent;
+	color: #fff !important;
+}
+.file-unsupported__dl:hover {
+	filter: brightness(1.06);
+	color: #fff !important;
+}
+.file-unsupported__open {
+	border: 1px solid var(--border);
+	background: var(--bg-elevated, var(--bg));
+	color: var(--fg) !important;
+}
+.file-unsupported__open:hover {
+	background: var(--bg-muted);
+	color: var(--fg) !important;
+}
+
+body.is-binary-page .center-scroll {
+	padding: 1rem 0.75rem;
+}
+body.is-binary-page .center-scroll > .markdown-body {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-start;
+	min-height: 12rem;
+}
+
+/* ========== CSV / Excel→CSV：类型栏+复制 + 纯表（无额外说明） ========== */
+body.is-sheet-page .center-scroll {
+	padding: 0.75rem 1rem 1.5rem !important;
+	overflow: auto;
+}
+.sheet-preview {
+	width: 100%;
+	box-sizing: border-box;
+}
+/* 多 sheet 页签：仅切换用，不算正文「说明」 */
+.sheet-preview > .sheet-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	margin: 0 0 0.55rem;
+}
+.sheet-tab {
+	appearance: none;
+	border: 1px solid var(--border);
+	background: var(--bg-muted);
+	color: var(--fg);
+	border-radius: 0.4rem;
+	padding: 0.3rem 0.7rem;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+.sheet-tab.is-active {
+	background: var(--accent, #0969da);
+	border-color: transparent;
+	color: #fff;
+}
+.sheet-panels {
+	width: 100%;
+}
+.sheet-panel[hidden] {
+	display: none !important;
+}
+/* 复用 .webmd-code 顶栏；表在栏下，无源码区 */
+.markdown-body .webmd-code.sheet-block {
+	position: relative;
+	margin: 0 0 0.75rem;
+	overflow: hidden;
+}
+.markdown-body .webmd-code.sheet-block > .sheet-table-wrap {
+	border: 0;
+	border-radius: 0;
+	margin: 0;
+}
+.markdown-body .webmd-code.sheet-block > pre.sheet-copy-source {
+	/* 仅供复制，不占版面 */
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	padding: 0 !important;
+	margin: -1px !important;
+	overflow: hidden !important;
+	clip: rect(0, 0, 0, 0) !important;
+	border: 0 !important;
+	white-space: pre !important;
+}
+.sheet-table-wrap {
+	overflow: auto;
+	background: var(--bg-elevated, var(--bg));
+	-webkit-overflow-scrolling: touch;
+}
+.sheet-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.875rem;
+	line-height: 1.4;
+}
+.sheet-table th,
+.sheet-table td {
+	padding: 0.45rem 0.7rem;
+	border-bottom: 1px solid var(--border);
+	border-right: 1px solid var(--border);
+	text-align: left;
+	vertical-align: top;
+	white-space: nowrap;
+}
+.sheet-table th:last-child,
+.sheet-table td:last-child {
+	border-right: none;
+}
+.sheet-table thead th {
+	position: sticky;
+	top: 0;
+	background: var(--bg-muted);
+	font-weight: 700;
+	z-index: 1;
+}
+.sheet-table tbody tr:nth-child(even) td {
+	background: color-mix(in srgb, var(--bg-muted) 45%, transparent);
+}
+.sheet-table tbody tr:hover td {
+	background: color-mix(in srgb, var(--accent, #0969da) 10%, transparent);
 }
 
 .tree-file.is-active .tree-icon--file .tree-icon__page {
@@ -2124,6 +3050,21 @@ html[data-theme='dark'] body.is-home-page .center-scroll {
 	background: #0d1117;
 }
 
+/*
+ * Markdown：左右贴齐路径栏内容起点（仅保留极少呼吸边距）。
+ * 勿用大 padding-inline——宽屏下会像「正文左边空一截」。
+ */
+body.is-markdown-page .center-scroll {
+	padding: 0.4rem 0.5rem 1.25rem;
+}
+body.is-markdown-page .center-scroll > .markdown-body {
+	padding: 2px 0 20px !important;
+	width: 100% !important;
+	max-width: none;
+	margin-inline: 0 !important;
+	box-sizing: border-box;
+}
+
 /* 标题仅 id，无可见 #；TOC 跳转保留滚动边距 */
 .markdown-body :is(h1, h2, h3, h4, h5, h6) {
 	scroll-margin-top: 1rem;
@@ -2335,14 +3276,68 @@ html[data-theme='dark'] .markdown-body .mermaid {
 	margin: 1rem 0;
 	width: 100%;
 }
-.markdown-body img,
+.markdown-body img {
+	max-width: 100%;
+	height: auto;
+}
+/*
+ * 文内视频（Markdown 嵌入）：
+ * 默认铺满正文栏宽度 + 等比 + 高度上限。
+ * 封面：构建/客户端绑定 _Res_*/poster（与全页同一文件）。
+ */
 .markdown-body video,
 .markdown-body .media-video {
+	display: block;
+	width: 100%;
 	max-width: 100%;
-	max-height: min(70vh, calc(100vh - var(--header-h) - 6rem));
-	width: auto;
 	height: auto;
+	max-height: min(70dvh, calc(100dvh - var(--header-h) - 5rem));
 	object-fit: contain;
+	margin: 0.75rem 0;
+	border-radius: 0.5rem;
+	background: #0d1117;
+	box-sizing: border-box;
+}
+/*
+ * 文内尺寸（不规定左右）：
+ * - media-size-sm：只缩小，仍可走 is-media-line → 固定模式居中
+ * - media-sm：缩小 + 左贴（显式布局，不参与固定居中）
+ */
+.markdown-body img.media-size-sm,
+.markdown-body video.media-size-sm,
+.markdown-body .media-size-sm,
+.markdown-body img.media-sm,
+.markdown-body video.media-sm,
+.markdown-body .media-sm {
+	display: block !important;
+	width: min(100%, 14rem) !important;
+	max-width: min(100%, 14rem) !important;
+	height: auto !important;
+	max-height: min(40dvh, 12rem);
+	object-fit: contain;
+	box-sizing: border-box;
+}
+.markdown-body video.media-size-sm,
+.markdown-body video.media-sm {
+	max-height: min(36dvh, 11rem);
+}
+/* 仅 media-sm：强制左对齐（覆盖固定模式居中） */
+.markdown-body img.media-sm,
+.markdown-body video.media-sm,
+.markdown-body .media-sm {
+	margin: 0.65rem 0 !important;
+	margin-inline: 0 auto 0 0 !important;
+	float: none !important;
+}
+/* 仅尺寸：上下间距；水平由 is-media-line / 默认流决定 */
+.markdown-body img.media-size-sm,
+.markdown-body video.media-size-sm,
+.markdown-body .media-size-sm {
+	margin-block: 0.65rem;
+}
+html[data-theme='dark'] .markdown-body video,
+html[data-theme='dark'] .markdown-body .media-video {
+	background: #010409;
 }
 .markdown-body .webmd-embed img,
 .markdown-body .webmd-embed video {
@@ -2361,49 +3356,83 @@ html[data-theme='dark'] .markdown-body .webmd-embed video {
 }
 
 /*
- * 全页媒体舞台（图/视频/音频）
- * 路径仍在顶部；媒体在剩余区域内水平 + 垂直居中，等比 contain
+ * 全页媒体舞台（图/视频/音频/SVG）
+ * 路径在 pane-bar；舞台吃满中栏剩余高度，媒体等比 contain 居中。
+ * 注意：勿再依赖「height:0 + flex:1」作为唯一高度来源——固定版心 /
+ * 窄屏下父级高度不定时 height:0 会把视频/图片压没。
  */
 .media-stage {
-	/* height:0 + flex:1 让 flex 子项拿到确定高度，max-height:% 才生效 */
 	flex: 1 1 auto;
-	height: 0;
-	min-height: 0;
+	min-height: min(50dvh, 22rem);
 	width: 100%;
+	max-width: 100%;
 	display: flex;
 	flex-direction: column;
-	align-items: center; /* 水平居中 */
-	justify-content: center; /* 垂直居中 */
+	align-items: center;
+	justify-content: center;
 	margin: 0;
-	padding: 0.25rem 0;
+	padding: 0.5rem;
 	box-sizing: border-box;
 }
 .media-stage .media-solo,
 .media-stage img.media-solo,
 .media-stage video.media-solo {
 	display: block;
-	/* 限制在舞台内，保持比例 */
 	max-width: 100%;
-	max-height: 100%;
+	/* 有确定父高时用 100%；否则退回视口高度，避免 max-height:100%→0 */
+	max-height: min(70dvh, 100%);
 	width: auto;
 	height: auto;
 	object-fit: contain;
 	margin: 0 auto;
 	border-radius: 0.5rem;
 	background: #0000;
-	flex-shrink: 1;
+	flex: 0 1 auto;
 }
+/*
+ * 全页视频：优先铺满中栏宽度（与手机文档站一致），高度按片源比例。
+ * 勿写死 aspect-ratio:16/9 —— 方形/竖屏源会被 contain 缩进中间，显得特别小。
+ */
 .media-stage--video .media-solo {
-	background: #000;
+	background: #0d1117;
+	width: 100% !important;
+	max-width: 100% !important;
+	height: auto !important;
+	max-height: min(85dvh, 100%);
+	min-height: 0;
+	aspect-ratio: auto;
+	object-fit: contain;
+	border-radius: 0.4rem;
+}
+/* 窄屏：贴边一点，视觉更满 */
+@media (max-width: 640px) {
+	.markdown-body video,
+	.markdown-body .media-video {
+		width: 100%;
+		max-height: min(72dvh, calc(100dvh - var(--header-h) - 4.5rem));
+		border-radius: 0.35rem;
+	}
+	body.is-video-page .media-stage {
+		padding: 0;
+	}
+	body.is-video-page .media-stage--video .media-solo {
+		width: 100% !important;
+		max-height: min(80dvh, 100%);
+		border-radius: 0;
+	}
 }
 .media-stage--audio {
 	justify-content: center;
 	align-items: center;
 	padding: 1rem;
 	gap: 0.75rem;
+	/* 全页时由 body.is-audio-page 规则吃满中栏高度再居中；此处仅兜底 */
+	min-height: min(40dvh, 12rem);
 }
 .media-stage--audio .media-audio {
 	width: min(100%, 28rem);
+	max-width: 100%;
+	flex: 0 0 auto;
 }
 .media-stage__caption {
 	margin: 0;
@@ -2415,41 +3444,75 @@ html[data-theme='dark'] .markdown-body .webmd-embed video {
 /* 图/视频/音频全页：路径已在 pane-bar；滚动区整块做媒体舞台 */
 body.is-image-page .center-scroll,
 body.is-video-page .center-scroll,
-body.is-audio-page .center-scroll {
+body.is-audio-page .center-scroll,
+body.is-media-page .center-scroll {
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
 	min-height: 0;
+	flex: 1 1 auto;
 	padding: 0;
+	align-items: stretch;
 }
 body.is-image-page .center-scroll > .markdown-body,
 body.is-video-page .center-scroll > .markdown-body,
-body.is-audio-page .center-scroll > .markdown-body {
+body.is-audio-page .center-scroll > .markdown-body,
+body.is-media-page .center-scroll > .markdown-body {
 	flex: 1 1 auto;
-	height: 0; /* 同 media-stage，保证剩余高度可计算 */
 	min-height: 0;
+	width: 100%;
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
 	padding: 0 !important;
+	box-sizing: border-box;
 }
+/*
+ * 全页媒体舞台：必须保持 flex + 纵横居中。
+ * 勿被 fixed 版心下的 .is-media-line { display:block } 盖掉
+ * （窄屏默认 fixed，否则视频/音频会贴顶、看不出居中）。
+ * 宽度跟版心走：舞台 100% 填满已夹紧的 .markdown-body。
+ */
 body.is-image-page .markdown-body > .media-stage,
 body.is-video-page .markdown-body > .media-stage,
-body.is-audio-page .markdown-body > .media-stage {
-	flex: 1 1 auto;
-	height: 0;
-	min-height: 0;
-	width: 100%;
+body.is-audio-page .markdown-body > .media-stage,
+body.is-media-page .markdown-body > .media-stage,
+html[data-content-width='fixed'] body.is-image-page .markdown-body > .media-stage,
+html[data-content-width='fixed'] body.is-video-page .markdown-body > .media-stage,
+html[data-content-width='fixed'] body.is-audio-page .markdown-body > .media-stage,
+html[data-content-width='fixed'] body.is-media-page .markdown-body > .media-stage,
+html[data-content-width='fixed'] body.is-media-page .markdown-body > .media-stage.is-media-line {
+	display: flex !important;
+	flex-direction: column !important;
+	align-items: center !important;
+	justify-content: center !important;
+	flex: 1 1 auto !important;
+	min-height: 0 !important;
+	width: 100% !important;
+	max-width: none !important;
+	margin-inline: 0 !important;
+	text-align: center;
+	box-sizing: border-box;
 }
 body.is-image-page .markdown-body > :not(.media-stage),
 body.is-video-page .markdown-body > :not(.media-stage),
 body.is-audio-page .markdown-body > :not(.media-stage) {
-	display: none;
+	display: none !important;
+}
+
+/* 固定模式：媒体/PDF 版心夹紧后仍吃满列高（横向居中由通用 max-width 负责） */
+html[data-content-width='fixed'] body.is-file-page.is-media-page .center-scroll > .markdown-body,
+html[data-content-width='fixed'] body.is-file-page.is-pdf-page .center-scroll > .markdown-body,
+html[data-content-width='fixed'] body.is-media-page .center-scroll > .markdown-body,
+html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-body {
+	min-height: 0;
+	height: 100%;
+	align-self: center;
 }
 
 /*
- * PDF 预览 — 对齐 starlight PdfEmbed + custom.css 媒体舞台
- * 中栏：面包屑固定高度，pdf-shell 吃满剩余高度
+ * PDF 预览 — PDF.js 阅读器（工具栏 + 左侧缩略图），手机/桌面统一
+ * 中栏：路径栏固定，pdf-shell 吃满剩余高度
  */
 .pdf-shell {
 	width: 100%;
@@ -2460,16 +3523,8 @@ body.is-audio-page .markdown-body > :not(.media-stage) {
 	margin: 0 !important;
 	padding: 0 !important;
 	align-items: stretch;
-}
-.pdf-frame {
-	width: 100% !important;
-	height: 100% !important;
-	flex: 1 1 auto;
-	min-height: 12rem;
-	max-height: none !important;
-	border: 1px solid var(--border);
-	border-radius: 0.4rem;
-	background: #525659;
+	position: relative;
+	background: #3d4043;
 }
 .pdf-status,
 .pdf-error {
@@ -2478,6 +3533,7 @@ body.is-audio-page .markdown-body > :not(.media-stage) {
 	background: var(--bg-muted);
 	color: var(--fg-muted);
 	font-size: 0.875rem;
+	margin: 0.75rem;
 }
 .pdf-error {
 	color: var(--danger-fg);
@@ -2487,31 +3543,232 @@ script[type='application/pdf-base64'] {
 	display: none !important;
 }
 
-/* PDF：路径在 pane-bar，预览铺满滚动区剩余高度 */
+.pdf-viewer {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	width: 100%;
+	height: 100%;
+}
+.pdf-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 0.2rem;
+	flex-wrap: nowrap;
+	flex-shrink: 0;
+	min-height: 2.4rem;
+	padding: 0.3rem 0.4rem;
+	background: var(--bg-elevated, var(--bg));
+	border-bottom: 1px solid var(--border);
+	color: var(--fg);
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+}
+.pdf-tb-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 2rem;
+	height: 2rem;
+	padding: 0 0.4rem;
+	border: 1px solid transparent;
+	border-radius: 0.4rem;
+	background: transparent;
+	color: inherit;
+	font-size: 1rem;
+	line-height: 1;
+	cursor: pointer;
+	text-decoration: none;
+	flex-shrink: 0;
+}
+.pdf-tb-btn:hover,
+.pdf-tb-btn[aria-pressed='true'] {
+	background: var(--bg-muted);
+	border-color: var(--border);
+}
+.pdf-tb-text {
+	font-size: 0.8rem;
+	font-weight: 600;
+}
+.pdf-tb-sep {
+	width: 1px;
+	height: 1.25rem;
+	background: var(--border);
+	margin: 0 0.15rem;
+	flex-shrink: 0;
+}
+.pdf-tb-spacer {
+	flex: 1 1 auto;
+	min-width: 0.5rem;
+}
+.pdf-page-jump {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.2rem;
+	font-size: 0.8rem;
+	color: var(--fg-muted);
+	flex-shrink: 0;
+}
+.pdf-page-input {
+	width: 2.6rem;
+	height: 1.75rem;
+	text-align: center;
+	border: 1px solid var(--border);
+	border-radius: 0.35rem;
+	background: var(--bg);
+	color: var(--fg);
+	font-size: 0.8rem;
+	/* 去掉 number 纺锤，省空间 */
+	-moz-appearance: textfield;
+}
+.pdf-page-input::-webkit-outer-spin-button,
+.pdf-page-input::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+.pdf-page-of {
+	opacity: 0.7;
+}
+.pdf-zoom-label {
+	font-size: 0.75rem;
+	min-width: 2.6rem;
+	text-align: center;
+	color: var(--fg-muted);
+	flex-shrink: 0;
+}
+.pdf-body {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	position: relative;
+	overflow: hidden;
+}
+.pdf-thumbs {
+	flex: 0 0 7.5rem;
+	width: 7.5rem;
+	max-width: 40vw;
+	overflow: auto;
+	background: #2b2d30;
+	border-right: 1px solid #1a1b1e;
+	-webkit-overflow-scrolling: touch;
+}
+.pdf-thumbs[hidden] {
+	display: none !important;
+}
+.pdf-thumbs-list {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.55rem;
+	padding: 0.55rem 0.4rem 1rem;
+}
+.pdf-thumb {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.2rem;
+	padding: 0.25rem;
+	border: 2px solid transparent;
+	border-radius: 0.35rem;
+	background: transparent;
+	cursor: pointer;
+	color: #c9cdd1;
+}
+.pdf-thumb canvas {
+	display: block;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+	background: #fff;
+}
+.pdf-thumb.is-active {
+	border-color: #58a6ff;
+	background: rgba(88, 166, 255, 0.12);
+}
+.pdf-thumb-label {
+	font-size: 0.7rem;
+	line-height: 1;
+}
+.pdf-pages {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: auto;
+	-webkit-overflow-scrolling: touch;
+	padding: 0.65rem 0.5rem 1.5rem;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.65rem;
+	background: #525659;
+}
+.pdf-page {
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+	background: #fff;
+	line-height: 0;
+}
+.pdf-page canvas {
+	display: block;
+	max-width: 100%;
+	height: auto;
+}
+
+/* 窄屏：缩略图改为浮层，不挤占正文宽度 */
+@media (max-width: 640px) {
+	.pdf-thumbs {
+		position: absolute;
+		left: 0;
+		top: 0;
+		bottom: 0;
+		z-index: 5;
+		flex-basis: 8rem;
+		width: 8rem;
+		max-width: 72vw;
+		box-shadow: 4px 0 16px rgba(0, 0, 0, 0.35);
+	}
+	.pdf-toolbar {
+		gap: 0.12rem;
+		padding: 0.25rem 0.3rem;
+	}
+	.pdf-tb-btn {
+		min-width: 1.85rem;
+		height: 1.85rem;
+	}
+}
+
+/* PDF：路径在 pane-bar；高度吃满，宽度跟固定/铺满版心 */
+body.is-pdf-page .wiki-main {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	overflow: hidden;
+}
 body.is-pdf-page .center-scroll {
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
 	min-height: 0;
-	padding: 0.5rem 0.75rem 0.75rem;
+	flex: 1 1 auto;
+	padding: 0 !important;
+	align-items: stretch;
 }
 body.is-pdf-page .center-scroll > .markdown-body {
 	flex: 1 1 auto;
 	min-height: 0;
+	width: 100%;
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
 	padding: 0 !important;
+	box-sizing: border-box;
 }
 body.is-pdf-page .markdown-body > .pdf-shell {
 	flex: 1 1 auto;
 	min-height: 0;
+	width: 100%;
+	display: flex;
+	flex-direction: column;
 }
 body.is-pdf-page .markdown-body > :not(.pdf-shell) {
-	display: none;
-}
-body.is-pdf-page .pdf-frame {
-	min-height: 0;
+	display: none !important;
 }
 
 body.is-col-resizing,
@@ -2541,16 +3798,196 @@ body.is-col-resizing video {
 	box-sizing: border-box;
 	box-shadow: none;
 	min-width: 0;
-	overflow: hidden;
+	/* visible：完整路径弹层；trail 自己 overflow 裁切省略 */
+	overflow: visible;
+	position: relative;
 }
 .wiki-breadcrumb__trail {
 	display: flex;
 	flex-wrap: nowrap;
 	align-items: center;
+	justify-content: flex-start;
 	gap: 0.1rem 0;
 	min-width: 0;
+	/* 吃剩余空间，但内部子项不 stretch 撑出「中间大空档」 */
 	flex: 1 1 auto;
 	overflow: hidden;
+	/* 可点查看完整路径 */
+	cursor: pointer;
+	border-radius: 0.35rem;
+	padding: 0.15rem 0.25rem;
+	margin: 0 -0.25rem;
+	outline: none;
+	-webkit-tap-highlight-color: transparent;
+	transition: background 0.12s ease;
+}
+.wiki-breadcrumb__trail:hover {
+	background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+.wiki-breadcrumb__trail:focus-visible {
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.wiki-breadcrumb__trail[aria-expanded='true'] {
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+/* 路径栏「URL」文字按钮 */
+.wiki-breadcrumb__url-btn {
+	min-width: 2.1rem;
+	padding: 0 0.35rem;
+}
+.wiki-breadcrumb__url-btn-label {
+	font-size: 0.65rem;
+	font-weight: 750;
+	letter-spacing: 0.04em;
+	line-height: 1;
+	color: inherit;
+}
+.wiki-breadcrumb__url-btn:hover {
+	color: var(--accent);
+}
+/* 完整 URL 弹层（fixed 定位由 JS 写入；宽度随 URL 测量自适应） */
+.wiki-breadcrumb__popover {
+	z-index: 120;
+	box-sizing: border-box;
+	min-width: 16rem;
+	/* max-width 由 JS 按视口设；默认不硬截断过短 */
+	padding: 0.65rem 0.75rem 0.7rem;
+	border: 1px solid var(--border);
+	border-radius: 0.55rem;
+	background: var(--bg-elevated, var(--bg));
+	color: var(--fg);
+	box-shadow: var(--shadow), 0 8px 28px rgba(0, 0, 0, 0.12);
+	font-family: var(--font-sans);
+	font-size: 0.8125rem;
+	line-height: 1.4;
+}
+.wiki-breadcrumb__popover[hidden] {
+	display: none !important;
+}
+.wiki-breadcrumb__popover-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	margin-bottom: 0.5rem;
+}
+.wiki-breadcrumb__popover-title {
+	font-weight: 650;
+	font-size: 0.75rem;
+	color: var(--fg-muted);
+	letter-spacing: 0.02em;
+}
+.wiki-breadcrumb__popover-close {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.6rem;
+	height: 1.6rem;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 0.35rem;
+	background: transparent;
+	color: var(--fg-muted);
+	font-size: 1.15rem;
+	line-height: 1;
+	cursor: pointer;
+}
+.wiki-breadcrumb__popover-close:hover {
+	background: color-mix(in srgb, var(--fg) 8%, transparent);
+	color: var(--fg);
+}
+.wiki-breadcrumb__popover-block {
+	margin-top: 0.4rem;
+}
+.wiki-breadcrumb__popover-block:first-of-type {
+	margin-top: 0;
+}
+.wiki-breadcrumb__popover-label {
+	display: block;
+	margin-bottom: 0.2rem;
+	font-size: 0.68rem;
+	font-weight: 650;
+	color: var(--fg-muted);
+	letter-spacing: 0.02em;
+}
+.wiki-breadcrumb__popover-path {
+	display: block;
+	margin: 0;
+	padding: 0.5rem 0.6rem;
+	border-radius: 0.4rem;
+	background: var(--bg-muted);
+	border: 1px solid var(--border);
+	color: var(--fg);
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+	font-size: 0.8125rem;
+	font-weight: 500;
+	line-height: 1.45;
+	/* 默认单行；超长再由 JS 改为 wrap */
+	white-space: nowrap;
+	overflow-x: auto;
+	overflow-y: hidden;
+	user-select: text;
+	cursor: text;
+	-webkit-overflow-scrolling: touch;
+}
+.wiki-breadcrumb__popover-path.is-wrap {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	word-break: break-word;
+	overflow-x: hidden;
+}
+.wiki-breadcrumb__popover-path--encoded {
+	font-size: 0.75rem;
+	color: var(--fg-muted);
+}
+.wiki-breadcrumb__popover-meta {
+	margin-top: 0.45rem;
+	font-size: 0.75rem;
+	color: var(--fg-muted);
+}
+.wiki-breadcrumb__popover-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	margin-top: 0.6rem;
+}
+.wiki-breadcrumb__popover-btn {
+	margin: 0;
+	padding: 0.3rem 0.65rem;
+	border: 1px solid var(--border);
+	border-radius: 0.35rem;
+	background: var(--accent-solid, var(--accent));
+	color: #fff;
+	font-size: 0.75rem;
+	font-weight: 600;
+	font-family: inherit;
+	cursor: pointer;
+}
+.wiki-breadcrumb__popover-btn:hover {
+	filter: brightness(1.05);
+}
+.wiki-breadcrumb__popover-btn--secondary {
+	background: color-mix(in srgb, var(--accent) 18%, var(--bg));
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.wiki-breadcrumb__popover-btn--secondary:hover {
+	background: color-mix(in srgb, var(--accent) 28%, var(--bg));
+	filter: none;
+}
+.wiki-breadcrumb__popover-btn--ghost {
+	background: var(--bg);
+	color: var(--fg);
+}
+.wiki-breadcrumb__popover-btn--ghost:hover {
+	background: var(--bg-muted);
+	filter: none;
+}
+.wiki-breadcrumb__popover-btn.is-copied {
+	background: color-mix(in srgb, #1a7f37 85%, #000);
+	border-color: transparent;
+	color: #fff;
 }
 .wiki-breadcrumb__home {
 	display: inline-flex;
@@ -2684,20 +4121,36 @@ body.is-col-resizing video {
 	opacity: 0.45;
 	font-weight: 400;
 	user-select: none;
+	flex: 0 0 auto;
 }
-.wiki-breadcrumb__seg {
+/*
+ * 文件夹路径：只按内容占宽（勿 flex-grow，否则 宽屏中间空一大截），
+ * 窄时优先被压；省略形态由 JS 写成 …/尾段（勿压成空串导致 //）。
+ */
+.wiki-breadcrumb__dirs {
 	color: var(--fg-muted);
-	max-width: 9rem;
+	flex: 0 1 auto;
+	min-width: 1.25em; /* 至少能放下 … */
+	max-width: 100%;
 	overflow: hidden;
-	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+/* 兼容旧多段结构（若有缓存页） */
+.wiki-breadcrumb__seg {
+	color: var(--fg-muted);
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+}
+/* 文件名：尽量保留；仍不够时再中间省略 */
 .wiki-breadcrumb__current {
 	color: var(--fg);
 	font-weight: 650;
-	max-width: min(22rem, 62vw);
+	flex: 0 1 auto;
+	min-width: 4ch;
+	max-width: 100%;
 	overflow: hidden;
-	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .wiki-breadcrumb__meta {
@@ -2802,13 +4255,14 @@ html[data-content-width='fill'] .wiki-breadcrumb__width-btn .wiki-breadcrumb__ic
 }
 
 /*
- * 中栏正文宽度
+ * 中栏正文宽度（所有页面类型统一）
  * - fill：吃满当前中栏
- * - fixed：max = 视口−左右栏设计宽；中栏因收起一侧/两侧变宽时
- *   正文不超过该 max，并在中栏内水平居中（与收起几个侧栏无关）
+ * - fixed（宽屏）：max = --content-readable-max（屏−左右栏 max…）；中栏更宽时居中
+ * - fixed（窄屏）：max ≈ 中栏全宽
+ * Markdown / 主页 / 文本 / 源码 / PDF / 图视频音频 / Office 二进制 全部遵守
  */
 .center-scroll > .markdown-body,
-.center-scroll > .mobile-toc {
+.center-scroll > .inline-toc {
 	width: 100%;
 	max-width: none;
 	margin-inline: 0;
@@ -2816,47 +4270,114 @@ html[data-content-width='fill'] .wiki-breadcrumb__width-btn .wiki-breadcrumb__ic
 	transition: max-width 0.18s ease, margin 0.18s ease;
 }
 
-/* 固定：滚动区用 flex 居中子项，避免 width:100% 在变宽中栏里贴满/贴左 */
-html[data-content-width='fixed'] .center-scroll {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-}
+/*
+ * 固定居中（全站统一，含 PDF / 媒体 / 文件页）：
+ * max-width = --content-readable-max；margin-inline:auto
+ * 勿改 .center-scroll 的 display（会重置 scrollTop）。
+ * 媒体/PDF 页 .markdown-body 仍为 flex 列（高度链），只统一改宽与水平居中。
+ */
 html[data-content-width='fixed'] .center-scroll > .markdown-body,
-html[data-content-width='fixed'] .center-scroll > .mobile-toc,
-html[data-content-width='fixed'] .app-shell .center-scroll > .markdown-body,
-html[data-content-width='fixed'] .app-shell.panels-collapsed .center-scroll > .markdown-body,
-html[data-content-width='fixed'] .app-shell.nav-collapsed .center-scroll > .markdown-body,
-html[data-content-width='fixed'] .app-shell.toc-collapsed .center-scroll > .markdown-body {
-	/* 不超过锁定 max；中栏更窄时仍可 100% 跟着缩 */
-	width: 100%;
+html[data-content-width='fixed'] .center-scroll > .inline-toc {
+	width: 100% !important;
 	max-width: min(100%, var(--content-readable-max)) !important;
-	margin-inline: auto;
-	align-self: center;
+	margin-top: 0 !important;
+	margin-bottom: 0 !important;
+	margin-left: auto !important;
+	margin-right: auto !important;
+	margin-inline: auto !important;
 	box-sizing: border-box;
+}
+/* Markdown/主页等流式正文保持 block；媒体/PDF 自身另有 flex 规则，特异性更高或同层后写 */
+html[data-content-width='fixed'] body.is-markdown-page .center-scroll > .markdown-body,
+html[data-content-width='fixed'] body.is-home-page .center-scroll > .markdown-body {
+	display: block;
 }
 html[data-content-width='fixed'] .center-scroll .home-hero {
 	max-width: min(100%, var(--content-readable-max));
 	width: 100%;
-	margin-inline: auto;
+	margin-left: auto;
+	margin-right: auto;
 }
-/* 媒体/PDF：同样锁 max + 居中，同时吃满列高 */
-html[data-content-width='fixed'] body.is-image-page .center-scroll,
-html[data-content-width='fixed'] body.is-video-page .center-scroll,
-html[data-content-width='fixed'] body.is-audio-page .center-scroll,
-html[data-content-width='fixed'] body.is-pdf-page .center-scroll {
-	align-items: center;
+
+/* 铺满：正文贴中栏，无额外居中空白（所有类型） */
+html[data-content-width='fill'] .center-scroll > .markdown-body,
+html[data-content-width='fill'] .center-scroll > .inline-toc {
+	max-width: none !important;
+	width: 100% !important;
+	margin-inline: 0 !important;
 }
-html[data-content-width='fixed'] body.is-image-page .center-scroll > .markdown-body,
-html[data-content-width='fixed'] body.is-video-page .center-scroll > .markdown-body,
-html[data-content-width='fixed'] body.is-audio-page .center-scroll > .markdown-body,
-html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-body {
-	max-width: min(100%, var(--content-readable-max)) !important;
+/*
+ * 固定模式：单独成行媒体居中（文内 Markdown 插图，非全页媒体舞台）
+ * 由 JS 打上 .is-media-line（避开 :only-child 被空白文本节点拆掉的问题）
+ */
+html[data-content-width='fixed'] .markdown-body .is-media-line {
+	text-align: center !important;
+	display: block;
 	width: 100%;
-	margin-inline: auto;
-	align-self: center;
-	height: 100%;
-	min-height: 0;
+	margin-inline: 0;
+	box-sizing: border-box;
+}
+html[data-content-width='fixed'] .markdown-body .is-media-line > img,
+html[data-content-width='fixed'] .markdown-body .is-media-line > video,
+html[data-content-width='fixed'] .markdown-body .is-media-line > audio,
+html[data-content-width='fixed'] .markdown-body .is-media-line > a,
+html[data-content-width='fixed'] .markdown-body img.is-media-line,
+html[data-content-width='fixed'] .markdown-body video.is-media-line,
+html[data-content-width='fixed'] .markdown-body audio.is-media-line,
+html[data-content-width='fixed'] .markdown-body figure.is-media-line,
+html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line,
+html[data-content-width='fixed'] .markdown-body .is-media-line img,
+html[data-content-width='fixed'] .markdown-body .is-media-line video,
+html[data-content-width='fixed'] .markdown-body .is-media-line audio {
+	display: block !important;
+	margin-left: auto !important;
+	margin-right: auto !important;
+	float: none !important;
+	max-width: 100%;
+	height: auto;
+}
+/* 固定模式下单独成行的视频仍铺满栏宽（只水平居中块本身，不缩成内容宽） */
+html[data-content-width='fixed'] .markdown-body video.is-media-line,
+html[data-content-width='fixed'] .markdown-body .is-media-line > video,
+html[data-content-width='fixed'] .markdown-body .is-media-line video {
+	width: 100% !important;
+	max-width: 100% !important;
+}
+/* media-size-sm 单独成行时：保持窄宽，但仍可 margin auto 居中 */
+html[data-content-width='fixed'] .markdown-body img.media-size-sm.is-media-line,
+html[data-content-width='fixed'] .markdown-body video.media-size-sm.is-media-line,
+html[data-content-width='fixed'] .markdown-body .is-media-line > img.media-size-sm,
+html[data-content-width='fixed'] .markdown-body .is-media-line > video.media-size-sm,
+html[data-content-width='fixed'] .markdown-body .is-media-line img.media-size-sm,
+html[data-content-width='fixed'] .markdown-body .is-media-line video.media-size-sm {
+	width: min(100%, 14rem) !important;
+	max-width: min(100%, 14rem) !important;
+	margin-left: auto !important;
+	margin-right: auto !important;
+}
+/* media-sm：固定/铺满均强制左对齐 */
+html[data-content-width='fixed'] .markdown-body img.media-sm,
+html[data-content-width='fixed'] .markdown-body video.media-sm,
+html[data-content-width='fixed'] .markdown-body .media-sm,
+html[data-content-width='fill'] .markdown-body img.media-sm,
+html[data-content-width='fill'] .markdown-body video.media-sm {
+	margin-left: 0 !important;
+	margin-right: auto !important;
+	text-align: left !important;
+}
+html[data-content-width='fixed'] .markdown-body .is-media-line > a {
+	/* 链接包图：整块居中 */
+	width: fit-content;
+	max-width: 100%;
+}
+html[data-content-width='fixed'] .markdown-body .is-media-line audio,
+html[data-content-width='fixed'] .markdown-body audio.is-media-line {
+	width: min(100%, 28rem);
+}
+html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
+	display: flex !important;
+	flex-direction: column;
+	align-items: center;
 }
 
 
@@ -2886,6 +4407,7 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 	font-weight: 600;
 	font-family: var(--font-sans);
 	min-width: 0;
+	overflow: hidden;
 	border-top: 1px solid var(--border);
 	background: var(--bg-muted);
 	box-sizing: border-box;
@@ -2904,10 +4426,30 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 .wiki-pager--single .wiki-pager__btn--next {
 	grid-column: 2;
 }
+/*
+ * 文本区：固定「上一页（」「）下一页」+ 文件名。
+ * 勿给 name / text 设 flex-grow，否则会把「）」顶到按钮最右，中间空一长截。
+ * 仅允许在空间不够时收缩文件名（中间省略由 JS 负责）。
+ */
 .wiki-pager__text {
+	display: inline-flex;
+	align-items: center;
+	min-width: 0;
+	flex: 0 1 auto;
+	max-width: 100%;
 	overflow: hidden;
-	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.wiki-pager__fixed {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+.wiki-pager__name {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	/* 中间省略由 JS data-middle-ellipsis 写入，不用 text-overflow: ellipsis */
 }
 .wiki-pager__chevron {
 	flex: 0 0 auto;
@@ -3143,7 +4685,7 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 .tree-body,
 .center-scroll,
 .doc-toc,
-.mobile-toc__nav,
+.inline-toc__nav,
 .webmd-ms-search .ms-panel-body,
 .webmd-ms-search .ms-results {
 	scrollbar-width: thin;
@@ -3153,7 +4695,7 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 .tree-body::-webkit-scrollbar,
 .center-scroll::-webkit-scrollbar,
 .doc-toc::-webkit-scrollbar,
-.mobile-toc__nav::-webkit-scrollbar,
+.inline-toc__nav::-webkit-scrollbar,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar,
 .webmd-ms-search .ms-results::-webkit-scrollbar {
 	width: 8px;
@@ -3163,7 +4705,7 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 .tree-body::-webkit-scrollbar-track,
 .center-scroll::-webkit-scrollbar-track,
 .doc-toc::-webkit-scrollbar-track,
-.mobile-toc__nav::-webkit-scrollbar-track,
+.inline-toc__nav::-webkit-scrollbar-track,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar-track,
 .webmd-ms-search .ms-results::-webkit-scrollbar-track {
 	background: transparent;
@@ -3172,7 +4714,7 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 .tree-body::-webkit-scrollbar-thumb,
 .center-scroll::-webkit-scrollbar-thumb,
 .doc-toc::-webkit-scrollbar-thumb,
-.mobile-toc__nav::-webkit-scrollbar-thumb,
+.inline-toc__nav::-webkit-scrollbar-thumb,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar-thumb,
 .webmd-ms-search .ms-results::-webkit-scrollbar-thumb {
 	background: color-mix(in srgb, var(--fg-muted) 35%, transparent);
@@ -3184,7 +4726,7 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 .tree-body::-webkit-scrollbar-thumb:hover,
 .center-scroll::-webkit-scrollbar-thumb:hover,
 .doc-toc::-webkit-scrollbar-thumb:hover,
-.mobile-toc__nav::-webkit-scrollbar-thumb:hover,
+.inline-toc__nav::-webkit-scrollbar-thumb:hover,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar-thumb:hover,
 .webmd-ms-search .ms-results::-webkit-scrollbar-thumb:hover {
 	background: color-mix(in srgb, var(--fg-muted) 55%, transparent);
@@ -3193,14 +4735,14 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 }
 
 /* ========== 移动 TOC ========== */
-.mobile-toc {
+.inline-toc {
 	display: none;
 	margin: 0 0 0.75rem;
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
 	background: var(--bg-muted);
 }
-.mobile-toc__summary {
+.inline-toc__summary {
 	cursor: pointer;
 	padding: 0.5rem 0.75rem;
 	font-size: 0.8125rem;
@@ -3208,10 +4750,10 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 	color: var(--fg-muted);
 	list-style: none;
 }
-.mobile-toc__summary::-webkit-details-marker {
+.inline-toc__summary::-webkit-details-marker {
 	display: none;
 }
-.mobile-toc__nav {
+.inline-toc__nav {
 	display: flex;
 	flex-direction: column;
 	padding: 0.25rem 0.5rem 0.65rem;
@@ -3219,7 +4761,7 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 	overflow: auto;
 	border-top: 1px solid var(--border);
 }
-.mobile-toc__nav a {
+.inline-toc__nav a {
 	display: block;
 	padding: 0.28rem 0.45rem;
 	border-radius: var(--radius);
@@ -3227,94 +4769,329 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 	text-decoration: none;
 	font-size: 0.8125rem;
 }
-.mobile-toc__nav a:hover,
-.mobile-toc__nav a.is-active {
+.inline-toc__nav a:hover,
+.inline-toc__nav a.is-active {
 	color: var(--accent);
 	background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-.mobile-toc__nav a.depth-2 {
+.inline-toc__nav a.depth-2 {
 	padding-left: 0.85rem;
 }
-.mobile-toc__nav a.depth-3 {
+.inline-toc__nav a.depth-3 {
 	padding-left: 1.25rem;
 }
 
-.mobile-nav-backdrop {
+.drawer-backdrop {
 	display: none;
 }
 
-/* 中等宽：藏 TOC，用 mobile-toc */
-@media (max-width: 900px) {
-	.wiki-center {
-		grid-template-columns: minmax(0, 1fr) 0 0 !important;
+/*
+ * 层叠约定（抽屉视口，须在同一层叠上下文内比较）：
+ *   header 100  >  抽屉 50  >  遮罩 40  >  正文 0
+ * 遮罩与抽屉都是 position:fixed；遮罩是 body 直接子节点。
+ * app-shell 不得带 z-index，否则抽屉会被锁在 shell 上下文内，整片被遮罩盖住。
+ */
+/*
+ * 抽屉视口（与 JS isDrawerViewport 一致）：
+ * - 宽 ≤900
+ * - 或 高 ≤500 且 宽 ≤1100（手机横屏，避免被当成桌面三栏）
+ * 左文件 + 右大纲 统一上层 fixed 抽屉，grid 只留中栏。
+ */
+@media (max-width: 900px), (max-height: 500px) and (max-width: 1100px) {
+	/*
+	 * 整壳单列。关键：子项若仍写 grid-column:2/3，会生成隐式列，
+	 * 左边空出「文件夹导航长条」占位——必须全部叠到第 1 列。
+	 */
+	.app-shell {
+		grid-template-columns: minmax(0, 1fr) !important;
+		grid-template-rows: 1fr !important;
+		overflow: visible;
 	}
-	.wiki-toc,
+	.app-shell.nav-collapsed,
+	.app-shell.nav-edge-visible,
+	.app-shell.toc-collapsed,
+	.app-shell.panels-collapsed {
+		grid-template-columns: minmax(0, 1fr) !important;
+	}
+	.app-shell > .wiki-nav,
+	.app-shell > .wiki-gutter--nav,
+	.app-shell > .wiki-center,
+	.app-shell > .wiki-gutter--toc,
+	.app-shell > .wiki-toc,
+	.app-shell > .wiki-edge-btn,
+	.app-shell > .wiki-rail-btn {
+		grid-column: 1 !important;
+		grid-row: 1 !important;
+	}
+	/* 拖缝 / 边缘长条：抽屉模式不占位 */
+	.wiki-gutter,
+	.wiki-edge-btn,
+	.wiki-rail-btn.wiki-edge-btn {
+		display: none !important;
+	}
+	.app-shell.nav-edge-visible .wiki-main,
+	.app-shell.toc-edge-visible .wiki-main {
+		padding-inline-start: 0 !important;
+		padding-inline-end: 0 !important;
+	}
+
+	.wiki-center {
+		grid-template-columns: minmax(0, 1fr) !important;
+		/* 避免 overflow 裁切 fixed 大纲抽屉（部分 WebKit） */
+		overflow: visible;
+		width: 100% !important;
+		min-width: 0 !important;
+		max-width: none !important;
+		/*
+		 * 切勿 z-index:0：会形成层叠上下文，内部 .wiki-toc { z-index:50 }
+		 * 只能在本上下文内比高低，整层被 body 上 z-index:40 的 .drawer-backdrop
+		 * 盖住 → 大纲发灰、点不到。
+		 */
+		z-index: auto;
+	}
+	.wiki-center > .wiki-main {
+		grid-column: 1 !important;
+		grid-row: 1 !important;
+		width: 100% !important;
+	}
+	.wiki-center > .wiki-gutter--toc,
+	.wiki-center > .wiki-toc {
+		/* toc 在壳层也是 fixed；center 内若仍有节点则不占宽 */
+		grid-column: 1 !important;
+		grid-row: 1 !important;
+	}
 	.wiki-gutter--toc {
 		display: none !important;
 	}
 	.wiki-edge-btn--toc {
 		display: none !important;
 	}
-	.mobile-toc {
-		display: block;
-	}
-}
-
-/* 手机：抽屉导航 */
-@media (max-width: 640px) {
-	.app-header {
-		grid-template-columns: auto 1fr auto;
-		padding: 0 0.65rem;
-	}
-	.app-shell {
-		grid-template-columns: minmax(0, 1fr) !important;
-	}
-	.wiki-gutter {
+	/* 不再使用正文内 inline-toc 折叠块 */
+	.inline-toc {
 		display: none !important;
 	}
-	.wiki-edge-btn {
-		display: none !important;
-	}
-	.panel-btn--menu {
+	.panel-btn--menu,
+	.panel-btn--toc {
 		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 2.25rem;
 	}
+	/* 遮罩：盖住正文，不盖顶栏/抽屉 */
+	.drawer-backdrop {
+		display: block;
+		position: fixed;
+		top: var(--app-header-offset, calc(var(--header-h) + env(safe-area-inset-top, 0px)));
+		right: 0;
+		bottom: 0;
+		left: 0;
+		z-index: 40;
+		background: rgba(31, 35, 40, 0.35);
+		pointer-events: auto;
+	}
+	.drawer-backdrop[hidden] {
+		display: none !important;
+	}
+
+	/* —— 左：文件树上层抽屉（fixed，不参与占位；关闭时完全移出） —— */
 	.wiki-nav {
 		position: fixed !important;
-		top: var(--header-h);
+		top: var(--app-header-offset, calc(var(--header-h) + env(safe-area-inset-top, 0px)));
 		left: 0;
 		bottom: 0;
+		/* 视觉宽度；因 fixed 不撑开 grid */
 		width: min(86vw, 320px) !important;
-		z-index: 40;
-		transform: translateX(-105%);
+		max-width: 86vw;
+		z-index: 50;
+		transform: translateX(-100%);
 		transition: transform 0.18s ease;
 		box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
 		visibility: visible !important;
 		pointer-events: auto !important;
 		border-right: 1px solid var(--border);
+		background: var(--bg-sidebar);
+		overflow: hidden;
+		/* 防止某些引擎仍按内容 min-size 占隐式列 */
+		min-width: 0 !important;
+		margin: 0 !important;
 	}
-	body.mobile-nav-open .wiki-nav {
+	body.nav-drawer-open .wiki-nav {
+		transform: translateX(0);
+		pointer-events: auto !important;
+	}
+	body:not(.nav-drawer-open) .wiki-nav {
+		pointer-events: none !important;
+		box-shadow: none;
+	}
+	.wiki-nav .file-tree,
+	.wiki-nav .tree-body {
+		pointer-events: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	/* —— 右：大纲上层抽屉 —— */
+	.wiki-toc {
+		display: flex !important;
+		flex-direction: column;
+		position: fixed !important;
+		top: var(--app-header-offset, calc(var(--header-h) + env(safe-area-inset-top, 0px)));
+		right: 0;
+		bottom: 0;
+		left: auto;
+		width: min(86vw, 320px) !important;
+		max-width: 86vw;
+		z-index: 50;
+		transform: translateX(100%);
+		transition: transform 0.18s ease;
+		box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+		visibility: visible !important;
+		pointer-events: auto !important;
+		border-left: 1px solid var(--border);
+		border-right: none;
+		background: var(--bg);
+		overflow: hidden;
+	}
+	body.toc-drawer-open .wiki-toc {
 		transform: translateX(0);
 	}
-	.mobile-nav-backdrop {
-		display: block;
-		position: fixed;
-		inset: var(--header-h) 0 0 0;
-		z-index: 35;
-		background: rgba(31, 35, 40, 0.35);
+	body:not(.toc-drawer-open) .wiki-toc {
+		pointer-events: none !important;
+		box-shadow: none;
 	}
-	.mobile-nav-backdrop[hidden] {
-		display: none !important;
+	body.toc-drawer-open .wiki-toc {
+		pointer-events: auto !important;
 	}
-	.center-scroll {
-		padding: 0.55rem 0.85rem 1rem;
+	.wiki-toc .doc-toc {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow: auto;
+		-webkit-overflow-scrolling: touch;
+		pointer-events: auto;
 	}
+	.wiki-toc .wiki-collapse-btn--toc,
+	.wiki-toc .pane-collapse-btn,
 	.wiki-collapse-btn--nav,
 	.wiki-collapse-btn--toc,
 	.pane-collapse-btn {
 		display: none !important;
+	}
+	.wiki-toc .pane-bar--toc {
+		flex-shrink: 0;
+	}
+}
+
+/* 很窄（≤640）：顶栏更紧凑；保留站名与铺满按钮 */
+@media (max-width: 640px) {
+	.app-header {
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		gap: 0.3rem;
+		padding-inline: 0.4rem;
+		padding-bottom: 0;
+	}
+	.header-left {
+		gap: 0.28rem; /* 文件钮与主页图标略分开 */
+		max-width: 38vw; /* 防止站名过长挤爆搜索 */
+	}
+	.header-left > .panel-btn--menu {
+		margin: 0;
+	}
+	.brand {
+		gap: 0.2rem;
+		min-width: 0;
+		margin-inline-start: 0;
+	}
+	.brand__title {
+		display: inline; /* 恢复站名 */
+		font-size: 0.95rem;
+		max-width: 5.5rem;
+	}
+	.header-right {
+		gap: 0.12rem; /* 大纲与工具组略分开 */
+	}
+	.header-right__tools {
+		gap: 0.14rem; /* 右三钮：比贴死稍开，减少点错 */
+	}
+	.header-right > .panel-btn--toc {
+		margin-inline-start: 0.06rem;
+	}
+	/* 右侧四钮：适中 hit-box，不负 margin */
+	.header-right .header-github,
+	.header-right .theme-toggle,
+	.header-right .header-focus-btn,
+	.header-right .panel-btn--toc {
+		width: 1.85rem !important;
+		min-width: 1.85rem !important;
+		height: 2.05rem;
+		margin: 0 !important;
+		padding: 0 !important;
+	}
+	.header-left > .panel-btn--menu {
+		width: 1.85rem !important;
+		min-width: 1.85rem !important;
+		height: 2.05rem;
+		padding: 0 !important;
+	}
+	.header-github__icon,
+	.theme-toggle__icon {
+		width: 1.05rem;
+		height: 1.05rem;
+	}
+	.header-focus-btn .wiki-breadcrumb__icon {
+		width: 1rem;
+		height: 1rem;
+	}
+	.panel-btn__glyph {
+		width: 1.12rem;
+		height: 1.12rem;
+	}
+	/* 搜索条：padding 略减，中间列尽量吃满 */
+	.webmd-ms-search .ms-open {
+		padding: 0.38rem 0.55rem 0.38rem 0.6rem;
+		gap: 0.3rem;
+		font-size: 0.85rem;
+		min-width: 0;
+		width: 100%;
+	}
+	.webmd-search,
+	.webmd-ms-search {
+		width: 100%;
+		min-width: 0;
+	}
+	.header-center {
+		min-width: 0;
+	}
+	body.is-markdown-page .center-scroll {
+		padding: 0.55rem 0.85rem 1rem;
+	}
+}
+
+/*
+ * 仅很窄（≤640）：固定版心用满中栏（JS 已写 contentBox；此处防 FOUC）
+ * 宽屏（含手机横屏 >640）不强制 100%，以便「屏−左右栏」夹紧后居中
+ */
+@media (max-width: 640px) {
+	html[data-content-width='fixed'] body.is-markdown-page .center-scroll > .markdown-body,
+	html[data-content-width='fixed'] body.is-markdown-page .center-scroll > .inline-toc,
+	html[data-content-width='fixed'] body.is-home-page .center-scroll > .markdown-body,
+	html[data-content-width='fixed'] .center-scroll .home-hero {
+		max-width: min(100%, var(--content-readable-max)) !important;
+		width: 100% !important;
+		margin-inline: auto !important;
+	}
+}
+
+/* 横屏矮视口：抽屉顶仍贴实测顶栏下（--app-header-offset），勿写死 --header-h */
+@media (max-height: 32rem) and (max-width: 56rem) {
+	.wiki-toc {
+		top: var(--app-header-offset, var(--header-h));
+		bottom: 0;
+	}
+	.wiki-nav {
+		top: var(--app-header-offset, var(--header-h));
+		bottom: 0;
+	}
+	.drawer-backdrop {
+		top: var(--app-header-offset, var(--header-h));
+		right: 0;
+		bottom: 0;
+		left: 0;
 	}
 }
 
@@ -3327,7 +5104,7 @@ html[data-content-width='fixed'] body.is-pdf-page .center-scroll > .markdown-bod
 	.wiki-rail-btn,
 	.wiki-collapse-btn,
 	.wiki-page-footer,
-	.mobile-toc,
+	.inline-toc,
 	.webmd-search,
 	.panel-btn {
 		display: none !important;

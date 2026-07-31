@@ -1,5 +1,5 @@
 /**
- * content 扫盘：树 + 扁平导航序列（排除 _res）
+ * content 扫盘：树 + 扁平导航序列（排除 _Res_ 前缀 / 旧名 _res，忽略大小写）
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -52,8 +52,15 @@ const VIDEO_EXT = new Set(['.mp4', '.webm', '.ogv', '.mov']);
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.ogg', '.m4a']);
 const PDF_EXT = new Set(['.pdf']);
 
+/**
+ * 资源目录（不进树、不进上下页，但仍可 /content 访问）：
+ * - 完整前缀 `_Res_`（忽略大小写），如 `_Res_demo`、`_res_MyVideo`
+ * - 兼容旧名：恰好 `_res` / `_Res` / `_RES`
+ */
 export function isResDirName(name: string): boolean {
-	return name.length >= 2 && name[0] === '_' && name.slice(1).toLowerCase() === 'res';
+	const lower = name.toLowerCase();
+	if (lower === '_res') return true;
+	return lower.startsWith('_res_');
 }
 
 function kindOf(ext: string): FileKind {

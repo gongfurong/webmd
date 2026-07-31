@@ -26,8 +26,10 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
-# 生成的导航索引（npm run scan / dev / build 会重写）
+# 生成的导航索引（npm run scan / dev / build 会重写，勿提交）
 public/tree.json
 
-# 旧流程遗留的 content 镜像（若仍存在，勿提交）
-public/content/
+# Office 临时锁文件
+**/~$*
+**/*~$*
+

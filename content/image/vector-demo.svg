@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" width="480" height="320" role="img" aria-label="纯矢量几何示意">
+  <!-- 纯矢量：仅 path / rect / circle / polygon，无位图嵌入 -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#9ec5fe"/>
+      <stop offset="55%" stop-color="#e7f1ff"/>
+      <stop offset="100%" stop-color="#d8f3dc"/>
+    </linearGradient>
+    <linearGradient id="sunG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffd43b"/>
+      <stop offset="100%" stop-color="#fd7e14"/>
+    </linearGradient>
+    <linearGradient id="hill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#51cf66"/>
+      <stop offset="100%" stop-color="#2f9e44"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="480" height="320" rx="20" fill="url(#sky)"/>
+
+  <!-- 太阳 + 光芒（path 线段，缩放不失真） -->
+  <g transform="translate(380 72)">
+    <g stroke="#ffa94d" stroke-width="4" stroke-linecap="round">
+      <line x1="0" y1="-46" x2="0" y2="-58"/>
+      <line x1="32" y1="-32" x2="42" y2="-42"/>
+      <line x1="46" y1="0" x2="58" y2="0"/>
+      <line x1="32" y1="32" x2="42" y2="42"/>
+      <line x1="0" y1="46" x2="0" y2="58"/>
+      <line x1="-32" y1="32" x2="-42" y2="42"/>
+      <line x1="-46" y1="0" x2="-58" y2="0"/>
+      <line x1="-32" y1="-32" x2="-42" y2="-42"/>
+    </g>
+    <circle r="28" fill="url(#sunG)"/>
+  </g>
+
+  <!-- 远山 -->
+  <path d="M0 210 C80 150 140 170 200 145 C260 120 300 160 360 140 C420 120 450 160 480 150 L480 320 L0 320 Z" fill="#74c0fc" opacity="0.55"/>
+  <path d="M0 240 C90 190 160 210 240 185 C320 160 380 210 480 195 L480 320 L0 320 Z" fill="url(#hill)"/>
+
+  <!-- 树（三角 + 树干） -->
+  <g transform="translate(90 200)">
+    <rect x="-6" y="36" width="12" height="28" rx="2" fill="#5c4033"/>
+    <polygon points="0,-8 36,48 -36,48" fill="#2b8a3e"/>
+    <polygon points="0,-28 28,20 -28,20" fill="#37b24d"/>
+  </g>
+  <g transform="translate(150 215) scale(0.75)">
+    <rect x="-6" y="36" width="12" height="28" rx="2" fill="#5c4033"/>
+    <polygon points="0,-8 36,48 -36,48" fill="#2b8a3e"/>
+    <polygon points="0,-28 28,20 -28,20" fill="#40c057"/>
+  </g>
+
+  <!-- 路径 / 河 -->
+  <path d="M220 320 C250 280 280 270 320 250 C360 230 400 240 480 220 L480 320 Z" fill="#4dabf7" opacity="0.85"/>
+
+  <!-- 装饰圆点（矢量点阵） -->
+  <circle cx="48" cy="48" r="4" fill="#fff" opacity="0.9"/>
+  <circle cx="72" cy="36" r="3" fill="#fff" opacity="0.75"/>
+  <circle cx="60" cy="64" r="2.5" fill="#fff" opacity="0.7"/>
+</svg>

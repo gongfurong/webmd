@@ -3,6 +3,7 @@
  * [nav | gutter | center[main | gutter | toc]]
  * 中栏正文滚动，底部分页固定
  */
+import site from '../../site.config';
 import type { Heading } from './markdown';
 import type { TreeFile, TreeNode } from './scan';
 import { pageHref } from './scan';
@@ -126,6 +127,10 @@ export function renderTreeHtml(
 				<path class="tree-icon__glyph" d="M10.15 6.1a2.55 2.55 0 0 1 0 3.8M11.65 4.85a4.1 4.1 0 0 1 0 6.3" stroke-linecap="round"/>`,
 			pdf: `${fileDocBase}<text class="tree-icon__badge" x="8.5" y="12" text-anchor="middle" font-size="3.8" font-weight="800" font-family="Segoe UI,system-ui,sans-serif">PDF</text>`,
 			file: `${fileDocBase}<path class="tree-icon__glyph" d="M5.5 8.4h5.5M5.5 10.4h4" stroke-linecap="round"/>`,
+			// 侧栏按 ext 着色时也会用 tree-icon--docx 等 class（见 renderTree 调用）
+			docx: `${fileDocBase}<text class="tree-icon__badge" x="8.5" y="12" text-anchor="middle" font-size="3.4" font-weight="800" font-family="Segoe UI,system-ui,sans-serif">W</text>`,
+			xlsx: `${fileDocBase}<text class="tree-icon__badge" x="8.5" y="12" text-anchor="middle" font-size="3.4" font-weight="800" font-family="Segoe UI,system-ui,sans-serif">X</text>`,
+			pptx: `${fileDocBase}<text class="tree-icon__badge" x="8.5" y="12" text-anchor="middle" font-size="3.4" font-weight="800" font-family="Segoe UI,system-ui,sans-serif">P</text>`,
 		};
 		const inner = glyph[kind] || glyph.file!;
 		return `<span class="tree-icon tree-icon--file tree-icon--${k}" aria-hidden="true"><svg class="tree-icon__svg" width="18" height="18" viewBox="0 0 16 16" fill="none">${inner}</svg></span>`;
@@ -172,7 +177,14 @@ export function renderTreeHtml(
 			} else {
 				const href = pageHref(n);
 				const active = n.path === activePath ? ' is-active' : '';
-				html += `<a class="tree-file${active}" href="${href}" title="${esc(n.path)}" data-path="${esc(n.path)}" data-sort-name="${esc(n.name)}" data-kind="${esc(n.kind)}">${iconFile(n.kind)}<span class="tree-label">${esc(n.name)}</span></a>`;
+				const iconKey =
+					n.kind === 'file' &&
+					['docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt'].includes(
+						(n.ext || '').toLowerCase().replace(/^\./, ''),
+					)
+						? (n.ext || '').toLowerCase().replace(/^\./, '')
+						: n.kind;
+				html += `<a class="tree-file${active}" href="${href}" title="${esc(n.path)}" data-path="${esc(n.path)}" data-sort-name="${esc(n.name)}" data-kind="${esc(n.kind)}">${iconFile(iconKey)}<span class="tree-label">${esc(n.name)}</span></a>`;
 			}
 		}
 		return html;
@@ -185,6 +197,8 @@ export function renderTreeHtml(
 		<span class="tree-sort-btn__label">名序</span>
 		<svg class="tree-sort-btn__arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v10"/><path d="M4.5 6.5 8 3l3.5 3.5"/></svg>
 	</button>`;
+	// 单开/多开切换；默认单开（手风琴）。精确状态由客户端 localStorage 同步
+	const accordionBtn = `<button type="button" class="tree-accordion-btn is-on" data-tree-accordion data-on="1" title="单开：同层只展开一个文件夹（点击切换为多开）" aria-label="文件夹展开：单开" aria-pressed="true"><span class="tree-accordion-btn__label">单开</span></button>`;
 	// 三态短文案更清晰：混=纯名序；文=文件在上；夹=文件夹在上
 	const groupLabel =
 		groupMode === 'files-first' ? '文上' : groupMode === 'dirs-first' ? '夹上' : '混排';
@@ -200,7 +214,7 @@ export function renderTreeHtml(
 	const collapseTop = `<button type="button" class="pane-collapse-btn pane-collapse-btn--nav" data-wiki-toggle="nav" data-wiki-header-collapse="nav" title="收起文件栏" aria-label="收起文件栏"><span aria-hidden="true">«</span></button>`;
 	return `<div class="tree-top">
 		<div class="pane-title-group">${home}</div>
-		<div class="pane-title-tools">${sortBtn}${groupBtn}</div>
+		<div class="pane-title-tools">${sortBtn}${accordionBtn}${groupBtn}</div>
 		<div class="pane-title-end">${renderScrollEdgeBtns('nav')}${collapseTop}</div>
 	</div><div class="tree-body thin-scrollbar" data-tree-level>${walk(nodes)}</div>`;
 }
@@ -217,7 +231,7 @@ export function renderTocHtml(headings: Heading[]): string {
 		.join('');
 }
 
-export function renderMobileTocHtml(headings: Heading[]): string {
+export function renderInlineTocHtml(headings: Heading[]): string {
 	if (!headings.length) return '';
 	const items = headings
 		.map(
@@ -225,9 +239,9 @@ export function renderMobileTocHtml(headings: Heading[]): string {
 				`<a class="depth-${h.depth}" href="#${esc(h.id)}">${esc(h.text)}</a>`,
 		)
 		.join('');
-	return `<details class="mobile-toc">
-  <summary class="mobile-toc__summary">本页大纲</summary>
-  <nav class="mobile-toc__nav thin-scrollbar" aria-label="本页大纲（移动）">${items}</nav>
+	return `<details class="inline-toc">
+  <summary class="inline-toc__summary">本页大纲</summary>
+  <nav class="inline-toc__nav thin-scrollbar" aria-label="本页大纲（文内）">${items}</nav>
 </details>`;
 }
 
@@ -250,8 +264,6 @@ function formatBytesForCrumb(n: number): string {
 
 const ICON_HOME = `<svg class="wiki-breadcrumb__home-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
 /** 复制路径：链接图标（比双页复制更贴「路径/URL」） */
-const ICON_COPY = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--link" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
-const ICON_CHECK = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
 const ICON_DOWNLOAD = `<svg class="wiki-breadcrumb__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>`;
 /** 回到顶部 / 滚到底部 */
 const ICON_TO_TOP = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--to-top" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14"/><path d="m5 14 7-7 7 7"/><path d="M12 7v12"/></svg>`;
@@ -295,14 +307,14 @@ function renderScrollEdgeBtns(target: ScrollPaneTarget = 'main'): string {
 /** 铺满 / 退出铺满（展开四角）— 顶栏收起左右栏 */
 const ICON_EXPAND = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--expand" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/></svg>`;
 const ICON_COLLAPSE = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--collapse" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 3-7 7"/><path d="M21 9V3h-6"/><path d="m3 21 7-7"/><path d="M3 15v6h6"/></svg>`;
-/** 中栏内容：铺满 ↔ 固定最大宽度居中
- * fill：外框四角外扩（铺满）
+/** 中栏内容宽度：铺满 ↔ 固定最大宽度居中
+ * fill：中间框 + 上下左右四向外扩箭头（区别于顶栏「收起侧栏」的对角展开）
  * fixed：中间窄栏 + 两侧竖线（居中留白）
  */
-const ICON_CONTENT_FILL = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--content-fill" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/></svg>`;
+const ICON_CONTENT_FILL = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--content-fill" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="8" height="8" rx="1"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><path d="m9 4 3-2 3 2M9 20l3 2 3-2M4 9l-2 3 2 3M20 9l2 3-2 3"/></svg>`;
 const ICON_CONTENT_FIXED = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--content-fixed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="4" width="8" height="16" rx="1.5"/><path d="M3 7v10M21 7v10"/></svg>`;
 
-/** 路径栏：内容宽度切换（在复制前） */
+/** 路径栏：正文宽度切换（铺满 / 固定居中） */
 function renderContentWidthBtn(): string {
 	// 注意：data-content-width-toggle 不可与 html[data-content-width] 同名，否则 closest 会点哪都命中
 	return `<button type="button" class="wiki-breadcrumb__icon-btn wiki-breadcrumb__width-btn" data-content-width-toggle title="固定宽度居中（当前为铺满）" aria-label="固定宽度居中" aria-pressed="false">${ICON_CONTENT_FILL}${ICON_CONTENT_FIXED}</button>`;
@@ -312,38 +324,58 @@ const ICON_THEME_SUN = `<svg class="theme-toggle__icon theme-toggle__icon--sun" 
 const ICON_THEME_MOON = `<svg class="theme-toggle__icon theme-toggle__icon--moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`;
 /** 顶栏主页图标（点图标/站名回主页） */
 const ICON_BRAND_HOME = `<svg class="brand__icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
+/** 窄屏顶栏：与宽屏「文件」标题同款叠放文档图标 */
+const ICON_PANEL_FILES = `<svg class="panel-btn__glyph panel-btn__glyph--files" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path class="panel-btn__sheet panel-btn__sheet--back" d="M6 4.5A2 2 0 0 1 8 2.5h6.2c.4 0 .78.16 1.06.44l3.3 3.3c.28.28.44.66.44 1.06V16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4.5Z"/><path class="panel-btn__fold" d="M14.5 2.7v3.3c0 .55.45 1 1 1h3.3"/><path class="panel-btn__sheet panel-btn__sheet--front" d="M4 7.5A2 2 0 0 1 6 5.5h.8V17c0 1.38 1.12 2.5 2.5 2.5H17c.55 0 1 .45 1 1s-.45 1-1 1H9.3A4.3 4.3 0 0 1 5 17.2V7.5Z"/><path class="panel-btn__lines" d="M9.2 11h6.6M9.2 14h5.2" stroke-linecap="round"/></svg>`;
+/** 窄屏顶栏：与宽屏「大纲」标题同款文档+横线图标 */
+const ICON_PANEL_TOC = `<svg class="panel-btn__glyph panel-btn__glyph--toc" width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path class="panel-btn__toc-fill" d="M2.5 3.25C2.5 2.56 3.06 2 3.75 2h8.5c.69 0 1.25.56 1.25 1.25v9.5c0 .69-.56 1.25-1.25 1.25h-8.5C3.06 14 2.5 13.44 2.5 12.75v-9.5Z"/><path class="panel-btn__toc-lines" d="M5 5.25h6M5 8h6M5 10.75h4" stroke-linecap="round"/></svg>`;
 
-/** 防 FOUC：仅 light | dark，无记录时跟系统一次并写入 */
-const THEME_BOOT_SCRIPT = `(function(){try{var k='webmd-theme';var p=localStorage.getItem(k);var t=(p==='light'||p==='dark')?p:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;var w=localStorage.getItem('webmd-content-width');if(w==='fixed'||w==='fill')r.dataset.contentWidth=w;else r.dataset.contentWidth='fill';}catch(e){document.documentElement.dataset.theme='light';document.documentElement.dataset.contentWidth='fill';}})();`;
+/** 防 FOUC：主题 + 正文宽度（宽屏默认 fill，窄屏默认 fixed，与 client defaultContentWidth 一致） */
+const THEME_BOOT_SCRIPT = `(function(){try{var k='webmd-theme';var p=localStorage.getItem(k);var t=(p==='light'||p==='dark')?p:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;var w=localStorage.getItem('webmd-content-width');if(w==='fixed'||w==='fill')r.dataset.contentWidth=w;else r.dataset.contentWidth=matchMedia('(max-width: 640px)').matches?'fixed':'fill';r.style.setProperty('--content-readable-max','100%');}catch(e){document.documentElement.dataset.theme='light';try{document.documentElement.dataset.contentWidth=matchMedia('(max-width: 640px)').matches?'fixed':'fill';document.documentElement.style.setProperty('--content-readable-max','100%');}catch(e2){document.documentElement.dataset.contentWidth='fill';}}})();`;
 
 function renderThemeToggle(): string {
 	return `<button type="button" class="theme-toggle" data-theme-toggle title="切换深色模式" aria-label="切换深色模式" aria-pressed="false">${ICON_THEME_SUN}${ICON_THEME_MOON}</button>`;
 }
 
+/** GitHub 图标（官方 mark 简化路径） */
+const ICON_GITHUB = `<svg class="header-github__icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.866-.013-1.7-2.782.604-3.369-1.341-3.369-1.341-.454-1.157-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.272.098-2.65 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0 1 12 6.844a9.56 9.56 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.378.203 2.397.1 2.65.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48A10.02 10.02 0 0 0 22 12c0-5.523-4.477-10-10-10Z"/></svg>`;
+
+function renderGithubLink(url: string): string {
+	const href = String(url || '').trim();
+	if (!href) return '';
+	return `<a class="header-github" href="${esc(href)}" target="_blank" rel="noopener noreferrer" title="GitHub" aria-label="在 GitHub 上查看">${ICON_GITHUB}</a>`;
+}
+
 /**
  * 顶部统一路径栏：content 相对路径 + 可选大小/类型 + 复制/下载
  * 正文区不再重复文件名、路径、大小
+ *
+ * 窄宽时由客户端测量省略：
+ * - 文件夹路径优先压成 …/尾段（如 …/sub），避免 //
+ * - 文件名尽量保留，仍不够时再中间省略 xxx…xxx
  */
 export function renderBreadcrumb(
 	file: TreeFile,
 	opts?: { bytes?: number },
 ): string {
 	const parts = file.path.replace(/\\/g, '/').split('/').filter(Boolean);
+	const fileName = parts.length ? parts[parts.length - 1]! : file.name;
+	const dirParts = parts.slice(0, -1);
+	const dirJoined = dirParts.join('/');
+
 	const crumbs: string[] = [];
 	crumbs.push(
 		`<a class="wiki-breadcrumb__home" href="/" title="主页" aria-label="主页">${ICON_HOME}</a>`,
 	);
-	parts.forEach((seg, i) => {
-		const isLast = i === parts.length - 1;
+	if (dirJoined) {
 		crumbs.push(`<span class="wiki-breadcrumb__sep" aria-hidden="true">/</span>`);
-		if (isLast) {
-			crumbs.push(
-				`<span class="wiki-breadcrumb__current" aria-current="page" title="${esc(file.path)}">${esc(seg)}</span>`,
-			);
-		} else {
-			crumbs.push(`<span class="wiki-breadcrumb__seg">${esc(seg)}</span>`);
-		}
-	});
+		crumbs.push(
+			`<span class="wiki-breadcrumb__dirs" data-middle-ellipsis data-ellipsis-full="${esc(dirJoined)}" title="${esc(dirJoined)}">${esc(dirJoined)}</span>`,
+		);
+	}
+	crumbs.push(`<span class="wiki-breadcrumb__sep" aria-hidden="true">/</span>`);
+	crumbs.push(
+		`<span class="wiki-breadcrumb__current" aria-current="page" data-middle-ellipsis data-ellipsis-full="${esc(fileName)}" title="${esc(file.path)}">${esc(fileName)}</span>`,
+	);
 	const metaParts: string[] = [];
 	if (opts?.bytes != null && Number.isFinite(opts.bytes)) {
 		const sz = formatBytesForCrumb(opts.bytes);
@@ -360,28 +392,54 @@ export function renderBreadcrumb(
 	const pathAttr = esc(file.path);
 	const downloadHref = esc(file.url);
 	const downloadName = esc(file.name);
+	const metaLine = metaParts.length ? metaParts.join(' · ') : '';
 	const actions = `<div class="wiki-breadcrumb__actions">
+		<button type="button" class="wiki-breadcrumb__icon-btn wiki-breadcrumb__url-btn" data-path-reveal-btn title="查看完整 URL" aria-label="查看完整 URL" aria-haspopup="dialog"><span class="wiki-breadcrumb__url-btn-label">URL</span></button>
 		${renderContentWidthBtn()}
-		<button type="button" class="wiki-breadcrumb__icon-btn" data-copy-url data-copy-path="${pathAttr}" title="复制完整链接" aria-label="复制完整链接">${ICON_COPY}${ICON_CHECK}</button>
 		<a class="wiki-breadcrumb__icon-btn" href="${downloadHref}" download="${downloadName}" title="下载文件" aria-label="下载文件">${ICON_DOWNLOAD}</a>
 		${renderScrollEdgeBtns('main')}
 	</div>`;
-	return `<nav class="wiki-breadcrumb" aria-label="文件路径">
-		<div class="wiki-breadcrumb__trail">${crumbs.join('')}</div>
+	/* 点击路径/URL 按钮弹出完整 URL；宽度随 URL 自适应；可分别复制可读/转义 */
+	const popover = `<div class="wiki-breadcrumb__popover" data-path-popover hidden role="dialog" aria-label="完整 URL">
+		<div class="wiki-breadcrumb__popover-head">
+			<span class="wiki-breadcrumb__popover-title">完整 URL</span>
+			<button type="button" class="wiki-breadcrumb__popover-close" data-path-popover-close title="关闭" aria-label="关闭">×</button>
+		</div>
+		<div class="wiki-breadcrumb__popover-block">
+			<span class="wiki-breadcrumb__popover-label">可读（非转义）</span>
+			<code class="wiki-breadcrumb__popover-path" data-path-popover-text data-path-popover-plain></code>
+		</div>
+		<div class="wiki-breadcrumb__popover-block">
+			<span class="wiki-breadcrumb__popover-label">转义（percent-encode）</span>
+			<code class="wiki-breadcrumb__popover-path wiki-breadcrumb__popover-path--encoded" data-path-popover-encoded></code>
+		</div>
+		${metaLine ? `<div class="wiki-breadcrumb__popover-meta">${esc(metaLine)}</div>` : ''}
+		<div class="wiki-breadcrumb__popover-actions">
+			<button type="button" class="wiki-breadcrumb__popover-btn" data-copy-url-plain data-copy-path="${pathAttr}" title="复制中文原样的完整 URL">复制可读 URL</button>
+			<button type="button" class="wiki-breadcrumb__popover-btn wiki-breadcrumb__popover-btn--secondary" data-copy-url-encoded data-copy-path="${pathAttr}" title="复制 %E4%B8%AD 形式的完整 URL">复制转义 URL</button>
+			<button type="button" class="wiki-breadcrumb__popover-btn wiki-breadcrumb__popover-btn--ghost" data-copy-rel-path data-copy-path="${pathAttr}" title="仅路径，不含域名">复制相对路径</button>
+		</div>
+	</div>`;
+	return `<nav class="wiki-breadcrumb" aria-label="文件路径" data-full-path="${pathAttr}">
+		<div class="wiki-breadcrumb__trail" data-path-reveal role="button" tabindex="0" title="点击查看完整 URL" aria-expanded="false" aria-haspopup="dialog">${crumbs.join('')}</div>
 		${meta}
 		${actions}
+		${popover}
 	</nav>`;
 }
 
+/**
+ * 底部分页：固定「上一页（」「）」「（」「）下一页」，文件名中间省略（xxx…xxx）
+ */
 export function renderPager(
 	prev: TreeFile | null,
 	next: TreeFile | null,
 ): string {
 	const prevHtml = prev
-		? `<a class="wiki-pager__btn wiki-pager__btn--prev" href="${pageHref(prev)}" rel="prev"><span class="wiki-pager__chevron">‹</span><span class="wiki-pager__text">上一页（${esc(prev.name)}）</span></a>`
+		? `<a class="wiki-pager__btn wiki-pager__btn--prev" href="${pageHref(prev)}" rel="prev" title="上一页：${esc(prev.name)}"><span class="wiki-pager__chevron">‹</span><span class="wiki-pager__text"><span class="wiki-pager__fixed">上一页（</span><span class="wiki-pager__name" data-middle-ellipsis data-ellipsis-full="${esc(prev.name)}">${esc(prev.name)}</span><span class="wiki-pager__fixed">）</span></span></a>`
 		: `<span class="wiki-pager__slot"></span>`;
 	const nextHtml = next
-		? `<a class="wiki-pager__btn wiki-pager__btn--next" href="${pageHref(next)}" rel="next"><span class="wiki-pager__text">（${esc(next.name)}）下一页</span><span class="wiki-pager__chevron">›</span></a>`
+		? `<a class="wiki-pager__btn wiki-pager__btn--next" href="${pageHref(next)}" rel="next" title="下一页：${esc(next.name)}"><span class="wiki-pager__text"><span class="wiki-pager__fixed">（</span><span class="wiki-pager__name" data-middle-ellipsis data-ellipsis-full="${esc(next.name)}">${esc(next.name)}</span><span class="wiki-pager__fixed">）下一页</span></span><span class="wiki-pager__chevron">›</span></a>`
 		: `<span class="wiki-pager__slot"></span>`;
 	const single = !(prev && next) ? ' wiki-pager--single' : '';
 	return `<div class="wiki-pager${single}">${prevHtml}${nextHtml}</div>`;
@@ -396,7 +454,7 @@ export type PageModel = {
 	bodyClass?: string;
 	treeHtml: string;
 	tocHtml: string;
-	mobileTocHtml: string;
+	inlineTocHtml: string;
 	breadcrumbHtml: string;
 	bodyHtml: string;
 	pagerHtml: string;
@@ -415,9 +473,17 @@ export function renderPage(m: PageModel): string {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="${esc(m.siteTitle)}" />
   <title>${esc(m.pageTitle)} | ${esc(m.siteTitle)}</title>${desc}
   <link rel="icon" href="${FAVICON}" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <script>${THEME_BOOT_SCRIPT}</script>
   <link rel="stylesheet" href="${m.assetCss}" />
   <style>
@@ -433,18 +499,22 @@ export function renderPage(m: PageModel): string {
 <body class="wiki-body${m.bodyClass ? ` ${esc(m.bodyClass)}` : ''}">
   <header class="app-header">
     <div class="header-left">
-      <button type="button" class="panel-btn panel-btn--menu" data-wiki-toggle="nav" data-wiki-mobile-menu title="打开/关闭文件树" aria-label="打开/关闭文件树">☰</button>
+      <button type="button" class="panel-btn panel-btn--menu" data-wiki-toggle="nav" data-wiki-drawer-nav title="文件" aria-label="打开文件导航">${ICON_PANEL_FILES}</button>
       <a class="brand" href="/" title="主页" aria-label="主页：${esc(m.siteTitle)}"><span class="brand__icon">${ICON_BRAND_HOME}</span><span class="brand__title">${esc(m.siteTitle)}</span></a>
     </div>
     <div class="header-center">
       <div id="search" class="webmd-search"></div>
     </div>
     <div class="header-right">
-      ${renderThemeToggle()}
-      <button type="button" class="header-focus-btn" data-focus-read title="铺满屏幕宽度（收起左右栏）" aria-label="铺满屏幕宽度" aria-pressed="false">${ICON_EXPAND}${ICON_COLLAPSE}</button>
+      <div class="header-right__tools">
+        ${renderGithubLink(site.site.githubUrl ?? '')}
+        ${renderThemeToggle()}
+        <button type="button" class="header-focus-btn" data-focus-read title="铺满屏幕宽度（收起左右栏）" aria-label="铺满屏幕宽度" aria-pressed="false">${ICON_EXPAND}${ICON_COLLAPSE}</button>
+      </div>
+      <button type="button" class="panel-btn panel-btn--toc" data-wiki-toggle="toc" data-wiki-drawer-toc title="大纲" aria-label="打开本页大纲">${ICON_PANEL_TOC}</button>
     </div>
   </header>
-  <div class="mobile-nav-backdrop" data-wiki-backdrop hidden></div>
+  <div class="drawer-backdrop" data-wiki-backdrop hidden></div>
   <div class="app-shell has-toc-col" data-wiki-shell>
     <!-- 左：文件树 | 拖缝 | 中栏(正文|拖缝|大纲) -->
     <aside class="wiki-nav pane-left" data-wiki-nav>
@@ -461,7 +531,7 @@ export function renderPage(m: PageModel): string {
         <!-- 路径栏固定顶栏（不随正文滚动） -->
         <div class="pane-bar pane-bar--center" data-wiki-crumb>${m.breadcrumbHtml}</div>
         <div class="center-scroll thin-scrollbar" data-wiki-scroll>
-          ${m.mobileTocHtml}
+          ${m.inlineTocHtml}
           <article class="markdown-body" id="content">${m.bodyHtml}</article>
         </div>
         <footer class="wiki-page-footer">${m.pagerHtml}</footer>
@@ -568,7 +638,7 @@ export function renderHomePage(m: {
 		bodyClass: 'is-home-page',
 		treeHtml: m.treeHtml,
 		tocHtml: '<div class="toc-empty">主页无大纲</div>',
-		mobileTocHtml: '',
+		inlineTocHtml: '',
 		breadcrumbHtml: crumb,
 		bodyHtml: body,
 		pagerHtml: '',
@@ -596,7 +666,7 @@ export function render404Page(m: {
 		activePath: '',
 		treeHtml: m.treeHtml,
 		tocHtml: '<div class="toc-empty">—</div>',
-		mobileTocHtml: '',
+		inlineTocHtml: '',
 		breadcrumbHtml: `<nav class="wiki-breadcrumb" aria-label="文件路径"><div class="wiki-breadcrumb__trail"><a class="wiki-breadcrumb__home" href="/" title="主页" aria-label="主页">${ICON_HOME}</a><span class="wiki-breadcrumb__sep" aria-hidden="true">/</span><span class="wiki-breadcrumb__current" aria-current="page">404</span></div><div class="wiki-breadcrumb__actions">${renderContentWidthBtn()}</div></nav>`,
 		bodyHtml: `<h1>页面未找到</h1><p>链接可能已失效，或文件尚未放入 <code>content/</code>。</p><p><a href="/">返回主页</a></p>`,
 		pagerHtml: '',

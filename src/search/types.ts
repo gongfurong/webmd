@@ -62,24 +62,36 @@ export type SearchQuery = {
 	/**
 	 * 模糊搜索（默认 true）
 	 * - true：单词汇可前缀/变体宽松命中
-	 * - false：每个词汇整段大小写不敏感连续匹配（1.jpg 不会因 “1” 误中）
+	 * - false：每个词汇整段连续匹配（精确分词语义，非 strict）
 	 * 空格始终表示多词汇，与是否模糊无关
+	 * 大小写由 caseSensitive 单独控制
 	 */
 	fuzzy?: boolean;
 	/**
 	 * 多词汇组合（默认 AND）
 	 * - AND / &：所有词都要命中
 	 * - OR / |：任一命中即可
-	 * 完全匹配开启时忽略
+	 * 完全匹配（strict）开启时忽略
 	 */
 	combine?: 'AND' | 'OR';
 	/**
-	 * 完全匹配（默认 false）
-	 * - true：不对查询做任何处理（不拆词、大小写/空格敏感），字段须原样包含查询串；
-	 *         模糊与 与/或 均失效
-	 * - false：走模糊/精确分词 + 组合逻辑
+	 * 完全匹配 / 精确（默认 false）
+	 * - true：不拆词，字段须包含整段查询串；模糊与 与/或 均失效
+	 * - false：走模糊/分词 + 组合逻辑
+	 * 大小写不由本项决定，见 caseSensitive
 	 */
 	strict?: boolean;
+	/**
+	 * 是否区分大小写（默认 false = 忽略大小写）
+	 * 与精确/模糊正交：精确只要求内容段一致，大小写由本项决定
+	 */
+	caseSensitive?: boolean;
+	/**
+	 * 串 / 词（默认 false = 串）
+	 * - 串（false）：可出现在任意子串中（cat → category）
+	 * - 词（true）：须为独立词边界（主要针对英文等拉丁字母；中文无词界，仍按串匹配）
+	 */
+	wholeWord?: boolean;
 };
 
 export type SearchHeadingHit = {

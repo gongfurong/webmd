@@ -15,6 +15,8 @@ const siteConfig = {
 	site: {
 		title: 'WebMD',
 		description: '个人 Wiki：content 为真相，GitHub 风渲染',
+		/** 顶栏 GitHub 按钮（本仓库）；空字符串则不渲染 */
+		githubUrl: 'https://github.com/gongfurong/webmd',
 	},
 	layout,
 	content,

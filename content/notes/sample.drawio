@@ -1,0 +1,19 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="webmd-sample">
+    <mxGraphModel dx="800" dy="600" grid="1" gridSize="10">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="2" value="WebMD" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;" vertex="1" parent="1">
+          <mxGeometry x="280" y="200" width="120" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="3" value="UML / Mindmap?" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="320" width="120" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="4" style="endArrow=classic;html=1;" edge="1" parent="1" source="2" target="3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

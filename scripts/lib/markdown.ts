@@ -10,6 +10,7 @@
  *
  * WebMD 仅在 enhanceCodeBlocksHtml 增加类型栏+复制（消毒之后、可信 DOM）。
  */
+import path from 'node:path';
 import { Marked, Renderer, type Tokens } from 'marked';
 import hljs from 'highlight.js';
 import DOMPurify from 'isomorphic-dompurify';
@@ -217,6 +218,10 @@ const PURIFY_CONFIG = {
 		'dd',
 		'u',
 		'center',
+		// 文内嵌入音视频（Markdown 里写 HTML5）
+		'video',
+		'audio',
+		'source',
 	],
 	ALLOWED_ATTR: [
 		'href',
@@ -248,6 +253,15 @@ const PURIFY_CONFIG = {
 		'value',
 		'cite',
 		'abbr',
+		// video / audio
+		'controls',
+		'preload',
+		'poster',
+		'playsinline',
+		'webkit-playsinline',
+		'loop',
+		'muted',
+		'autoplay',
 		// WebMD mermaid 重绘需要（插件用内存 Map；我们用 data-*）
 		'data-mermaid-id',
 		'data-mermaid-code',
@@ -625,16 +639,167 @@ const MIME: Record<string, string> = {
 };
 
 /**
+ * PDF.js 阅读器壳（真 PDF 页 / Office 转出的 preview.pdf 共用）
+ * @param previewSrc 预览 PDF 的 /content/... URL（嵌入 base64 时仍作 fallback fetch）
+ * @param downloadHref 工具栏「下载」：真 PDF 用自身；Office 用原 docx/xlsx/pptx
+ * @param downloadName 下载文件名
+ */
+export function renderPdfViewerShell(opts: {
+	title: string;
+	previewSrc: string;
+	downloadHref: string;
+	downloadName?: string;
+	/** 原 Office 文件 URL；有则 data-office-src，下载走原件 */
+	officeSrc?: string;
+}): string {
+	const title = escAttr(opts.title);
+	const previewSrc = escAttr(opts.previewSrc);
+	const downloadHref = escAttr(opts.downloadHref);
+	const downloadName = escAttr(opts.downloadName || opts.title);
+	const officeAttr = opts.officeSrc
+		? ` data-office-src="${escAttr(opts.officeSrc)}"`
+		: '';
+	const dlTitle = opts.officeSrc ? '下载原文件' : '下载 PDF';
+	return `<div class="pdf-shell" data-pdf-name="${downloadName}" data-pdf-src="${previewSrc}"${officeAttr}>
+<script type="application/pdf-base64"></script>
+<div class="pdf-status" data-pdf-status>正在准备 PDF 预览…</div>
+<div class="pdf-viewer" data-pdf-viewer hidden>
+  <div class="pdf-toolbar" role="toolbar" aria-label="PDF 工具栏">
+    <button type="button" class="pdf-tb-btn" data-pdf-toggle-thumbs title="分页导航" aria-label="分页导航" aria-pressed="false">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="5" rx="1"/><rect x="14" y="11" width="7" height="4" rx="1"/><rect x="14" y="17" width="7" height="3" rx="1"/></svg>
+    </button>
+    <span class="pdf-tb-sep" aria-hidden="true"></span>
+    <button type="button" class="pdf-tb-btn" data-pdf-prev title="上一页" aria-label="上一页">‹</button>
+    <label class="pdf-page-jump">
+      <input type="number" class="pdf-page-input" data-pdf-page min="1" value="1" inputmode="numeric" aria-label="页码" />
+      <span class="pdf-page-of">/</span>
+      <span data-pdf-pages>1</span>
+    </label>
+    <button type="button" class="pdf-tb-btn" data-pdf-next title="下一页" aria-label="下一页">›</button>
+    <span class="pdf-tb-sep" aria-hidden="true"></span>
+    <button type="button" class="pdf-tb-btn" data-pdf-zoom-out title="缩小" aria-label="缩小">−</button>
+    <span class="pdf-zoom-label" data-pdf-zoom-label>100%</span>
+    <button type="button" class="pdf-tb-btn" data-pdf-zoom-in title="放大" aria-label="放大">+</button>
+    <button type="button" class="pdf-tb-btn pdf-tb-text" data-pdf-fit title="适应宽度" aria-label="适应宽度">宽</button>
+    <span class="pdf-tb-spacer"></span>
+    <a class="pdf-tb-btn pdf-tb-text" data-pdf-download href="${downloadHref}" download="${downloadName}" title="${escAttr(dlTitle)}">下载</a>
+  </div>
+  <div class="pdf-body">
+    <aside class="pdf-thumbs" data-pdf-thumbs-pane hidden aria-label="页面缩略图">
+      <div class="pdf-thumbs-list" data-pdf-thumbs-list></div>
+    </aside>
+    <div class="pdf-pages" data-pdf-pages-scroll tabindex="0" role="region" aria-label="PDF 页面"></div>
+  </div>
+</div>
+<div class="pdf-error" data-pdf-err hidden></div>
+</div>
+`;
+}
+
+/** 扩展名 → 人类可读类型（统一下载卡用） */
+const FILE_TYPE_LABEL: Record<string, string> = {
+	docx: 'Word 文档',
+	doc: 'Word 文档（旧格式）',
+	xlsx: 'Excel 表格',
+	xls: 'Excel 表格（旧格式）',
+	pptx: 'PowerPoint 演示文稿',
+	ppt: 'PowerPoint（旧格式）',
+	odt: 'OpenDocument 文本',
+	ods: 'OpenDocument 表格',
+	odp: 'OpenDocument 演示',
+	rtf: 'RTF 文档',
+	zip: '压缩包',
+	'7z': '压缩包',
+	rar: '压缩包',
+	gz: '压缩包',
+	tar: '压缩包',
+	exe: '可执行文件',
+	dll: '动态库',
+	wasm: 'WebAssembly',
+	bin: '二进制文件',
+	dat: '数据文件',
+	iso: '镜像文件',
+	dmg: '磁盘镜像',
+	apk: 'Android 安装包',
+	ipa: 'iOS 应用包',
+	// 图示 / 建模（当前无专用预览 → 统一下载卡）
+	puml: 'PlantUML 图',
+	plantuml: 'PlantUML 图',
+	uml: 'UML 模型',
+	drawio: 'diagrams.net 图',
+	dio: 'diagrams.net 图',
+	xmind: 'XMind 思维导图',
+	mm: 'FreeMind 思维导图',
+	mindnode: 'MindNode 导图',
+	vsdx: 'Visio 图',
+};
+
+/**
+ * 无法在线预览时的统一展示卡（所有 kind=file / 缺预览资源共用）。
+ * 始终提供下载原文件；可选「在新标签打开」直链。
+ */
+export function renderUnsupportedFileCard(opts: {
+	name: string;
+	url: string;
+	ext?: string;
+	bytes?: number;
+	/** 额外说明（缺省用通用文案） */
+	hint?: string;
+}): string {
+	const ext = (opts.ext || path.extname(opts.name) || '')
+		.toLowerCase()
+		.replace(/^\./, '');
+	const badge = (ext || 'FILE').toUpperCase();
+	const label =
+		FILE_TYPE_LABEL[ext] || (ext ? `${ext.toUpperCase()} 文件` : '未知类型文件');
+	const size =
+		opts.bytes != null && Number.isFinite(opts.bytes)
+			? formatBytes(opts.bytes)
+			: '';
+	const hint =
+		opts.hint ||
+		'此类型暂不支持在浏览器内预览。你可以下载到本地后用对应应用打开。';
+
+	const metaParts = [
+		ext ? `.${ext}` : '',
+		size,
+		'可下载',
+	].filter(Boolean);
+
+	return `<div class="file-unsupported" data-file-ext="${escAttr(ext || 'file')}">
+  <div class="file-unsupported__badge">${escAttr(badge)}</div>
+  <h2 class="file-unsupported__title">${escAttr(label)}</h2>
+  <p class="file-unsupported__name" title="${escAttr(opts.name)}">${escAttr(opts.name)}</p>
+  <p class="file-unsupported__meta">${escAttr(metaParts.join(' · '))}</p>
+  <p class="file-unsupported__desc">${escAttr(hint)}</p>
+  <div class="file-unsupported__actions">
+    <a class="file-unsupported__dl" href="${escAttr(opts.url)}" download="${escAttr(opts.name)}">下载文件</a>
+    <a class="file-unsupported__open" href="${escAttr(opts.url)}" target="_blank" rel="noopener noreferrer">打开原文件</a>
+  </div>
+</div>
+`;
+}
+
+/**
  * 正文区只渲染预览内容，不重复路径/文件名/大小。
  * 路径与大小统一由顶部 breadcrumb 展示。
+ *
+ * @param opts.officePreviewUrl 若 Office 已有 preview.pdf，则渲染 PDF 阅读器
+ * @param opts.excelCsvHtml 若 Excel 已导出 CSV，则渲染表格预览 HTML
  */
 export function wrapAsMarkdown(
 	file: TreeFile,
 	rawText: string,
-	_opts?: { bytes?: number },
+	_opts?: {
+		bytes?: number;
+		officePreviewUrl?: string | null;
+		excelCsvHtml?: string | null;
+	},
 ): string {
 	const title = file.name;
 	const mime = MIME[file.ext] || '';
+	const officePreviewUrl = _opts?.officePreviewUrl || null;
+	const excelCsvHtml = _opts?.excelCsvHtml || null;
 
 	switch (file.kind) {
 		case 'markdown': {
@@ -644,16 +809,21 @@ export function wrapAsMarkdown(
 		}
 		case 'image':
 			// 全页媒体舞台：比例不变，适应可视高度（非 markdown 包裹）
+			// SVG 与位图同走 img；宽屏/窄屏均依赖 .media-stage 最小高度兜底
 			return `<div class="media-stage media-stage--image" data-media-kind="image">
 <img class="media-solo" src="${escAttr(file.url)}" alt="${escAttr(title)}" loading="eager" decoding="async" />
 </div>`;
-		case 'video':
+		case 'video': {
+			// #t=0.001：多数浏览器会解码该时刻作初始画面（预览）；下载链仍用无 fragment 的 url
+			const src = file.url;
+			const previewSrc = `${src}#t=0.001`;
 			return `<div class="media-stage media-stage--video" data-media-kind="video">
-<video class="media-solo media-video" controls preload="metadata" playsinline${mime ? ` data-mime="${escAttr(mime)}"` : ''}>
-<source src="${escAttr(file.url)}"${mime ? ` type="${escAttr(mime)}"` : ''} />
-你的浏览器不支持 HTML5 视频，请<a href="${escAttr(file.url)}">下载文件</a>。
+<video class="media-solo media-video" controls preload="auto" playsinline webkit-playsinline${mime ? ` data-mime="${escAttr(mime)}"` : ''}>
+<source src="${escAttr(previewSrc)}"${mime ? ` type="${escAttr(mime)}"` : ''} />
+你的浏览器不支持 HTML5 视频，请<a href="${escAttr(src)}">下载文件</a>。
 </video>
 </div>`;
+		}
 		case 'audio':
 			return `<div class="media-stage media-stage--audio" data-media-kind="audio">
 <audio class="media-audio" controls preload="metadata">
@@ -662,22 +832,55 @@ export function wrapAsMarkdown(
 </audio>
 </div>`;
 		case 'pdf':
-			// 与 starlight PdfEmbed 一致：纯 pdf-shell，base64 → Blob iframe
-			return `<div class="pdf-shell" data-pdf-name="${escAttr(title)}" data-pdf-src="${escAttr(file.url)}">
-<script type="application/pdf-base64"></script>
-<div class="pdf-status" data-pdf-status>正在准备 PDF 预览…</div>
-<iframe class="pdf-frame" title="${escAttr(title)}" data-pdf-frame hidden></iframe>
-<div class="pdf-error" data-pdf-err hidden></div>
-</div>
-`;
+			return renderPdfViewerShell({
+				title,
+				previewSrc: file.url,
+				downloadHref: file.url,
+				downloadName: title,
+			});
 		case 'text': {
+			// CSV 表 HTML 由 render-page 直接注入（opts 里不走本分支的 markdown）
 			const lang = file.ext || 'text';
 			const body = rawText ?? '';
-			// 文本/代码：仅内容，无路径/文件名/大小（统一在顶部路径栏）
 			return `\`\`\`${lang}\n${body}\n\`\`\`\n`;
 		}
-		default:
-			return `暂无内置预览，请[下载](${file.url})。\n`;
+		default: {
+			const ext = (file.ext || '').toLowerCase().replace(/^\./, '');
+			// Excel：有导出 CSV 时用表格预览 HTML
+			if (
+				['xlsx', 'xls', 'ods'].includes(ext) &&
+				excelCsvHtml &&
+				!excelCsvHtml.includes('file-unsupported')
+			) {
+				return excelCsvHtml;
+			}
+			// Word/PPT：有 preview.pdf → PDF.js
+			const officePdfLike = [
+				'docx',
+				'doc',
+				'pptx',
+				'ppt',
+				'odt',
+				'odp',
+				'rtf',
+			].includes(ext);
+			if (officePdfLike && officePreviewUrl) {
+				return renderPdfViewerShell({
+					title,
+					previewSrc: officePreviewUrl,
+					downloadHref: file.url,
+					downloadName: title,
+					officeSrc: file.url,
+				});
+			}
+			// 其余（含未导出 CSV 的 Excel、缺 PDF 的 Word/PPT、zip…）：统一下载卡
+			return renderUnsupportedFileCard({
+				name: file.name,
+				url: file.url,
+				ext,
+				bytes: _opts?.bytes,
+			});
+		}
 	}
 }
 

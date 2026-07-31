@@ -42,14 +42,101 @@ function expandFuzzyVariants(term: string): string[] {
 	return [...set].sort((a, b) => b.length - a.length);
 }
 
+/** 含汉字等：词边界对中文几乎无意义，词模式仍按串处理 */
+export function hasCjk(s: string): boolean {
+	return /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/.test(s);
+}
+
 /**
- * 完全匹配：查询串不做任何处理，大小写/空格敏感，整段原样包含
+ * 适合「词边界」的拉丁词形（英数 + 少量内部符号）。
+ * 中文、纯符号、空格句等走串匹配。
  */
-export function literalMatches(text: string, query: string): boolean {
+export function isLatinWordToken(term: string): boolean {
+	const t = String(term || '').trim();
+	if (!t || hasCjk(t)) return false;
+	// 允许 file_name、don't、well-known 等
+	return /^[A-Za-z0-9](?:[A-Za-z0-9_'.-]*[A-Za-z0-9])?$/.test(t) || /^[A-Za-z0-9]+$/.test(t);
+}
+
+function escapeRegExp(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 在 plain 中找 needle 的所有区间。
+ * wholeWord + 拉丁词：两侧不能是字母数字下划线；中文/非拉丁仍为子串。
+ */
+export function findAllRanges(
+	plain: string,
+	needle: string,
+	caseSensitive = false,
+	wholeWord = false,
+): [number, number][] {
+	const ranges: [number, number][] = [];
+	if (!needle || !plain) return ranges;
+
+	const useWord =
+		wholeWord && isLatinWordToken(needle) && !hasCjk(needle);
+
+	if (useWord) {
+		const flags = caseSensitive ? 'gu' : 'giu';
+		const re = new RegExp(
+			`(?<![A-Za-z0-9_])${escapeRegExp(needle)}(?![A-Za-z0-9_])`,
+			flags,
+		);
+		let m: RegExpExecArray | null;
+		// 防止 zero-length 死循环
+		re.lastIndex = 0;
+		while ((m = re.exec(plain)) !== null) {
+			const i = m.index;
+			const len = m[0].length;
+			if (len <= 0) {
+				re.lastIndex++;
+				continue;
+			}
+			ranges.push([i, i + len]);
+			if (re.lastIndex === i) re.lastIndex++;
+		}
+		return ranges;
+	}
+
+	// 串：子串包含
+	if (caseSensitive) {
+		let from = 0;
+		while (from < plain.length) {
+			const i = plain.indexOf(needle, from);
+			if (i < 0) break;
+			ranges.push([i, i + needle.length]);
+			from = i + Math.max(needle.length, 1);
+		}
+		return ranges;
+	}
+	const lower = plain.toLowerCase();
+	const n = needle.toLowerCase();
+	let from = 0;
+	while (from < lower.length) {
+		const i = lower.indexOf(n, from);
+		if (i < 0) break;
+		ranges.push([i, i + needle.length]);
+		from = i + Math.max(needle.length, 1);
+	}
+	return ranges;
+}
+
+/**
+ * 完全匹配（整段查询串连续包含，不拆词）
+ * caseSensitive / wholeWord 见上
+ */
+export function literalMatches(
+	text: string,
+	query: string,
+	caseSensitive = false,
+	wholeWord = false,
+): boolean {
 	const plain = String(text ?? '');
 	const q = String(query ?? '');
 	if (!q) return false;
-	return plain.includes(q);
+	return findAllRanges(plain, q, caseSensitive, wholeWord).length > 0;
 }
 
 /** 单词汇是否命中一段文本 */
@@ -57,21 +144,19 @@ export function termMatches(
 	text: string,
 	term: string,
 	mode: MatchMode = 'fuzzy',
+	caseSensitive = false,
+	wholeWord = false,
 ): boolean {
 	const plain = String(text || '');
 	const t = String(term || '').trim();
 	if (!t || !plain) return false;
 	if (mode === 'exact') {
-		return plain.toLowerCase().includes(t.toLowerCase());
+		return findAllRanges(plain, t, caseSensitive, wholeWord).length > 0;
 	}
-	const lower = plain.toLowerCase();
+	// 模糊：变体扩展；词模式下拉丁变体也要求词界
 	for (const v of expandFuzzyVariants(t)) {
 		if (!v) continue;
-		if (/^[\x00-\x7F]+$/.test(v)) {
-			if (lower.includes(v.toLowerCase())) return true;
-		} else if (plain.includes(v)) {
-			return true;
-		}
+		if (findAllRanges(plain, v, caseSensitive, wholeWord).length > 0) return true;
 	}
 	return false;
 }
@@ -87,13 +172,17 @@ export function fieldMatches(
 	query: string,
 	mode: MatchMode = 'fuzzy',
 	combine: CombineMode = 'AND',
+	caseSensitive = false,
+	wholeWord = false,
 ): boolean {
 	const terms = splitQueryTerms(query);
 	if (!terms.length) return false;
 	if (combine === 'AND') {
-		return terms.every((t) => termMatches(text, t, mode));
+		return terms.every((t) =>
+			termMatches(text, t, mode, caseSensitive, wholeWord),
+		);
 	}
-	return terms.some((t) => termMatches(text, t, mode));
+	return terms.some((t) => termMatches(text, t, mode, caseSensitive, wholeWord));
 }
 
 /**
@@ -106,11 +195,13 @@ export function fieldsMatchTerms(
 	query: string,
 	mode: MatchMode = 'fuzzy',
 	combine: CombineMode = 'AND',
+	caseSensitive = false,
+	wholeWord = false,
 ): boolean {
 	const terms = splitQueryTerms(query);
 	if (!terms.length) return false;
 	const hit = (term: string) =>
-		fields.some((f) => termMatches(f, term, mode));
+		fields.some((f) => termMatches(f, term, mode, caseSensitive, wholeWord));
 	if (combine === 'AND') return terms.every(hit);
 	return terms.some(hit);
 }
@@ -129,9 +220,34 @@ function highlightTerms(query: string, mode: MatchMode): string[] {
 	return [...set].sort((a, b) => b.length - a.length);
 }
 
+function mergeRanges(ranges: [number, number][]): [number, number][] {
+	if (!ranges.length) return [];
+	ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+	const merged: [number, number][] = [];
+	for (const r of ranges) {
+		const last = merged[merged.length - 1];
+		if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
+		else merged.push([r[0], r[1]]);
+	}
+	return merged;
+}
+
+function paintRanges(plain: string, ranges: [number, number][]): string {
+	if (!ranges.length) return escapeHtml(plain);
+	let out = '';
+	let cur = 0;
+	for (const [a, b] of ranges) {
+		if (a > cur) out += escapeHtml(plain.slice(cur, a));
+		out += `<mark>${escapeHtml(plain.slice(a, b))}</mark>`;
+		cur = b;
+	}
+	if (cur < plain.length) out += escapeHtml(plain.slice(cur));
+	return out;
+}
+
 /**
  * 在纯文本上高亮；按分隔符拆词后分别高亮
- * strict：只高亮原样查询串（大小写敏感）
+ * strict：只高亮整段查询串（不拆词）；大小写/词界由参数决定
  */
 export function highlightText(
 	text: string,
@@ -139,74 +255,29 @@ export function highlightText(
 	mode: MatchMode = 'fuzzy',
 	_combine: CombineMode = 'AND',
 	strict = false,
+	caseSensitive = false,
+	wholeWord = false,
 ): string {
 	const plain = String(text || '');
 	if (!plain) return '';
 	if (strict) {
 		const q = String(query ?? '');
 		if (!q) return escapeHtml(plain);
-		// 大小写敏感、原样子串高亮
-		type R = [number, number];
-		const ranges: R[] = [];
-		let from = 0;
-		while (from < plain.length) {
-			const i = plain.indexOf(q, from);
-			if (i < 0) break;
-			ranges.push([i, i + q.length]);
-			from = i + Math.max(q.length, 1);
-		}
-		if (!ranges.length) return escapeHtml(plain);
-		let out = '';
-		let cur = 0;
-		for (const [a, b] of ranges) {
-			if (a > cur) out += escapeHtml(plain.slice(cur, a));
-			out += `<mark>${escapeHtml(plain.slice(a, b))}</mark>`;
-			cur = b;
-		}
-		if (cur < plain.length) out += escapeHtml(plain.slice(cur));
-		return out;
+		return paintRanges(
+			plain,
+			findAllRanges(plain, q, caseSensitive, wholeWord),
+		);
 	}
 
 	const q = String(query || '').trim();
 	if (!q) return escapeHtml(plain);
 
 	const terms = highlightTerms(q, mode);
-	type R = [number, number];
-	const ranges: R[] = [];
-	const lower = plain.toLowerCase();
-
+	const ranges: [number, number][] = [];
 	for (const term of terms) {
-		const ascii = /^[\x00-\x7F]+$/.test(term);
-		const needle = ascii ? term.toLowerCase() : term;
-		const hay = ascii ? lower : plain;
-		let from = 0;
-		while (from < hay.length) {
-			const i = hay.indexOf(needle, from);
-			if (i < 0) break;
-			ranges.push([i, i + term.length]);
-			from = i + Math.max(term.length, 1);
-		}
+		ranges.push(...findAllRanges(plain, term, caseSensitive, wholeWord));
 	}
-
-	if (!ranges.length) return escapeHtml(plain);
-
-	ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
-	const merged: R[] = [];
-	for (const r of ranges) {
-		const last = merged[merged.length - 1];
-		if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
-		else merged.push([r[0], r[1]]);
-	}
-
-	let out = '';
-	let cur = 0;
-	for (const [a, b] of merged) {
-		if (a > cur) out += escapeHtml(plain.slice(cur, a));
-		out += `<mark>${escapeHtml(plain.slice(a, b))}</mark>`;
-		cur = b;
-	}
-	if (cur < plain.length) out += escapeHtml(plain.slice(cur));
-	return out;
+	return paintRanges(plain, mergeRanges(ranges));
 }
 
 /** 从长正文取含关键词的摘录并高亮 */
@@ -217,6 +288,8 @@ export function excerptHighlight(
 	mode: MatchMode = 'fuzzy',
 	combine: CombineMode = 'AND',
 	strict = false,
+	caseSensitive = false,
+	wholeWord = false,
 ): string {
 	// 完全匹配：保留原文空白，不折叠空格
 	const plain = strict
@@ -230,7 +303,8 @@ export function excerptHighlight(
 			const head = plain.slice(0, radius * 2);
 			return escapeHtml(head) + (plain.length > head.length ? '…' : '');
 		}
-		const i = plain.indexOf(q);
+		const ranges = findAllRanges(plain, q, caseSensitive, wholeWord);
+		const i = ranges[0]?.[0] ?? -1;
 		if (i < 0) {
 			const head = plain.slice(0, radius * 2);
 			return escapeHtml(head) + (plain.length > head.length ? '…' : '');
@@ -239,7 +313,7 @@ export function excerptHighlight(
 		const end = Math.min(plain.length, i + q.length + radius);
 		const slice =
 			(start > 0 ? '…' : '') + plain.slice(start, end) + (end < plain.length ? '…' : '');
-		return highlightText(slice, q, mode, combine, true);
+		return highlightText(slice, q, mode, combine, true, caseSensitive, wholeWord);
 	}
 
 	const q = String(query || '').trim();
@@ -251,10 +325,9 @@ export function excerptHighlight(
 	const terms = highlightTerms(q, mode);
 	let best = -1;
 	let bestTerm = '';
-	const lower = plain.toLowerCase();
 	for (const term of terms) {
-		const ascii = /^[\x00-\x7F]+$/.test(term);
-		const i = ascii ? lower.indexOf(term.toLowerCase()) : plain.indexOf(term);
+		const ranges = findAllRanges(plain, term, caseSensitive, wholeWord);
+		const i = ranges[0]?.[0] ?? -1;
 		if (i >= 0 && (best < 0 || i < best)) {
 			best = i;
 			bestTerm = term;
@@ -268,5 +341,5 @@ export function excerptHighlight(
 	const end = Math.min(plain.length, best + bestTerm.length + radius);
 	const slice =
 		(start > 0 ? '…' : '') + plain.slice(start, end) + (end < plain.length ? '…' : '');
-	return highlightText(slice, query, mode, combine, false);
+	return highlightText(slice, query, mode, combine, false, caseSensitive, wholeWord);
 }
