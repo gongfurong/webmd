@@ -652,7 +652,6 @@ export function renderPdfViewerShell(opts: {
 	/** 原 Office 文件 URL；有则 data-office-src，下载走原件 */
 	officeSrc?: string;
 }): string {
-	const title = escAttr(opts.title);
 	const previewSrc = escAttr(opts.previewSrc);
 	const downloadHref = escAttr(opts.downloadHref);
 	const downloadName = escAttr(opts.downloadName || opts.title);

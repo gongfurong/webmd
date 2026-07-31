@@ -17,7 +17,6 @@ import path from 'node:path';
 import * as XLSX from 'xlsx';
 import type { TreeFile } from './scan';
 import {
-	contentFileParts,
 	contentUrl,
 	ensureSiblingResDir,
 	findSiblingResDir,

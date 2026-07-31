@@ -28,7 +28,6 @@ import {
 } from './template';
 import { ensureVideoPoster, injectInlineVideoPosters } from './video-poster';
 import {
-	isOfficeFile,
 	isOfficePdfConvertible,
 	resolveOfficePreview,
 } from './office-preview';
