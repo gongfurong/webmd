@@ -2264,9 +2264,9 @@ html[data-content-width='fill'] body.is-binary-page .center-scroll > .markdown-b
 	margin-inline: 0 !important;
 	align-self: stretch;
 }
-/* 源码/文本：代码块贴满中栏，无外边距 */
-body.is-source-page .markdown-body > .webmd-code,
-body.is-file-page .markdown-body > .webmd-code {
+/* 源码/文本：代码块贴满中栏，无外边距（图示卡除外，需保留一体边框） */
+body.is-source-page .markdown-body > .webmd-code:not(.webmd-diagram),
+body.is-file-page .markdown-body > .webmd-code:not(.webmd-diagram) {
 	width: 100% !important;
 	max-width: none !important;
 	margin: 0 !important;
@@ -2725,49 +2725,844 @@ body.is-binary-page .center-scroll > .markdown-body {
 	min-height: 12rem;
 }
 
-/* ========== CSV / Excel→CSV：类型栏+复制 + 纯表（无额外说明） ========== */
-body.is-sheet-page .center-scroll {
-	padding: 0.75rem 1rem 1.5rem !important;
-	overflow: auto;
+/* ========== sheet-app：SheetJS + x-data-spreadsheet ========== */
+body.is-sheet-app-page .wiki-main {
+	min-height: 0;
+	height: 100%;
+	overflow: hidden;
 }
-.sheet-preview {
+body.is-sheet-app-page .center-scroll {
+	padding: 0 !important;
+	overflow: hidden !important;
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0 !important;
+	height: 0 !important;
+	min-height: 0 !important;
+}
+body.is-sheet-app-page .center-scroll > .markdown-body {
+	flex: 1 1 0;
+	min-height: 0;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	padding: 0 !important;
+	max-width: none !important;
 	width: 100%;
 	box-sizing: border-box;
+	overflow: hidden;
 }
-/* 多 sheet 页签：仅切换用，不算正文「说明」 */
-.sheet-preview > .sheet-tabs {
+body.is-sheet-app-page .markdown-body > .sheet-app {
+	flex: 1 1 0;
+	min-height: 0;
+	height: 100%;
 	display: flex;
-	flex-wrap: wrap;
-	gap: 0.25rem;
-	margin: 0 0 0.55rem;
+	flex-direction: column;
+	overflow: hidden;
+	margin: 0 !important;
+	border-radius: 0 !important;
 }
-.sheet-tab {
+
+.sheet-app.webmd-code.sheet-block {
+	margin: 0;
+	max-width: 100%;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	flex: 1 1 0;
+	overflow: hidden;
+}
+.sheet-app .webmd-code__bar {
+	flex: 0 0 auto;
+	flex-wrap: wrap;
+	gap: 0.35rem 0.5rem;
+}
+.sheet-app .webmd-code__actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-left: auto;
+	flex-wrap: wrap;
+}
+.sheet-app .webmd-code__hint {
+	font-size: 0.72rem;
+	font-weight: 500;
+	color: var(--fg-muted);
+	margin-left: 0.35rem;
+}
+/* 类型旁提醒：与标题隔开，提醒色 */
+.sheet-app .webmd-code__note {
+	flex: 0 1 auto;
+	margin-left: 0.75rem;
+	padding-left: 0.75rem;
+	border-left: 1px solid var(--border, #d0d7de);
+	font-size: 0.8rem;
+	font-weight: 550;
+	line-height: 1.3;
+	letter-spacing: 0.01em;
+	white-space: nowrap;
+}
+.sheet-app .webmd-code__note--warn {
+	/* 提醒色：纯黄、少灰感 */
+	color: #d4a017;
+}
+html[data-theme='dark'] .sheet-app .webmd-code__note {
+	border-left-color: var(--border);
+}
+html[data-theme='dark'] .sheet-app .webmd-code__note--warn {
+	color: #ffd666;
+}
+/* 密度三档 */
+.xs-density {
+	display: inline-flex;
+	align-items: stretch;
+	border: 1px solid var(--border-muted, #d0d7de);
+	border-radius: 0.375rem;
+	overflow: hidden;
+	background: var(--bg-muted, #f6f8fa);
+}
+.xs-density__btn {
 	appearance: none;
-	border: 1px solid var(--border);
-	background: var(--bg-muted);
-	color: var(--fg);
-	border-radius: 0.4rem;
-	padding: 0.3rem 0.7rem;
-	font-size: 0.8125rem;
+	margin: 0;
+	padding: 0.2rem 0.45rem;
+	border: 0;
+	border-right: 1px solid var(--border-muted, #d0d7de);
+	background: transparent;
+	color: var(--fg-muted, #656d76);
+	font-size: 0.72rem;
+	font-weight: 500;
+	line-height: 1.4;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.xs-density__btn:last-child {
+	border-right: 0;
+}
+.xs-density__btn:hover {
+	color: var(--fg, #1f2328);
+	background: rgba(0, 0, 0, 0.04);
+}
+.xs-density__btn.is-active {
+	color: var(--fg, #1f2328);
+	background: var(--bg-elevated, #fff);
 	font-weight: 600;
+	box-shadow: inset 0 0 0 1px var(--border-muted, #d0d7de);
+}
+html[data-theme='dark'] .xs-density {
+	border-color: #30363d;
+	background: #21262d;
+}
+html[data-theme='dark'] .xs-density__btn {
+	border-right-color: #30363d;
+	color: #8b949e;
+}
+html[data-theme='dark'] .xs-density__btn:hover {
+	color: #e6edf3;
+	background: rgba(255, 255, 255, 0.06);
+}
+html[data-theme='dark'] .xs-density__btn.is-active {
+	color: #e6edf3;
+	background: #0d1117;
+	box-shadow: inset 0 0 0 1px #30363d;
+}
+/* 缩放滑块 50%–200%（几何缩放，不改 CSS zoom） */
+.xs-zoom {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.1rem 0.45rem;
+	border: 1px solid var(--border-muted, #d0d7de);
+	border-radius: 0.375rem;
+	background: var(--bg-muted, #f6f8fa);
+	user-select: none;
+}
+.xs-zoom__cap {
+	font-size: 0.72rem;
+	font-weight: 500;
+	color: var(--fg-muted, #656d76);
+	white-space: nowrap;
+}
+.xs-zoom__label {
+	font-size: 0.72rem;
+	font-weight: 600;
+	color: var(--fg, #1f2328);
+	min-width: 2.4rem;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.xs-zoom__range {
+	width: 7.5rem;
+	height: 1.1rem;
+	margin: 0;
+	accent-color: var(--accent, #0969da);
 	cursor: pointer;
 }
-.sheet-tab.is-active {
-	background: var(--accent, #0969da);
-	border-color: transparent;
-	color: #fff;
+html[data-theme='dark'] .xs-zoom {
+	border-color: #30363d;
+	background: #21262d;
+}
+html[data-theme='dark'] .xs-zoom__cap {
+	color: #8b949e;
+}
+html[data-theme='dark'] .xs-zoom__label {
+	color: #e6edf3;
+}
+.xs-actions {
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+}
+.xs-action-btn {
+	appearance: none;
+	margin: 0;
+	padding: 0.2rem 0.5rem;
+	border: 1px solid var(--border-muted, #d0d7de);
+	border-radius: 0.35rem;
+	background: var(--bg-elevated, #fff);
+	color: var(--fg-muted, #656d76);
+	font-size: 0.72rem;
+	font-weight: 500;
+	line-height: 1.4;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.xs-action-btn:hover {
+	color: var(--fg, #1f2328);
+	border-color: var(--border, #afb8c1);
+}
+.xs-action-btn.is-copied,
+.webmd-code__copy.is-copied {
+	color: #1a7f37;
+	border-color: #1a7f37;
+}
+.xs-action-btn.is-failed,
+.webmd-code__copy.is-failed {
+	color: #cf222e;
+	border-color: #cf222e;
+}
+html[data-theme='dark'] .xs-action-btn {
+	background: #21262d;
+	border-color: #30363d;
+	color: #8b949e;
+}
+html[data-theme='dark'] .xs-action-btn:hover {
+	color: #e6edf3;
+	border-color: #484f58;
+}
+.sheet-app .webmd-code__hint.is-dirty {
+	color: #9a6700;
+	font-weight: 600;
+}
+html[data-theme='dark'] .sheet-app .webmd-code__hint.is-dirty {
+	color: #d4a72c;
+}
+/*
+ * 中栏通用全屏 —— 仅匹配 :fullscreen，不写全局 class 驱动布局，
+ * 避免退出全屏后残留样式影响 MD 滚动 / 固定·铺满版心。
+ */
+.wiki-main:fullscreen {
+	box-sizing: border-box;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	background: var(--bg);
+	/* wiki-main 本身已是 column flex；全屏时保持即可 */
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.wiki-main:fullscreen > .pane-bar--center {
+	flex: 0 0 auto;
+}
+.wiki-main:fullscreen > .center-scroll {
+	/* 与常态一致：可滚动、占满剩余高度；勿改 markdown-body 的 max-width */
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: auto;
+}
+.wiki-main:fullscreen > .wiki-page-footer {
+	flex: 0 0 auto;
+}
+/* 仅表格页：全屏时内部引擎滚动，外层不滚（与 body.is-sheet-app-page 常态一致） */
+body.is-sheet-app-page .wiki-main:fullscreen > .center-scroll {
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	padding: 0 !important;
+}
+body.is-sheet-app-page .wiki-main:fullscreen > .center-scroll > .markdown-body,
+body.is-sheet-app-page .wiki-main:fullscreen .markdown-body > .sheet-app {
+	flex: 1 1 0;
+	min-height: 0;
+	height: 100%;
+	width: 100%;
+	max-width: none !important;
+}
+body.is-sheet-app-page .wiki-main:fullscreen .xs-host {
+	width: 100% !important;
+	max-width: none !important;
+	min-width: 0 !important;
+}
+/* 路径栏全屏按钮：两态图标（仅按钮状态，不改布局） */
+.wiki-breadcrumb__fs-btn .wiki-breadcrumb__icon--fs-exit {
+	display: none;
+}
+.wiki-breadcrumb__fs-btn.is-active .wiki-breadcrumb__icon--fs-enter {
+	display: none;
+}
+.wiki-breadcrumb__fs-btn.is-active .wiki-breadcrumb__icon--fs-exit {
+	display: block;
+}
+/* x-spreadsheet：少覆盖库样式 */
+.xs-host {
+	overflow: hidden;
+}
+.xs-host .x-spreadsheet {
+	height: 100%;
+}
+/*
+ * 工具栏：全宽排出常用按钮（不用 max-content，否则 moreResize 量窄会全进 …）。
+ */
+.xs-host .x-spreadsheet-toolbar {
+	width: 100% !important;
+	max-width: 100% !important;
+	box-sizing: border-box;
+	background: var(--bg-muted, #f6f8fa);
+	border-bottom: 1px solid var(--border, #e0e2e4);
+}
+.xs-host .x-spreadsheet-toolbar-btn:has(.x-spreadsheet-icon-img.print),
+.xs-host .x-spreadsheet-toolbar-btn[data-xs-hidden-print],
+.xs-host .x-spreadsheet-icon-img.print {
+	display: none !important;
+}
+.xs-host .x-spreadsheet-print {
+	display: none !important;
+}
+.xs-host .x-spreadsheet-contextmenu,
+.xs-host .x-spreadsheet-dropdown,
+.xs-host .x-spreadsheet-color-palette,
+.xs-host .x-spreadsheet-modal,
+.xs-host .x-spreadsheet-toast {
+	z-index: 40;
+}
+
+/* sheet-app 类型栏也跟站点 token */
+body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
+	background: var(--bg-muted);
+	border-bottom-color: var(--border);
+	color: var(--fg);
+}
+
+/* 上栏：自动列宽/行高贴工具栏最左（库默认 padding 30px，压成贴边） */
+.xs-host .x-spreadsheet-toolbar {
+	display: flex !important;
+	align-items: center;
+	flex-wrap: nowrap;
+	gap: 0;
+	padding-left: 6px !important;
+	padding-right: 12px !important;
+}
+.xs-host .x-spreadsheet-toolbar .x-spreadsheet-toolbar-btns {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: nowrap;
+}
+.xs-fit-bar {
+	display: inline-flex;
+	align-items: center;
+	flex: 0 0 auto;
+	order: -1;
+	gap: 0.2rem;
+	margin: 6px 4px 0 0;
+	padding: 0 6px 0 0;
+	border-right: 1px solid var(--border, #e0e2e4);
+	background: transparent;
+	z-index: 2;
+}
+.xs-fit-bar__btn {
+	appearance: none;
+	margin: 0;
+	padding: 0 0.4rem;
+	height: 26px;
+	border: 1px solid var(--border, #d0d7de);
+	border-radius: 2px;
+	background: var(--bg-elevated, #fff);
+	color: var(--fg-muted, #656d76);
+	font-size: 0.72rem;
+	font-weight: 500;
+	line-height: 24px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.xs-fit-bar__btn:hover {
+	color: var(--fg, #1f2328);
+	border-color: var(--border-strong, #afb8c1);
+	background: color-mix(in srgb, var(--fg) 4%, var(--bg-elevated, #fff));
+}
+html[data-theme='dark'] .xs-fit-bar,
+.xs-host.is-xs-dark .xs-fit-bar {
+	border-right-color: var(--border);
+}
+html[data-theme='dark'] .xs-fit-bar__btn,
+.xs-host.is-xs-dark .xs-fit-bar__btn {
+	background: var(--bg-elevated);
+	border-color: var(--border);
+	color: var(--fg-muted);
+}
+html[data-theme='dark'] .xs-fit-bar__btn:hover,
+.xs-host.is-xs-dark .xs-fit-bar__btn:hover {
+	color: var(--fg);
+	background: var(--nav-hover-bg, rgba(255, 255, 255, 0.06));
+	border-color: var(--border-strong);
+}
+
+/*
+ * 暗色：与站点 --bg/--fg/--border/--accent 完全一致（GitHub 风）
+ * canvas 浅色由 JS remap；下拉/菜单用 token 强制覆盖库白底。
+ */
+html[data-theme='dark'] .xs-host,
+body.is-xs-dark .xs-host,
+.sheet-app.is-xs-dark .xs-host,
+.xs-host.is-xs-dark {
+	background: var(--bg) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet,
+.xs-host.is-xs-dark .x-spreadsheet {
+	background: var(--bg) !important;
+	color: var(--fg);
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-sheet,
+.xs-host.is-xs-dark .x-spreadsheet-sheet {
+	background: var(--bg) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-table,
+.xs-host.is-xs-dark .x-spreadsheet-table {
+	background: var(--bg) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-toolbar,
+.xs-host.is-xs-dark .x-spreadsheet-toolbar {
+	background: var(--bg-muted) !important;
+	border-bottom-color: var(--border) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-toolbar .x-spreadsheet-icon-img,
+.xs-host.is-xs-dark .x-spreadsheet-toolbar .x-spreadsheet-icon-img {
+	filter: invert(0.88) brightness(1.08);
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-toolbar-btn:hover,
+html[data-theme='dark'] .xs-host .x-spreadsheet-toolbar-btn.active,
+.xs-host.is-xs-dark .x-spreadsheet-toolbar-btn:hover,
+.xs-host.is-xs-dark .x-spreadsheet-toolbar-btn.active {
+	background: var(--nav-hover-bg, rgba(255, 255, 255, 0.06));
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-toolbar-divider,
+.xs-host.is-xs-dark .x-spreadsheet-toolbar-divider {
+	border-right-color: var(--border) !important;
+}
+/* 工具栏下拉标题文字 */
+html[data-theme='dark'] .xs-host .x-spreadsheet-dropdown-title,
+html[data-theme='dark'] .xs-host .x-spreadsheet-toolbar select,
+.xs-host.is-xs-dark .x-spreadsheet-dropdown-title {
+	color: var(--fg) !important;
+	background: var(--bg-elevated) !important;
+	border-color: var(--border) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-bottombar,
+.xs-host.is-xs-dark .x-spreadsheet-bottombar {
+	background: var(--bg-muted) !important;
+	border-top: 1px solid var(--border) !important;
+	color: var(--fg) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-menu > li,
+.xs-host.is-xs-dark .x-spreadsheet-menu > li {
+	color: var(--fg-muted) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-menu > li.active,
+.xs-host.is-xs-dark .x-spreadsheet-menu > li.active {
+	background: var(--bg) !important;
+	color: var(--fg) !important;
+	border-bottom: 2px solid var(--accent) !important;
+}
+/* 下拉面板 / 右键 / 建议列表 — 覆盖库内白底 */
+html[data-theme='dark'] .xs-host .x-spreadsheet-dropdown,
+html[data-theme='dark'] .xs-host .x-spreadsheet-dropdown-content,
+html[data-theme='dark'] .xs-host .x-spreadsheet-suggest,
+html[data-theme='dark'] .xs-host .x-spreadsheet-contextmenu,
+html[data-theme='dark'] .xs-host .x-spreadsheet-color-palette,
+html[data-theme='dark'] .xs-host .x-spreadsheet-modal,
+html[data-theme='dark'] .xs-host .x-spreadsheet-toast,
+html[data-theme='dark'] .xs-host .x-spreadsheet-calendar,
+.xs-host.is-xs-dark .x-spreadsheet-dropdown,
+.xs-host.is-xs-dark .x-spreadsheet-dropdown-content,
+.xs-host.is-xs-dark .x-spreadsheet-suggest,
+.xs-host.is-xs-dark .x-spreadsheet-contextmenu {
+	background: var(--bg-elevated) !important;
+	color: var(--fg) !important;
+	border: 1px solid var(--border) !important;
+	box-shadow: var(--shadow) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-dropdown .x-spreadsheet-item,
+html[data-theme='dark'] .xs-host .x-spreadsheet-suggest .x-spreadsheet-item,
+html[data-theme='dark'] .xs-host .x-spreadsheet-contextmenu li,
+.xs-host.is-xs-dark .x-spreadsheet-dropdown .x-spreadsheet-item,
+.xs-host.is-xs-dark .x-spreadsheet-contextmenu li {
+	color: var(--fg) !important;
+	background: transparent !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-dropdown .x-spreadsheet-item:hover,
+html[data-theme='dark'] .xs-host .x-spreadsheet-suggest .x-spreadsheet-item:hover,
+html[data-theme='dark'] .xs-host .x-spreadsheet-contextmenu li:hover,
+html[data-theme='dark'] .xs-host .x-spreadsheet-item.active,
+.xs-host.is-xs-dark .x-spreadsheet-dropdown .x-spreadsheet-item:hover,
+.xs-host.is-xs-dark .x-spreadsheet-contextmenu li:hover {
+	background: var(--nav-hover-bg, rgba(255, 255, 255, 0.06)) !important;
+	color: var(--fg) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar,
+.xs-host.is-xs-dark .x-spreadsheet-scrollbar {
+	background: var(--bg);
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar .x-spreadsheet-scrollbar-track,
+.xs-host.is-xs-dark .x-spreadsheet-scrollbar .x-spreadsheet-scrollbar-track {
+	background: var(--bg-muted);
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-selector .x-spreadsheet-selector-area,
+.xs-host.is-xs-dark .x-spreadsheet-selector .x-spreadsheet-selector-area {
+	border-color: var(--accent) !important;
+}
+/* 编辑框 */
+html[data-theme='dark'] .xs-host .x-spreadsheet-editor,
+html[data-theme='dark'] .xs-host .x-spreadsheet-editor textarea,
+.xs-host.is-xs-dark .x-spreadsheet-editor,
+.xs-host.is-xs-dark .x-spreadsheet-editor textarea {
+	background: var(--bg-elevated) !important;
+	color: var(--fg) !important;
+	caret-color: var(--fg);
+}
+/* 中栏全屏时表格右键菜单在最上层 */
+.wiki-main:fullscreen .xs-host .x-spreadsheet-contextmenu {
+	z-index: 10050;
+}
+.xs-status,
+.xs-error {
+	flex: 0 0 auto;
+	margin: 0.75rem 1rem;
+	padding: 0.65rem 0.85rem;
+	border-radius: 0.4rem;
+	font-size: 0.875rem;
+	background: var(--bg-muted);
+	color: var(--fg-muted);
+}
+/* 页内确认条（替代 window.confirm，避免打断全屏） */
+.xs-confirm {
+	flex: 0 0 auto;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem 0.75rem;
+	margin: 0;
+	padding: 0.45rem 0.75rem;
+	border-bottom: 1px solid var(--border, #d0d7de);
+	background: color-mix(in srgb, #d4a017 12%, var(--bg-muted, #f6f8fa));
+	color: var(--fg, #1f2328);
+	font-size: 0.8rem;
+	line-height: 1.35;
+}
+.xs-confirm[hidden] {
+	display: none !important;
+}
+.xs-confirm__msg {
+	flex: 1 1 12rem;
+	min-width: 0;
+}
+.xs-confirm__actions {
+	display: inline-flex;
+	gap: 0.35rem;
+	flex: 0 0 auto;
+}
+.xs-confirm__btn {
+	appearance: none;
+	margin: 0;
+	padding: 0.2rem 0.55rem;
+	border: 1px solid var(--border, #d0d7de);
+	border-radius: 0.3rem;
+	background: var(--bg-elevated, #fff);
+	color: var(--fg-muted, #656d76);
+	font-size: 0.75rem;
+	font-weight: 500;
+	cursor: pointer;
+}
+.xs-confirm__btn--ok {
+	border-color: color-mix(in srgb, #d4a017 50%, var(--border));
+	color: #9a6700;
+	font-weight: 600;
+}
+.xs-confirm__btn:hover {
+	color: var(--fg);
+	border-color: var(--border-strong, #afb8c1);
+}
+html[data-theme='dark'] .xs-confirm {
+	background: color-mix(in srgb, #ffd666 10%, var(--bg-muted));
+	border-bottom-color: var(--border);
+}
+html[data-theme='dark'] .xs-confirm__btn--ok {
+	color: #ffd666;
+}
+.xs-error {
+	color: var(--danger-fg, #cf222e);
+	background: var(--danger-bg, #ffebe9);
+}
+/* x-spreadsheet 宿主：内部 Canvas 自带滚动与冻结顶/左 */
+.xs-host {
+	flex: 1 1 0;
+	min-height: 320px;
+	min-width: 0;
+	width: 100%;
+	position: relative;
+	overflow: hidden;
+	background: #fff;
+}
+html[data-theme='dark'] .xs-host {
+	background: var(--bg-elevated, #0d1117);
+}
+.xs-host .x-spreadsheet {
+	width: 100% !important;
+	height: 100% !important;
+}
+.xs-host canvas {
+	image-rendering: auto;
+}
+/* 密度档驱动的 DOM 字号提示（canvas 字号由引擎 options 控制） */
+.sheet-app[data-density='compact'] .xs-host .x-spreadsheet {
+	--xs-ui-font: 11px;
+}
+.sheet-app[data-density='standard'] .xs-host .x-spreadsheet {
+	--xs-ui-font: 12px;
+}
+.sheet-app[data-density='comfortable'] .xs-host .x-spreadsheet {
+	--xs-ui-font: 13px;
+}
+
+/* —— 多 sheet：仿 Excel 底栏页签，横向滚动 + 下拉 —— */
+.sheet-tabbar {
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+	flex: 0 0 auto;
+	flex-shrink: 0;
+	min-height: 1.85rem;
+	border-bottom: 1px solid #c6c6c6;
+	background: #f3f3f3;
+	user-select: none;
+}
+html[data-theme='dark'] .sheet-tabbar {
+	border-bottom-color: #30363d;
+	background: #21262d;
+}
+.sheet-tabbar__nav {
+	flex: 0 0 1.65rem;
+	appearance: none;
+	border: 0;
+	border-right: 1px solid #d8d8d8;
+	background: transparent;
+	color: #555;
+	font-size: 1.05rem;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0;
+}
+.sheet-tabbar__nav:last-of-type {
+	border-right: 0;
+	border-left: 1px solid #d8d8d8;
+}
+.sheet-tabbar__nav:hover:not(:disabled) {
+	background: #e8e8e8;
+	color: #222;
+}
+.sheet-tabbar__nav:disabled,
+.sheet-tabbar__nav.is-disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+html[data-theme='dark'] .sheet-tabbar__nav {
+	border-color: #30363d;
+	color: #c9d1d9;
+}
+html[data-theme='dark'] .sheet-tabbar__nav:hover:not(:disabled) {
+	background: #30363d;
+}
+.sheet-app[data-sheet-app] {
+	/* 便于接收方向键切换 sheet */
+	outline: none;
+}
+.sheet-app .sheet-tabs,
+.sheet-tabbar .sheet-tabs {
+	flex: 1 1 auto;
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: flex-end;
+	gap: 1px;
+	min-width: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scroll-behavior: smooth;
+	padding: 0.15rem 0.2rem 0;
+	/* 页签可滑，但不要露出横向滚动条（用 ‹ › / 下拉切换） */
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	-webkit-overflow-scrolling: touch;
+}
+.sheet-app .sheet-tabs::-webkit-scrollbar,
+.sheet-tabbar .sheet-tabs::-webkit-scrollbar {
+	display: none;
+	width: 0;
+	height: 0;
+}
+.sheet-app .sheet-tab,
+.sheet-tabbar .sheet-tab {
+	appearance: none;
+	flex: 0 0 auto;
+	max-width: 10rem;
+	border: 1px solid transparent;
+	border-bottom: 0;
+	border-radius: 0.25rem 0.25rem 0 0;
+	background: #e7e7e7;
+	color: #444;
+	font: inherit;
+	font-size: 0.75rem;
+	font-weight: 500;
+	padding: 0.28rem 0.7rem;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	line-height: 1.25;
+}
+.sheet-app .sheet-tab:hover,
+.sheet-tabbar .sheet-tab:hover {
+	background: #efefef;
+	color: #222;
+}
+.sheet-app .sheet-tab.is-active,
+.sheet-tabbar .sheet-tab.is-active {
+	background: #fff;
+	color: #1a1a1a;
+	border-color: #c6c6c6;
+	border-bottom-color: #fff;
+	font-weight: 600;
+	box-shadow: 0 1px 0 #fff;
+	/* 轻微 Excel 绿点缀，避免整条高饱和 */
+	box-shadow: inset 0 -2px 0 #217346;
+}
+html[data-theme='dark'] .sheet-app .sheet-tab,
+html[data-theme='dark'] .sheet-tabbar .sheet-tab {
+	background: #2d333b;
+	color: #c9d1d9;
+}
+html[data-theme='dark'] .sheet-app .sheet-tab:hover,
+html[data-theme='dark'] .sheet-tabbar .sheet-tab:hover {
+	background: #373e47;
+}
+html[data-theme='dark'] .sheet-app .sheet-tab.is-active,
+html[data-theme='dark'] .sheet-tabbar .sheet-tab.is-active {
+	background: var(--bg-elevated, #0d1117);
+	color: #e6edf3;
+	border-color: #30363d;
+	box-shadow: inset 0 -2px 0 #3fb950;
+}
+.sheet-tabbar__pick {
+	position: relative;
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	margin: 0;
+	padding: 0 0.15rem 0 0.35rem;
+	border-left: 1px solid #d8d8d8;
+	background: transparent;
+	cursor: pointer;
+}
+html[data-theme='dark'] .sheet-tabbar__pick {
+	border-left-color: #30363d;
+}
+.sheet-tabbar__pick-icon {
+	font-size: 0.7rem;
+	color: #666;
+	pointer-events: none;
+	padding: 0 0.15rem;
+}
+.sheet-tabbar__select {
+	position: absolute;
+	inset: 0;
+	opacity: 0;
+	cursor: pointer;
+	width: 100%;
+	height: 100%;
+	font-size: 0.75rem;
+}
+.sheet-tabbar__count {
+	flex: 0 0 auto;
+	align-self: center;
+	padding: 0 0.55rem 0 0.25rem;
+	font-size: 0.68rem;
+	font-variant-numeric: tabular-nums;
+	color: #888;
+	white-space: nowrap;
+}
+html[data-theme='dark'] .sheet-tabbar__count {
+	color: #8b949e;
+}
+.sheet-view--csv {
+	padding: 0;
+	flex: 1 1 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 }
 .sheet-panels {
-	width: 100%;
+	flex: 1 1 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.sheet-panel {
+	flex: 1 1 0;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 }
 .sheet-panel[hidden] {
 	display: none !important;
 }
-/* 复用 .webmd-code 顶栏；表在栏下，无源码区 */
-.markdown-body .webmd-code.sheet-block {
+.sheet-empty-csv {
+	padding: 1rem 1.1rem;
+	color: var(--fg-muted);
+	font-size: 0.875rem;
+}
+
+/* 旧 HTML 网格（.xl-grid / .sheet-preview）已移除；现行仅 sheet-app + x-spreadsheet */
+body.is-sheet-app-page .center-scroll,
+body.is-sheet-app-page .center-scroll > .markdown-body,
+body.is-sheet-app-page .sheet-app {
+	overflow: hidden !important;
+}
+
+/* sheet-app：吃满中栏，禁止被表格撑高（否则横向条在内容底） */
+body.is-sheet-app-page .markdown-body .webmd-code.sheet-block.sheet-app {
 	position: relative;
-	margin: 0 0 0.75rem;
-	overflow: hidden;
+	margin: 0 !important;
+	overflow: hidden !important;
+	display: flex !important;
+	flex-direction: column !important;
+	flex: 1 1 0 !important;
+	height: 100% !important;
+	max-height: 100% !important;
+	min-height: 0 !important;
+	border-radius: 0 !important;
 }
 .markdown-body .webmd-code.sheet-block > .sheet-table-wrap {
 	border: 0;
@@ -3246,26 +4041,274 @@ html[data-theme='dark'] .markdown-body .webmd-code__copy.is-copied {
 }
 
 /*
- * Mermaid 容器：跟站点主题
- * 图本身由 mermaid theme default|dark 绘制（见 client.ts）
+ * Mermaid 图示（shell: mermaid-preview.ts · bind: src/previews/mermaid.ts）
+ *
+ * 一体卡片（文内 / 独立 .mmd 相同）：
+ *   .webmd-code.webmd-diagram
+ *     ├─ .webmd-code__bar          类型栏
+ *     └─ .webmd-code__content      内容区（SVG 挂内部，不顶替内容区）
  */
-.markdown-body .mermaid {
+.markdown-body .webmd-code.webmd-diagram {
+	display: flex;
+	flex-direction: column;
+	/* 必须有实体底，否则内容区与中栏融成「只有顶栏」 */
+	background: #ffffff;
+	border: 1px solid #d0d7de;
+	border-radius: 8px;
+	overflow: hidden;
+	box-shadow: 0 1px 2px rgba(31, 35, 40, 0.04);
+}
+html[data-theme='dark'] .markdown-body .webmd-code.webmd-diagram {
+	background: #0d1117;
+	border-color: #30363d;
+}
+
+/* 内容区 = 代码块 pre 同级：明确面板（勿与页底同色到看不见框） */
+.markdown-body .webmd-diagram .webmd-code__content,
+.markdown-body .webmd-diagram__body {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	flex: 1 1 auto;
+	min-height: 12rem;
+	margin: 0;
+	padding: 1.25rem 1.15rem 1.35rem;
+	overflow-x: auto;
+	overflow-y: auto;
+	text-align: center;
+	box-sizing: border-box;
+	/* 略区别于顶栏灰底，形成「下面那一格」 */
+	background: #f6f8fa;
+	border: 0;
+	border-top: 0;
+	border-radius: 0;
+}
+html[data-theme='dark'] .markdown-body .webmd-diagram .webmd-code__content,
+html[data-theme='dark'] .markdown-body .webmd-diagram__body {
+	background: #161b22;
+}
+
+/* 画布：内容区内挂载点 */
+.markdown-body .webmd-diagram .mermaid,
+.markdown-body .webmd-diagram .webmd-diagram__canvas {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	margin: 0;
+	padding: 0;
+	overflow: visible;
+	text-align: center;
+	background: transparent !important;
+	border: 0 !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+}
+.markdown-body .webmd-diagram .mermaid svg,
+.markdown-body .webmd-diagram .webmd-diagram__canvas svg {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin-inline: auto;
+}
+
+/* 兼容旧裸 .mermaid（无类型栏） */
+.markdown-body > .mermaid,
+.markdown-body :not(.webmd-diagram) > .mermaid {
 	margin: 1rem 0;
 	padding: 0.75rem 1rem;
 	overflow-x: auto;
 	text-align: center;
-	background: #ffffff;
-	border: 1px solid #d0d7de;
+	background: var(--bg-elevated, #ffffff);
+	border: 1px solid var(--border, #d0d7de);
 	border-radius: 6px;
 }
-.markdown-body .mermaid svg {
+html[data-theme='dark'] .markdown-body > .mermaid,
+html[data-theme='dark'] .markdown-body :not(.webmd-diagram) > .mermaid {
+	background: var(--bg, #0d1117);
+	border-color: var(--border, #3b434b);
+}
+.markdown-body .webmd-diagram .mermaid.is-mermaid-error,
+.markdown-body .mermaid.is-mermaid-error {
+	text-align: left;
+	align-self: stretch;
+	background: color-mix(in srgb, var(--danger-bg, #ffebe9) 80%, var(--bg)) !important;
+	border: 1px solid color-mix(in srgb, var(--danger-fg, #cf222e) 35%, var(--border)) !important;
+	border-radius: 6px !important;
+	padding: 0.75rem 1rem !important;
+}
+.markdown-body .mermaid-error {
+	font-size: 0.875rem;
+	color: var(--fg);
+}
+.markdown-body .mermaid-error strong {
+	color: var(--danger-fg, #cf222e);
+}
+.markdown-body .mermaid-error__detail,
+.markdown-body .mermaid-error__src pre {
+	margin: 0.5rem 0 0;
+	padding: 0.5rem 0.65rem;
+	overflow: auto;
+	font-size: 0.75rem;
+	background: var(--bg-muted);
+	border-radius: 4px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+/* 复制用源码：不占版面 */
+.markdown-body .mermaid-copy-source[hidden],
+.markdown-body pre.mermaid-copy-source {
+	display: none !important;
+}
+
+/*
+ * 独立图示文件页（.mmd / .puml…）：
+ * 与文内同一张「顶栏+内容区」卡；中栏留边，勿贴边剃框。
+ */
+body.is-mermaid-page .center-scroll,
+body.is-plantuml-page .center-scroll,
+body.is-graphviz-page .center-scroll {
+	padding: 0.75rem 0.85rem 1.35rem !important;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+}
+body.is-mermaid-page .center-scroll > .markdown-body,
+body.is-plantuml-page .center-scroll > .markdown-body,
+body.is-graphviz-page .center-scroll > .markdown-body {
+	width: 100% !important;
+	max-width: none !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	align-self: stretch;
+}
+body.is-mermaid-page .markdown-body > .webmd-code.webmd-diagram,
+body.is-plantuml-page .markdown-body > .webmd-code.webmd-diagram,
+body.is-graphviz-page .markdown-body > .webmd-code.webmd-diagram {
+	display: flex !important;
+	flex-direction: column !important;
+	width: 100% !important;
+	max-width: none !important;
+	min-height: min(75vh, 36rem);
+	margin: 0 !important;
+	border: 1px solid #d0d7de !important;
+	border-radius: 8px !important;
+	overflow: hidden !important;
+	box-shadow: 0 1px 2px rgba(31, 35, 40, 0.04);
+	box-sizing: border-box;
+}
+html[data-theme='dark'] body.is-mermaid-page .markdown-body > .webmd-code.webmd-diagram,
+html[data-theme='dark'] body.is-plantuml-page .markdown-body > .webmd-code.webmd-diagram,
+html[data-theme='dark'] body.is-graphviz-page .markdown-body > .webmd-code.webmd-diagram {
+	border-color: #30363d !important;
+}
+/* 独立页内容区占满卡片剩余高度，避免「只有一条顶栏」 */
+body.is-mermaid-page .markdown-body > .webmd-code.webmd-diagram > .webmd-code__content,
+body.is-mermaid-page .markdown-body > .webmd-code.webmd-diagram > .webmd-diagram__body,
+body.is-plantuml-page .markdown-body > .webmd-code.webmd-diagram > .webmd-code__content,
+body.is-plantuml-page .markdown-body > .webmd-code.webmd-diagram > .webmd-diagram__body,
+body.is-graphviz-page .markdown-body > .webmd-code.webmd-diagram > .webmd-code__content,
+body.is-graphviz-page .markdown-body > .webmd-code.webmd-diagram > .webmd-diagram__body {
+	display: flex !important;
+	flex: 1 1 auto !important;
+	min-height: 14rem !important;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* PlantUML 画布 / 加载 / 错误 */
+.markdown-body .plantuml-canvas {
+	width: 100%;
+	min-height: 4rem;
+}
+.markdown-body .plantuml-canvas .plantuml-svg {
+	display: block;
 	max-width: 100%;
 	height: auto;
+	margin-inline: auto;
 }
-html[data-theme='dark'] .markdown-body .mermaid {
-	background: #0d1117;
-	border-color: #3b434b;
+.markdown-body .plantuml-loading {
+	padding: 1.5rem 1rem;
+	font-size: 0.875rem;
+	color: var(--fg-muted, #656d76);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+.markdown-body .plantuml-canvas.is-plantuml-error {
+	text-align: left;
+	padding: 0.75rem 1rem;
+	background: color-mix(in srgb, var(--danger-bg, #ffebe9) 80%, var(--bg));
+	border-radius: 6px;
+}
+.markdown-body .plantuml-error {
+	font-size: 0.875rem;
+	color: var(--fg);
+}
+.markdown-body .plantuml-error strong {
+	color: var(--danger-fg, #cf222e);
+}
+.markdown-body .plantuml-error__detail,
+.markdown-body .plantuml-error__src pre {
+	margin: 0.5rem 0 0;
+	padding: 0.5rem 0.65rem;
+	overflow: auto;
+	font-size: 0.75rem;
+	background: var(--bg-muted);
+	border-radius: 4px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+.markdown-body .plantuml-copy-source[hidden],
+.markdown-body pre.plantuml-copy-source {
+	display: none !important;
+}
+
+/* Graphviz 画布 / 加载 / 错误 */
+.markdown-body .graphviz-canvas {
+	width: 100%;
+	min-height: 4rem;
+}
+.markdown-body .graphviz-canvas .graphviz-svg {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin-inline: auto;
+}
+.markdown-body .graphviz-loading {
+	padding: 1.5rem 1rem;
+	font-size: 0.875rem;
+	color: var(--fg-muted, #656d76);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.markdown-body .graphviz-canvas.is-graphviz-error {
+	text-align: left;
+	padding: 0.75rem 1rem;
+	background: color-mix(in srgb, var(--danger-bg, #ffebe9) 80%, var(--bg));
+	border-radius: 6px;
+}
+.markdown-body .graphviz-error {
+	font-size: 0.875rem;
+	color: var(--fg);
+}
+.markdown-body .graphviz-error strong {
+	color: var(--danger-fg, #cf222e);
+}
+.markdown-body .graphviz-error__detail,
+.markdown-body .graphviz-error__src pre {
+	margin: 0.5rem 0 0;
+	padding: 0.5rem 0.65rem;
+	overflow: auto;
+	font-size: 0.75rem;
+	background: var(--bg-muted);
+	border-radius: 4px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+.markdown-body .graphviz-copy-source[hidden],
+.markdown-body pre.graphviz-copy-source {
+	display: none !important;
+}
+
+/* 画布/导图源有旁路导出图时：正文仅 media-stage，与普通图片页相同，无额外 chrome */
 
 /* KaTeX */
 .markdown-body .katex {

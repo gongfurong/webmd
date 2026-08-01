@@ -1,0 +1,7 @@
+stateDiagram-v2
+  [*] --> Idle
+  Idle --> Loading: 打开文件
+  Loading --> Ready: 解析成功
+  Loading --> Error: 失败
+  Ready --> Idle: 软导航离开
+  Error --> Loading: 重试

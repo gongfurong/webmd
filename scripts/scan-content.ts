@@ -2,11 +2,10 @@
  * 站点内容扫描（制作/重建网站的公共入口之一）：
  * - content/ → public/tree.json
  * - 视频：有 ffmpeg → `_Res_<完整文件名>/poster.jpg`
- * - Excel：SheetJS → `_Res_<完整文件名.xlsx>/*.csv` + `_sheets.json`（不依赖 LO）
  * - Word/PPT：有 LibreOffice → `_Res_<完整文件名>/preview.pdf`
+ * - 表格预览：不在此预生成；浏览器 SheetJS 读原文件（见 excel-viewer）
  *
  * 由 `npm run scan`、vite 启动/打包的 buildStart、以及 content 变更重扫调用。
- * 渲染：CSV 源文件 → HTML 表；xlsx 挂导出 CSV → HTML 表；docx/pptx → PDF.js。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +14,6 @@ import site from '../site.config';
 import { flattenFiles, scanContent } from './lib/scan';
 import { prepareAllVideoPosters } from './lib/video-poster';
 import { prepareAllOfficePreviews } from './lib/office-preview';
-import { prepareAllExcelCsvs } from './lib/spreadsheet-preview';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const contentDir = path.join(root, site.content.root);
@@ -32,13 +30,6 @@ if (posters.skippedNoFfmpeg) {
 } else if (posters.tried) {
 	console.log(
 		`[site] 视频封面：检查 ${posters.tried} 个，新生成 ${posters.generated} 个`,
-	);
-}
-// Excel → CSV（不依赖 LibreOffice）
-const excelCsv = prepareAllExcelCsvs(contentDir, files);
-if (excelCsv.tried) {
-	console.log(
-		`[site] Excel→CSV：检查 ${excelCsv.tried} 个，新写 ${excelCsv.written} 个 sheet`,
 	);
 }
 // Word/PPT → PDF（需 LibreOffice）

@@ -21,7 +21,7 @@ import {
 } from './res-dir';
 
 /** 可尝试转 PDF 预览的扩展名（小写，无点） */
-/** 走 LibreOffice→PDF 的类型（表格 xlsx/xls/ods 改走 CSV，见 spreadsheet-preview） */
+/** 走 LibreOffice→PDF 的类型（表格 xlsx/xls/ods 走浏览器 SheetJS 预览，不走 PDF） */
 export const OFFICE_EXTS = new Set([
 	'docx',
 	'doc',
@@ -64,15 +64,6 @@ export function isOfficePdfConvertible(
 		.toLowerCase()
 		.replace(/^\./, '');
 	return OFFICE_EXTS.has(fromExt);
-}
-
-/** @deprecated 使用 findSiblingResDir */
-export function findOfficeResDir(
-	contentDir: string,
-	relPath: string,
-): { abs: string; relPosix: string; name: string } | null {
-	const r = findSiblingResDir(contentDir, relPath);
-	return r ? { abs: r.abs, relPosix: r.relPosix, name: r.name } : null;
 }
 
 function isValidPreviewPdf(absPath: string): boolean {
@@ -287,7 +278,7 @@ export function prepareAllOfficePreviews(
 	contentDir: string,
 	files: TreeFile[],
 ): { tried: number; generated: number; skippedNoSoffice: boolean } {
-	// 仅 Word/PPT 等走 PDF；xlsx 走 CSV（spreadsheet-preview）
+	// 仅 Word/PPT 等走 PDF；xlsx 不在此处理
 	const officeFiles = files.filter((f) => isOfficePdfConvertible(f));
 	if (!officeFiles.length) {
 		return { tried: 0, generated: 0, skippedNoSoffice: false };

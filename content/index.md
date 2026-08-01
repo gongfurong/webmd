@@ -1,47 +1,36 @@
-# index.md
+# content 入口说明
 
-这是 **content 里的普通 Markdown 文件**（路由 `/index/`），不是站点主页。
-
-站级主页是左侧栏「主页」→ `/`（构建产物为 `index.html`）。
+这是 **content 内的普通 Markdown**（预览：`/pages/index/`），**不是**站级首页。  
+站级首页请点左侧「主页」→ `/`。
 
 ---
 
-**WebMD**：静态 HTML Wiki，正文嵌在页面内，Markdown 使用 **GitHub 风格**渲染。
+## content 目录怎么组织
 
-## 布局
-
-| 区域 | 作用 |
+| 目录 | 用途 |
 |------|------|
-| 左 | 文件夹树（含扩展名；`_Res_*` / `_res` 不进树，忽略大小写） |
-| 中 | 正文 + 面包屑 + 上一页/下一页 |
-| 右 | 本页大纲（窄屏折叠为「本页大纲」） |
-| 顶 | 站名、文件/大纲切换、**搜索**（`npm run build` 后） |
+| **`knowledge/`** | 主题知识（AI、量子、ComfyUI…） |
+| **`notes/`** | 短笔记、日记 |
+| **`guides/`** | 使用说明、图文指南 |
+| **`reference/`** | 参考页 |
+| **`media/`** | 媒体库：`image/` · `video/` · `audio/` |
+| **`samples/`** | **格式预览样例**（开发验收用，非正文） |
+| **`scripts/`** | 可预览的脚本样例 |
+| **`index.md`** | 本说明 |
 
-## 多格式（不另写包装 md）
+### 约定
 
-文件直接放进 `content/`：
+- **原件**永远在 `content/`；预览页 URL：`/pages/` + 相对路径（`.md` 去掉扩展名）。  
+- **旁路资源**（不进树）：与源文件同级 `_Res_<完整文件名>/`（如 `preview.pdf`、`poster.jpg`、`preview.svg`）。  
+- 原件直链：`/content/...`  
 
-| 类型 | 例子 | 路由 |
-|------|------|------|
-| Markdown | `notes/hello.md` | `/notes/hello/` |
-| 图片 | `image/1.jpg` | `/f/image/1.jpg/` |
-| 视频/音频 | `video/*.mp4`、`audio/*.mp3` | `/f/.../` |
-| PDF | `notes/sample.pdf` | `/f/notes/sample.pdf/`（Blob 内嵌预览） |
-| 文本/代码 | `notes/sample.txt`、`script/*.py` | `/f/.../` 高亮 + 复制 |
-
-原始文件始终可通过 `/content/...` 访问（构建后在 `dist/content/`）。
-
-## 命令
+### 常用命令
 
 ```bash
-npm install
-npm run dev       # 开发：与生产同模板，按需渲染完整 HTML
-npm run build     # 静态站 → dist/ + Pagefind
-npm run preview   # 预览 dist
+npm run dev       # http://localhost:18087/
+npm run build     # 生成 dist/（可整删重建）
+npm run preview
 ```
 
-默认端口见 `vite.config.ts`（`18087`）。
-
-## 与 starlight-vanilla 对齐
-
-左树 / 右大纲 / 分页 / 面包屑 / 拖宽收起 / 多格式预览 / 代码复制 / Pagefind 搜索 / 静态部署。
+样例入口：[`samples/README.md`](./samples/README.md)。  
+项目元文档（产品/架构）：仓库 `docs/`。

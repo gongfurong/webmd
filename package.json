@@ -16,6 +16,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
+    "@hpcc-js/wasm-graphviz": "^1.28.0",
+    "@plantuml/core": "^1.2026.6",
     "github-markdown-css": "^5.8.1",
     "github-slugger": "^2.0.0",
     "highlight.js": "^11.11.1",
@@ -29,6 +31,7 @@
     "mermaid": "^11.16.0",
     "minisearch": "^7.2.0",
     "pdfjs-dist": "^4.10.38",
+    "x-data-spreadsheet": "^1.1.9",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

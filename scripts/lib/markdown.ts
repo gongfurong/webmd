@@ -15,6 +15,13 @@ import { Marked, Renderer, type Tokens } from 'marked';
 import hljs from 'highlight.js';
 import DOMPurify from 'isomorphic-dompurify';
 import type { TreeFile } from './scan';
+import { renderMermaidShell } from './mermaid-preview';
+import { renderPlantumlShell } from './plantuml-preview';
+import { renderGraphvizShell } from './graphviz-preview';
+import {
+	renderDiagramExportPreviewHtml,
+	type DiagramExportPreview,
+} from './diagram-export-preview';
 
 /**
  * 插件 content.js generateSlug（github-slugger 简化实现，字符表一致）
@@ -76,17 +83,31 @@ function createPluginMarked() {
 		return `<h${headingLevel} id="${slug}">${headingText}</h${headingLevel}>\n`;
 	};
 
-	// 插件 mermaid：```mermaid → <div class="mermaid">，由客户端 mermaid.js 画成图
+	// 图示 shell：```mermaid / ```plantuml → 类型栏 + 内容区（bind 见 src/previews/*）
 	const originalCode = renderer.code.bind(renderer);
 	let mermaidCounter = 0;
+	let plantumlCounter = 0;
+	let graphvizCounter = 0;
 	renderer.code = function (this: Renderer, token: Tokens.Code): string {
 		const codeText = token.text ?? '';
-		const codeLang = (token.lang || '').trim();
-		if (codeLang === 'mermaid') {
-			const id = `mermaid-source-${mermaidCounter++}`;
-			// URI 编码单行属性，避免换行导致 DOMPurify 丢掉 data-mermaid-code
-			const data = encodeURIComponent(codeText);
-			return `<div class="mermaid" data-mermaid-id="${id}" data-mermaid-code="${data}">${escapeHtml(codeText)}</div>\n`;
+		const codeLang = (token.lang || '').trim().toLowerCase();
+		if (codeLang === 'mermaid' || codeLang === 'mmd') {
+			return renderMermaidShell({
+				source: codeText,
+				id: `mermaid-source-${mermaidCounter++}`,
+			});
+		}
+		if (codeLang === 'plantuml' || codeLang === 'puml') {
+			return renderPlantumlShell({
+				source: codeText,
+				id: `plantuml-source-${plantumlCounter++}`,
+			});
+		}
+		if (codeLang === 'dot' || codeLang === 'graphviz' || codeLang === 'gv') {
+			return renderGraphvizShell({
+				source: codeText,
+				id: `graphviz-source-${graphvizCounter++}`,
+			});
 		}
 		return originalCode(token);
 	};
@@ -262,9 +283,33 @@ const PURIFY_CONFIG = {
 		'loop',
 		'muted',
 		'autoplay',
-		// WebMD mermaid 重绘需要（插件用内存 Map；我们用 data-*）
+		// WebMD 图示壳 / 重绘（data-*；hidden 供复制源 pre）
 		'data-mermaid-id',
 		'data-mermaid-code',
+		'data-mermaid-kind',
+		'data-mermaid-canvas',
+		'data-mermaid-copy',
+		'data-mermaid-copy-slot',
+		'data-mermaid-bar',
+		'data-plantuml-id',
+		'data-plantuml-code',
+		'data-plantuml-kind',
+		'data-plantuml-canvas',
+		'data-plantuml-copy',
+		'data-plantuml-copy-slot',
+		'data-plantuml-bar',
+		'data-plantuml-loading',
+		'data-graphviz-id',
+		'data-graphviz-code',
+		'data-graphviz-kind',
+		'data-graphviz-canvas',
+		'data-graphviz-copy',
+		'data-graphviz-copy-slot',
+		'data-graphviz-bar',
+		'data-graphviz-loading',
+		'data-diagram-content',
+		'data-diagram-engine',
+		'hidden',
 	],
 	ALLOW_DATA_ATTR: false,
 	ALLOW_UNKNOWN_PROTOCOLS: false,
@@ -541,9 +586,9 @@ export function encodeContentUrl(pathFromContentRoot: string): string {
 
 /**
  * 资源 URL 改写：
- * - /files/... → /content/...（starlight 遗留路径）
- * - 媒体标签 src 中的 /f/... 若像原始文件路径 → /content/...
- * - **Markdown 链接 /f/... 保持为预览页路由**（不要改成 raw）
+ * - /files/... → /content/...（遗留）
+ * - 旧 /f/... 预览 → /pages/...（与 content 相对路径对齐）
+ * - 媒体 ![](/f/...) / ![](/pages/...) 无尾斜杠 → /content/...
  */
 export function rewriteProjectAssetUrls(text: string): string {
 	let s = String(text ?? '');
@@ -553,22 +598,29 @@ export function rewriteProjectAssetUrls(text: string): string {
 	});
 	s = s.replace(/\]\(\/files\/([^)]+)\)/g, (_m, p: string) => `](${encodeContentUrl(p)})`);
 
-	// HTML 属性 src/href="/f/path.ext" → 对真实媒体文件用 /content/；保留尾斜杠预览路径
-	s = s.replace(
-		/(src|href)=(["'])\/f\/([^"']+)\2/gi,
-		(_m, attr: string, quote: string, p: string) => {
-			const clean = String(p).replace(/\/+$/, '');
-			// 有预览页语义的链接（带尾斜杠或 .md）仍可指向 /f/；媒体直接用 content
-			if (/\.(md|mdx)(\/)?$/i.test(clean)) {
-				return `${attr}=${quote}/f/${p}${quote}`;
-			}
+	// 旧预览前缀 /f/ → /pages/
+	s = s.replace(/(src|href)=(["'])\/f\/([^"']+)\2/gi, (_m, attr: string, quote: string, p: string) => {
+		const raw = String(p);
+		const clean = raw.replace(/\/+$/, '');
+		// 图片/媒体直接用 content 原件
+		if (
+			attr.toLowerCase() === 'src' ||
+			/\.(png|jpe?g|gif|webp|svg|bmp|mp4|webm|mp3|wav|pdf)(\/)?$/i.test(clean)
+		) {
 			return `${attr}=${quote}${encodeContentUrl(decodeURIComponent(clean))}${quote}`;
-		},
-	);
+		}
+		const trail = raw.endsWith('/') ? '/' : '';
+		return `${attr}=${quote}/pages/${clean}${trail}${quote}`;
+	});
+	s = s.replace(/\]\(\/f\/([^)]+)\)/g, (_m, p: string) => {
+		const raw = String(p);
+		const clean = raw.replace(/\/+$/, '');
+		const trail = raw.endsWith('/') || !/\.[a-z0-9]+$/i.test(clean) ? '/' : '/';
+		return `](/pages/${clean}${trail})`;
+	});
 
-	// Markdown 链接 [x](/f/...) 保持 /f/（全页预览路由）
-	// 仅当目标是明确的 raw 资源且无尾斜杠、且写在 img 语法里时改写
-	s = s.replace(/!\[([^\]]*)\]\(\/f\/([^)]+)\)/g, (_m, alt: string, p: string) => {
+	// Markdown 图片：预览路径 → content 原件
+	s = s.replace(/!\[([^\]]*)\]\(\/(?:f|pages)\/([^)]+)\)/g, (_m, alt: string, p: string) => {
 		const clean = decodeURIComponent(String(p).replace(/\/+$/, ''));
 		return `![${alt}](${encodeContentUrl(clean)})`;
 	});
@@ -784,7 +836,7 @@ export function renderUnsupportedFileCard(opts: {
  * 路径与大小统一由顶部 breadcrumb 展示。
  *
  * @param opts.officePreviewUrl 若 Office 已有 preview.pdf，则渲染 PDF 阅读器
- * @param opts.excelCsvHtml 若 Excel 已导出 CSV，则渲染表格预览 HTML
+ * @param opts.diagramExportPreview 画布/导图源旁路导出图（§3.1）
  */
 export function wrapAsMarkdown(
 	file: TreeFile,
@@ -792,13 +844,13 @@ export function wrapAsMarkdown(
 	_opts?: {
 		bytes?: number;
 		officePreviewUrl?: string | null;
-		excelCsvHtml?: string | null;
+		diagramExportPreview?: DiagramExportPreview | null;
 	},
 ): string {
 	const title = file.name;
 	const mime = MIME[file.ext] || '';
 	const officePreviewUrl = _opts?.officePreviewUrl || null;
-	const excelCsvHtml = _opts?.excelCsvHtml || null;
+	const diagramExport = _opts?.diagramExportPreview || null;
 
 	switch (file.kind) {
 		case 'markdown': {
@@ -838,21 +890,14 @@ export function wrapAsMarkdown(
 				downloadName: title,
 			});
 		case 'text': {
-			// CSV 表 HTML 由 render-page 直接注入（opts 里不走本分支的 markdown）
-			const lang = file.ext || 'text';
+			// CSV / Mermaid 独立文件壳由 render-page 直接注入，不走本分支
+			const ext = (file.ext || '').toLowerCase().replace(/^\./, '');
 			const body = rawText ?? '';
+			const lang = ext || 'text';
 			return `\`\`\`${lang}\n${body}\n\`\`\`\n`;
 		}
 		default: {
 			const ext = (file.ext || '').toLowerCase().replace(/^\./, '');
-			// Excel：有导出 CSV 时用表格预览 HTML
-			if (
-				['xlsx', 'xls', 'ods'].includes(ext) &&
-				excelCsvHtml &&
-				!excelCsvHtml.includes('file-unsupported')
-			) {
-				return excelCsvHtml;
-			}
 			// Word/PPT：有 preview.pdf → PDF.js
 			const officePdfLike = [
 				'docx',
@@ -872,10 +917,27 @@ export function wrapAsMarkdown(
 					officeSrc: file.url,
 				});
 			}
+			// draw.io / Excalidraw / XMind / mm：有导出图则图片预览
+			if (diagramExport) {
+				return renderDiagramExportPreviewHtml({
+					sourceName: file.name,
+					sourceUrl: file.url,
+					sourceExt: ext,
+					preview: diagramExport,
+					bytes: _opts?.bytes,
+				});
+			}
+			const diagramHint =
+				ext === 'drawio' || ext === 'dio' || ext === 'excalidraw'
+					? '约定：导出 SVG（优先）到 _Res_<源文件名>/preview.svg 或同目录同名 .svg 后可在此预览。源文件请用桌面工具编辑。'
+					: ext === 'xmind' || ext === 'mm'
+						? '约定：导出 PNG（优先）到 _Res_<源文件名>/preview.png 或同目录同名 .png 后可在此预览。文内导图可用 Mermaid mindmap。'
+						: undefined;
 			// 其余（含未导出 CSV 的 Excel、缺 PDF 的 Word/PPT、zip…）：统一下载卡
 			return renderUnsupportedFileCard({
 				name: file.name,
 				url: file.url,
+				hint: diagramHint,
 				ext,
 				bytes: _opts?.bytes,
 			});
@@ -937,13 +999,21 @@ const CODE_ICON_CHECK = `<svg class="webmd-code__icon webmd-code__icon--check" w
 export function enhanceCodeBlocksHtml(html: string): string {
 	return html.replace(
 		/<pre(\s[^>]*)?>([\s\S]*?)<\/pre>/gi,
-		(_full, attrs: string | undefined, inner: string) => {
+		(full, attrs: string | undefined, inner: string) => {
+			const preAttrs = attrs ?? '';
+			// 已是图示/表格复制源或已在 webmd-code 内的预埋 pre：勿再套类型栏
+			if (
+				/\bmermaid-copy-source\b/i.test(preAttrs) ||
+				/\bsheet-copy-source\b/i.test(preAttrs) ||
+				/\bhidden\b/i.test(preAttrs)
+			) {
+				return full;
+			}
 			const langMatch = String(inner).match(
 				/class="[^"]*(?:language|lang)-([a-z0-9_+-]+)/i,
 			);
 			const lang = (langMatch?.[1] || 'text').toLowerCase();
 			const label = LANG_LABEL[lang] || (lang === 'text' ? 'Code' : lang.toUpperCase());
-			const preAttrs = attrs ?? '';
 			return (
 				`<div class="webmd-code">` +
 				`<div class="webmd-code__bar" role="toolbar" aria-label="代码：${label}">` +

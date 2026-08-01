@@ -1,0 +1,11 @@
+@startuml
+actor User
+participant "WebMD" as W
+participant "PlantUML core" as P
+
+User -> W: 打开 sample.puml
+W -> W: renderPlantumlShell
+W -> P: renderToString(lines)
+P --> W: SVG
+W --> User: 类型栏 + 内容区出图
+@enduml

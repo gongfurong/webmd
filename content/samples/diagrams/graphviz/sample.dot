@@ -1,0 +1,9 @@
+digraph WebMD {
+  rankdir=LR;
+  node [shape=box, style=rounded];
+  A [label="content/*.dot"];
+  B [label="shell\n类型栏+内容区"];
+  C [label="@hpcc-js/wasm\nGraphviz"];
+  D [label="SVG"];
+  A -> B -> C -> D;
+}

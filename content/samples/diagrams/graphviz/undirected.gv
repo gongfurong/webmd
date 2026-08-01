@@ -1,0 +1,6 @@
+graph G {
+  rankdir=LR;
+  node [shape=circle];
+  a -- b -- c;
+  b -- d;
+}

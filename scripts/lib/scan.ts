@@ -46,6 +46,16 @@ const TEXT_EXT = new Set([
 	'.html',
 	'.sh',
 	'.log',
+	// Mermaid 独立源文件 → 文件页同文内引擎渲染
+	'.mmd',
+	'.mermaid',
+	// PlantUML 独立源文件 → 同 shell/bind（@plantuml/core 客户端）
+	'.puml',
+	'.plantuml',
+	'.pu',
+	// Graphviz DOT
+	'.dot',
+	'.gv',
 ]);
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp']);
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.ogv', '.mov']);
@@ -75,25 +85,35 @@ function kindOf(ext: string): FileKind {
 }
 
 /**
- * 站点页面路径
- * - 主页 / 是站级 index.html，不由 content 文件映射
- * - Markdown：去扩展名，如 index.md → /index/ ；notes/hello.md → /notes/hello/
- * - 其它：/f/...
+ * 预览页统一挂在 `/pages/` 下，相对路径与 content 一致，便于对照维护。
+ * - 主页 `/` → dist/index.html（站级，不在 pages 内）
+ * - Markdown：去扩展名 → /pages/notes/hello/ ← content/notes/hello.md
+ * - 其它文件：保留扩展名 → /pages/image/1.jpg/ ← content/image/1.jpg
+ * - 原件始终在 /content/...（dist/content 拷贝）
  */
+export const PAGES_ROOT = 'pages';
+
 export function pageHref(file: TreeFile): string {
+	const segs = (rel: string) =>
+		[PAGES_ROOT, ...rel.split('/').filter(Boolean)]
+			.map(encodeURIComponent)
+			.join('/');
 	if (file.kind === 'markdown') {
 		const noExt = file.path.replace(/\.(md|mdx)$/i, '');
-		return '/' + noExt.split('/').map(encodeURIComponent).join('/') + '/';
+		return '/' + segs(noExt) + '/';
 	}
-	return '/f/' + file.path.split('/').map(encodeURIComponent).join('/') + '/';
+	return '/' + segs(file.path) + '/';
 }
 
-/** 磁盘输出相对 dist 的目录（无尾斜杠文件名）；主页 dist/index.html 单独写出 */
+/** 磁盘输出相对 dist 的目录（无尾斜杠）；主页 dist/index.html 单独写出 */
 export function pageOutDir(file: TreeFile): string {
 	if (file.kind === 'markdown') {
-		return file.path.replace(/\.(md|mdx)$/i, '');
+		return path.posix.join(
+			PAGES_ROOT,
+			file.path.replace(/\.(md|mdx)$/i, ''),
+		);
 	}
-	return path.posix.join('f', file.path);
+	return path.posix.join(PAGES_ROOT, file.path);
 }
 
 function walk(dir: string, base = ''): TreeNode[] {

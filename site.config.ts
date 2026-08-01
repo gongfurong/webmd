@@ -24,7 +24,7 @@ const siteConfig = {
 	features: {
 		toc: true,
 		codeCopy: true,
-		/** 构建后 Pagefind 站内搜索 */
+		/** 站内搜索（MiniSearch + search-index.json） */
 		search: true,
 	},
 } as const;

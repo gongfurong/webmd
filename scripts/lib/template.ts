@@ -265,6 +265,9 @@ function formatBytesForCrumb(n: number): string {
 const ICON_HOME = `<svg class="wiki-breadcrumb__home-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
 /** 复制路径：链接图标（比双页复制更贴「路径/URL」） */
 const ICON_DOWNLOAD = `<svg class="wiki-breadcrumb__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>`;
+/** 中栏全屏 / 退出全屏（通用，非某类内容专属） */
+const ICON_PANE_FULLSCREEN = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--fs-enter" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
+const ICON_PANE_EXIT_FULLSCREEN = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--fs-exit" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>`;
 /** 回到顶部 / 滚到底部 */
 const ICON_TO_TOP = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--to-top" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14"/><path d="m5 14 7-7 7 7"/><path d="M12 7v12"/></svg>`;
 const ICON_TO_BOTTOM = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--to-bottom" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v12"/><path d="m5 10 7 7 7-7"/><path d="M5 19h14"/></svg>`;
@@ -318,6 +321,11 @@ const ICON_CONTENT_FIXED = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__i
 function renderContentWidthBtn(): string {
 	// 注意：data-content-width-toggle 不可与 html[data-content-width] 同名，否则 closest 会点哪都命中
 	return `<button type="button" class="wiki-breadcrumb__icon-btn wiki-breadcrumb__width-btn" data-content-width-toggle title="固定宽度居中（当前为铺满）" aria-label="固定宽度居中" aria-pressed="false">${ICON_CONTENT_FILL}${ICON_CONTENT_FIXED}</button>`;
+}
+
+/** 路径栏：中栏全屏（通用，全屏 data-wiki-main） */
+function renderCenterFullscreenBtn(): string {
+	return `<button type="button" class="wiki-breadcrumb__icon-btn wiki-breadcrumb__fs-btn" data-center-fullscreen title="中栏全屏" aria-label="中栏全屏" aria-pressed="false">${ICON_PANE_FULLSCREEN}${ICON_PANE_EXIT_FULLSCREEN}</button>`;
 }
 /** 主题：太阳 / 月亮 两态切换（对齐 Docusaurus 风格） */
 const ICON_THEME_SUN = `<svg class="theme-toggle__icon theme-toggle__icon--sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
@@ -396,6 +404,7 @@ export function renderBreadcrumb(
 	const actions = `<div class="wiki-breadcrumb__actions">
 		<button type="button" class="wiki-breadcrumb__icon-btn wiki-breadcrumb__url-btn" data-path-reveal-btn title="查看完整 URL" aria-label="查看完整 URL" aria-haspopup="dialog"><span class="wiki-breadcrumb__url-btn-label">URL</span></button>
 		${renderContentWidthBtn()}
+		${renderCenterFullscreenBtn()}
 		<a class="wiki-breadcrumb__icon-btn" href="${downloadHref}" download="${downloadName}" title="下载文件" aria-label="下载文件">${ICON_DOWNLOAD}</a>
 		${renderScrollEdgeBtns('main')}
 	</div>`;
@@ -606,7 +615,7 @@ export function renderHomePage(m: {
 			<span class="wiki-breadcrumb__current" aria-current="page">主页</span>
 		</div>
 		${desc ? `<span class="wiki-breadcrumb__meta"><span class="wiki-breadcrumb__chip">${esc(desc)}</span></span>` : ''}
-		<div class="wiki-breadcrumb__actions">${renderContentWidthBtn()}</div>
+		<div class="wiki-breadcrumb__actions">${renderContentWidthBtn()}${renderCenterFullscreenBtn()}</div>
 	</nav>`;
 	const body = `<div class="home-hero">
   <h1 class="home-hero__title">${esc(m.siteTitle)}</h1>
@@ -667,7 +676,7 @@ export function render404Page(m: {
 		treeHtml: m.treeHtml,
 		tocHtml: '<div class="toc-empty">—</div>',
 		inlineTocHtml: '',
-		breadcrumbHtml: `<nav class="wiki-breadcrumb" aria-label="文件路径"><div class="wiki-breadcrumb__trail"><a class="wiki-breadcrumb__home" href="/" title="主页" aria-label="主页">${ICON_HOME}</a><span class="wiki-breadcrumb__sep" aria-hidden="true">/</span><span class="wiki-breadcrumb__current" aria-current="page">404</span></div><div class="wiki-breadcrumb__actions">${renderContentWidthBtn()}</div></nav>`,
+		breadcrumbHtml: `<nav class="wiki-breadcrumb" aria-label="文件路径"><div class="wiki-breadcrumb__trail"><a class="wiki-breadcrumb__home" href="/" title="主页" aria-label="主页">${ICON_HOME}</a><span class="wiki-breadcrumb__sep" aria-hidden="true">/</span><span class="wiki-breadcrumb__current" aria-current="page">404</span></div><div class="wiki-breadcrumb__actions">${renderContentWidthBtn()}${renderCenterFullscreenBtn()}</div></nav>`,
 		bodyHtml: `<h1>页面未找到</h1><p>链接可能已失效，或文件尚未放入 <code>content/</code>。</p><p><a href="/">返回主页</a></p>`,
 		pagerHtml: '',
 		assetJs: m.assetJs,

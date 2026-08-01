@@ -35,9 +35,27 @@ import {
 	isCsvFile,
 	isSpreadsheetFile,
 	renderCsvDocumentHtml,
-	renderExcelCsvPreviewHtml,
-	resolveExcelCsvSheets,
+	renderExcelSheetApp,
 } from './spreadsheet-preview';
+import {
+	enhanceMermaidCopyButtons,
+	isMermaidFile,
+	renderMermaidShell,
+} from './mermaid-preview';
+import {
+	enhancePlantumlCopyButtons,
+	isPlantumlFile,
+	renderPlantumlShell,
+} from './plantuml-preview';
+import {
+	enhanceGraphvizCopyButtons,
+	isGraphvizFile,
+	renderGraphvizShell,
+} from './graphviz-preview';
+import {
+	isDiagramExportSourceFile,
+	resolveDiagramExportPreview,
+} from './diagram-export-preview';
 
 export type RenderCtx = {
 	contentDir: string;
@@ -90,41 +108,66 @@ export function renderFilePage(
 		isOfficePdfConvertible(file)
 			? resolveOfficePreview(ctx.contentDir, file.path)
 			: null;
-	const excelSheets = isSpreadsheetFile(file)
-		? resolveExcelCsvSheets(ctx.contentDir, file.path)
-		: [];
-	const excelCsvHtml =
-		isSpreadsheetFile(file) && excelSheets.length
-			? renderExcelCsvPreviewHtml(excelSheets, {
-					downloadUrl: file.url,
-					downloadName: file.name,
-				})
-			: null;
-	const csvTableHtml =
-		isCsvFile(file)
-			? renderCsvDocumentHtml(readFileRaw(ctx.contentDir, file), {
+	// 表格：仅输出 sheet-app 壳，数据浏览器 fetch 原文件（SheetJS + x-spreadsheet）
+	const sheetAppHtml = isSpreadsheetFile(file)
+		? renderExcelSheetApp({ src: file.url, name: file.name })
+		: isCsvFile(file)
+			? renderCsvDocumentHtml('', {
 					title: file.name,
+					fileUrl: file.url,
 				})
 			: null;
+	// Mermaid / PlantUML 独立文件：与文内同壳，不过假 MD
+	const mermaidAppHtml = isMermaidFile(file)
+		? renderMermaidShell({
+				source: readFileRaw(ctx.contentDir, file),
+				id: `file-${file.path.replace(/[^\w.-]+/g, '-')}`,
+			})
+		: null;
+	const plantumlAppHtml = isPlantumlFile(file)
+		? renderPlantumlShell({
+				source: readFileRaw(ctx.contentDir, file),
+				id: `file-${file.path.replace(/[^\w.-]+/g, '-')}`,
+			})
+		: null;
+	const graphvizAppHtml = isGraphvizFile(file)
+		? renderGraphvizShell({
+				source: readFileRaw(ctx.contentDir, file),
+				id: `file-${file.path.replace(/[^\w.-]+/g, '-')}`,
+			})
+		: null;
+
+	const diagramExportPrev = isDiagramExportSourceFile(file)
+		? resolveDiagramExportPreview(ctx.contentDir, file.path)
+		: null;
 
 	const source = wrapAsMarkdown(file, readFileRaw(ctx.contentDir, file), {
 		bytes,
 		officePreviewUrl: officePrev?.url ?? null,
-		excelCsvHtml,
+		diagramExportPreview: diagramExportPrev,
 	});
-	// 媒体/PDF/Office/表格预览为完整 HTML，勿再过 marked
+	// 媒体/PDF/Office/表格/独立图示预览为完整 HTML，勿再过 marked
 	const isRawHtml =
 		file.kind === 'pdf' ||
 		file.kind === 'image' ||
 		file.kind === 'video' ||
 		file.kind === 'audio' ||
 		file.kind === 'file' ||
-		Boolean(csvTableHtml);
-	let bodyHtml = csvTableHtml
-		? csvTableHtml
-		: isRawHtml
-			? source
-			: md.render(source);
+		Boolean(sheetAppHtml) ||
+		Boolean(mermaidAppHtml) ||
+		Boolean(plantumlAppHtml) ||
+		Boolean(graphvizAppHtml);
+	let bodyHtml = sheetAppHtml
+		? sheetAppHtml
+		: mermaidAppHtml
+			? mermaidAppHtml
+			: plantumlAppHtml
+				? plantumlAppHtml
+				: graphvizAppHtml
+					? graphvizAppHtml
+					: isRawHtml
+						? source
+						: md.render(source);
 
 	// 全页视频文件：绑定 _Res_* 封面
 	if (file.kind === 'video') {
@@ -165,6 +208,12 @@ export function renderFilePage(
 	if (site.features.codeCopy && !isRawHtml) {
 		bodyHtml = enhanceCodeBlocksHtml(bodyHtml);
 	}
+	// 图示复制钮：必须在 MD 消毒之后注入（button 在消毒前会被转义成可见文本）
+	if (site.features.codeCopy) {
+		bodyHtml = enhanceMermaidCopyButtons(bodyHtml);
+		bodyHtml = enhancePlantumlCopyButtons(bodyHtml);
+		bodyHtml = enhanceGraphvizCopyButtons(bodyHtml);
+	}
 	const headings = isRawHtml ? [] : extractHeadings(bodyHtml);
 
 	/*
@@ -181,14 +230,30 @@ export function renderFilePage(
 		if (file.kind === 'video') return `${filePage} is-media-page is-video-page`;
 		if (file.kind === 'audio') return `${filePage} is-media-page is-audio-page`;
 		if (file.kind === 'text') {
-			if (isCsvFile(file)) return `${filePage} is-text-page is-sheet-page`;
+			if (isCsvFile(file))
+				return `${filePage} is-text-page is-sheet-page is-sheet-app-page is-xs-page`;
+			// TreeFile.ext 无点；独立图示页：文件页 + mermaid 卡，勿挂 is-markdown-page（避免 MD 版心规则搅布局）
+			const ext = (file.ext || '').toLowerCase().replace(/^\./, '');
+			if (ext === 'mmd' || ext === 'mermaid') {
+				return `${filePage} is-text-page is-mermaid-page`;
+			}
+			if (ext === 'puml' || ext === 'plantuml' || ext === 'pu') {
+				return `${filePage} is-text-page is-plantuml-page`;
+			}
+			if (ext === 'dot' || ext === 'gv' || ext === 'graphviz') {
+				return `${filePage} is-text-page is-graphviz-page`;
+			}
 			return `${filePage} is-text-page is-source-page`;
 		}
-		if (isSpreadsheetFile(file) && excelSheets.length) {
-			return `${filePage} is-sheet-page is-office-page`;
+		if (isSpreadsheetFile(file)) {
+			return `${filePage} is-sheet-page is-office-page is-sheet-app-page is-xs-page`;
 		}
 		if (officePrev) {
 			return `${filePage} is-pdf-page is-media-page is-office-page`;
+		}
+		// 画布/导图源 + 旁路导出图：与纯图片页相同布局（正文仅 media-stage）
+		if (diagramExportPrev) {
+			return `${filePage} is-media-page is-image-page`;
 		}
 		return `${filePage} is-binary-page`;
 	})();
@@ -241,11 +306,30 @@ function normalizeUrlPath(pathname: string): string {
 
 /** 文件 → 逻辑 URL 路径（已 decode，无尾斜杠）。主页 / 不映射到任何 content 文件 */
 function fileLogicalPath(file: TreeFile): string {
-	if (file.kind === 'markdown') {
-		const noExt = file.path.replace(/\.(md|mdx)$/i, '');
-		return normalizeUrlPath('/' + noExt);
+	// 与 pageHref 一致（decode 后比）
+	return normalizeUrlPath(pageHref(file));
+}
+
+/**
+ * 旧链接兼容：生成若干等价 want，便于 /f/... 与「无 pages 前缀」仍能打开。
+ */
+function urlMatchCandidates(pathname: string): string[] {
+	const want = normalizeUrlPath(pathname);
+	const out = new Set<string>([want]);
+	// /f/a/b → /pages/a/b
+	if (want === '/f' || want.startsWith('/f/')) {
+		const rest = want === '/f' ? '' : want.slice(3);
+		out.add(normalizeUrlPath('/pages/' + rest));
 	}
-	return normalizeUrlPath('/f/' + file.path);
+	// /notes/hello → /pages/notes/hello（旧 md 直链）
+	if (want !== '/' && !want.startsWith('/pages/') && !want.startsWith('/content/')) {
+		out.add(normalizeUrlPath('/pages' + want));
+	}
+	// /pages/f/a → /pages/a（误写）
+	if (want.startsWith('/pages/f/')) {
+		out.add(normalizeUrlPath('/pages/' + want.slice('/pages/f/'.length)));
+	}
+	return [...out];
 }
 
 /** 是否站级主页 URL（/ 或空） */
@@ -273,17 +357,22 @@ export function renderSiteHome(
 
 /** URL pathname → TreeFile（不含 / 主页） */
 export function matchFileByUrl(pathname: string, files: TreeFile[]): TreeFile | null {
-	const want = normalizeUrlPath(pathname);
+	const candidates = urlMatchCandidates(pathname);
 
 	// 站级主页不由 content 文件承担
-	if (want === '/') return null;
+	if (candidates.length === 1 && candidates[0] === '/') return null;
+	if (candidates.every((c) => c === '/' || c === '')) return null;
 
-	for (const f of files) {
-		if (fileLogicalPath(f) === want) return f;
-		// 兼容：直接按 content 相对路径访问 /notes/hello.md
-		if (normalizeUrlPath('/' + f.path) === want) return f;
-		// 兼容：pageHref 编码串与 want 在 normalize 后相等（双重保险）
-		if (normalizeUrlPath(pageHref(f)) === want) return f;
+	for (const want of candidates) {
+		if (want === '/' || want === '') continue;
+		for (const f of files) {
+			if (fileLogicalPath(f) === want) return f;
+			// 兼容：直接按 content 相对路径访问 /notes/hello.md 或 /content/...
+			if (normalizeUrlPath('/' + f.path) === want) return f;
+			if (normalizeUrlPath('/content/' + f.path) === want) return f;
+			// 兼容：pageHref 编码串
+			if (normalizeUrlPath(pageHref(f)) === want) return f;
+		}
 	}
 
 	return null;

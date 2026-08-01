@@ -283,6 +283,13 @@ export default defineConfig({
 		port,
 		strictPort: false,
 	},
+	// SheetJS 仅 Excel 页动态 import，预构建避免 dev 解析怪异
+	optimizeDeps: {
+		include: ['xlsx'],
+		// PlantUML TeaVM 体积大且依赖经典脚本 viz-global；按需动态 import，勿预构建
+		exclude: ['@plantuml/core'],
+		// x-data-spreadsheet 用 dist UMD（window.x_spreadsheet），勿强制 prebundle src
+	},
 	build: {
 		outDir: 'dist',
 		emptyOutDir: true,

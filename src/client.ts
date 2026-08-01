@@ -6,10 +6,13 @@ import site from '../site.config';
 import './style.css';
 import 'katex/dist/katex.min.css';
 import { mountSearch } from './search/ui';
-import mermaid from 'mermaid';
 import renderMathInElement from 'katex/contrib/auto-render';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { bindExcelViewers } from './excel-viewer';
+import { renderMermaidBlocks } from './previews/mermaid';
+import { renderPlantumlBlocks } from './previews/plantuml';
+import { renderGraphvizBlocks } from './previews/graphviz';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -108,8 +111,10 @@ function applyTheme(theme: ThemeMode) {
 		btn.title = isDark ? '切换浅色模式' : '切换深色模式';
 		btn.setAttribute('aria-label', isDark ? '切换浅色模式' : '切换深色模式');
 	});
-	// Mermaid 图主题跟站点：切换后强制重绘
+	// 图示主题跟站点：切换后强制重绘
 	void renderMermaidBlocks({ reset: true });
+	void renderPlantumlBlocks({ reset: true });
+	void renderGraphvizBlocks({ reset: true });
 }
 
 function toggleTheme() {
@@ -1186,7 +1191,7 @@ function captureMainScrollAnchor(pane: HTMLElement): {
 		pane.querySelector('#content') ||
 		pane;
 	const nodes = content.querySelectorAll(
-		'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,table,img,video,audio,.is-media-line,.webmd-code,.mermaid',
+		'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,table,img,video,audio,.is-media-line,.webmd-code,.webmd-diagram,.mermaid,.plantuml-canvas,.graphviz-canvas',
 	);
 	for (const el of nodes) {
 		const r = el.getBoundingClientRect();
@@ -2157,19 +2162,110 @@ function bindFocusRead() {
 	});
 }
 
+/** 中栏全屏按钮态（不改 wiki-main class，布局只靠 :fullscreen） */
+function syncCenterFullscreenButtons(on: boolean): void {
+	document.querySelectorAll<HTMLButtonElement>('[data-center-fullscreen]').forEach((btn) => {
+		btn.classList.toggle('is-active', on);
+		btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+		btn.title = on ? '退出中栏全屏' : '中栏全屏';
+		btn.setAttribute('aria-label', on ? '退出中栏全屏' : '中栏全屏');
+	});
+}
+
+/**
+ * 中栏（data-wiki-main）全屏：路径栏图标，通用所有内容。
+ * 注意：不得改 markdown-body / content-width / 非全屏时的 center-scroll 规则。
+ */
+function bindCenterFullscreen(): void {
+	document.addEventListener('click', (ev) => {
+		const btn = (ev.target as HTMLElement).closest(
+			'[data-center-fullscreen]',
+		) as HTMLButtonElement | null;
+		if (!btn) return;
+		ev.preventDefault();
+		ev.stopPropagation();
+		const main = document.querySelector<HTMLElement>('[data-wiki-main]');
+		if (!main) return;
+		void (async () => {
+			try {
+				if (document.fullscreenElement === main) {
+					await document.exitFullscreen();
+				} else if (document.fullscreenElement) {
+					await document.exitFullscreen();
+					await main.requestFullscreen();
+				} else {
+					await main.requestFullscreen();
+				}
+			} catch {
+				/* 浏览器拒绝全屏时静默 */
+			}
+		})();
+	});
+	document.addEventListener('fullscreenchange', () => {
+		const main = document.querySelector<HTMLElement>('[data-wiki-main]');
+		const on = Boolean(main && document.fullscreenElement === main);
+		syncCenterFullscreenButtons(on);
+		// 仅表格宿主清掉锁定尺寸；不碰其它内容布局
+		if (main) {
+			main
+				.querySelectorAll<HTMLElement>('[data-xs-host]')
+				.forEach((host) => {
+					host.style.removeProperty('width');
+					host.style.removeProperty('max-width');
+					host.style.removeProperty('height');
+					host.style.removeProperty('min-height');
+				});
+		}
+		// 轻触 resize：让表格 / sticky 等重算；不改 content-width dataset
+		requestAnimationFrame(() => {
+			window.dispatchEvent(new Event('resize'));
+		});
+	});
+}
+
 function bindCodeCopy() {
 	document.querySelectorAll<HTMLButtonElement>('.webmd-code__copy').forEach((btn) => {
 		if (btn.dataset.bound) return;
 		btn.dataset.bound = '1';
 		btn.addEventListener('click', async () => {
 			const root = btn.closest('.webmd-code');
-			// 代码块：pre 可见源码；表格：.sheet-copy-source 隐藏的原始 CSV
-			const pre =
-				root?.querySelector<HTMLElement>('pre.sheet-copy-source') ||
-				root?.querySelector('pre');
+			const sheetApp = btn.closest<HTMLElement>('[data-sheet-app]');
+			const diagramApp = btn.closest<HTMLElement>(
+				'.webmd-diagram[data-diagram-engine="mermaid"], .webmd-diagram[data-diagram-engine="plantuml"], .webmd-diagram[data-diagram-engine="graphviz"]',
+			);
+			// 表格应用：只复制当前 sheet 的 CSV
+			let pre: HTMLElement | null | undefined;
+			if (sheetApp) {
+				const i = sheetApp.dataset.activeSheet || '0';
+				pre =
+					sheetApp.querySelector<HTMLElement>(
+						`pre.sheet-copy-source[data-sheet-copy="${i}"]`,
+					) ||
+					sheetApp.querySelector<HTMLElement>(
+						`.sheet-panel.is-active pre.sheet-copy-source`,
+					);
+			} else if (diagramApp) {
+				// 图示：复制 DSL 源码（隐藏 pre）
+				pre =
+					diagramApp.querySelector<HTMLElement>('pre.mermaid-copy-source') ||
+					diagramApp.querySelector<HTMLElement>('pre.plantuml-copy-source') ||
+					diagramApp.querySelector<HTMLElement>('pre.graphviz-copy-source');
+			} else {
+				// 代码块：pre 可见源码；旧 sheet-block
+				pre =
+					root?.querySelector<HTMLElement>('pre.sheet-copy-source') ||
+					root?.querySelector('pre');
+			}
 			const text = pre?.textContent || '';
-			const isSheet = Boolean(root?.classList.contains('sheet-block'));
-			const labelCopy = isSheet ? '复制 CSV' : '复制代码';
+			const isSheet = Boolean(
+				sheetApp || root?.classList.contains('sheet-block'),
+			);
+			const isDiagram = Boolean(diagramApp);
+			const labelCopy = isSheet
+				? '复制当前表 CSV'
+				: isDiagram
+					? '复制源码'
+					: '复制代码';
 			const reset = () => {
 				btn.classList.remove('is-copied', 'is-failed');
 				btn.title = labelCopy;
@@ -2193,64 +2289,7 @@ function bindCodeCopy() {
 	});
 }
 
-/* ========== Mermaid：图主题跟随站点 light/dark（与 MD 正文一致） ========== */
-let mermaidTheme: 'default' | 'dark' | null = null;
-
-function siteIsDark(): boolean {
-	return document.documentElement.dataset.theme === 'dark';
-}
-
-/** 按当前站点主题初始化/重配 mermaid（白→default，黑→dark） */
-function configureMermaidForSiteTheme() {
-	const theme = siteIsDark() ? 'dark' : 'default';
-	if (mermaidTheme === theme) return;
-	mermaid.initialize({
-		startOnLoad: false,
-		theme,
-		securityLevel: 'strict',
-		fontFamily:
-			'-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif',
-	});
-	mermaidTheme = theme;
-}
-
-async function renderMermaidBlocks(opts?: { reset?: boolean }) {
-	const root = document.getElementById('content') || document;
-	const elements = Array.from(root.querySelectorAll<HTMLElement>('.mermaid'));
-	if (!elements.length) return;
-
-	const themeChanged =
-		(siteIsDark() && mermaidTheme !== 'dark') ||
-		(!siteIsDark() && mermaidTheme !== 'default');
-	const force = Boolean(opts?.reset || themeChanged);
-	configureMermaidForSiteTheme();
-
-	const toRender: HTMLElement[] = [];
-	for (const el of elements) {
-		if (!force && el.querySelector('svg')) continue;
-		let src = '';
-		const encoded = el.getAttribute('data-mermaid-code');
-		if (encoded) {
-			try {
-				src = decodeURIComponent(encoded);
-			} catch {
-				src = encoded;
-			}
-		} else if (!el.querySelector('svg')) {
-			src = el.textContent || '';
-		}
-		if (!src.trim()) continue;
-		el.removeAttribute('data-processed');
-		el.textContent = src;
-		toRender.push(el);
-	}
-	if (!toRender.length) return;
-	try {
-		await mermaid.run({ nodes: toRender });
-	} catch (err) {
-		console.warn('[webmd] mermaid render failed', err);
-	}
-}
+/* Mermaid 图示 → src/previews/mermaid.ts（文内 flowchart/类图/时序/mindmap…） */
 
 /* ========== KaTeX（插件：GitHub 启发式 $ 配对 → auto-render） ========== */
 
@@ -2359,7 +2398,13 @@ function renderKatexBlocks() {
 				'code',
 				'option',
 			],
-			ignoredClasses: ['mermaid', 'webmd-code'],
+			ignoredClasses: [
+				'mermaid',
+				'webmd-code',
+				'plantuml-canvas',
+				'graphviz-canvas',
+				'webmd-diagram',
+			],
 		});
 	} catch (err) {
 		console.warn('[webmd] katex render failed', err);
@@ -2587,29 +2632,6 @@ function bindVideoPosters() {
  * PDF 预览 — PDF.js 自带阅读器（工具栏 + 左侧缩略图分页）
  * 不依赖系统 iframe PDF 壳（手机上常无控件/无侧栏）
  */
-/** Excel 多 sheet 页签（CSV 预览） */
-function bindSheetTabs() {
-	document.querySelectorAll<HTMLElement>('.sheet-preview[data-sheet-tabs]').forEach((root) => {
-		if (root.dataset.bound) return;
-		root.dataset.bound = '1';
-		root.querySelectorAll<HTMLElement>('[data-sheet-tab]').forEach((btn) => {
-			btn.addEventListener('click', () => {
-				const i = btn.getAttribute('data-sheet-tab');
-				root.querySelectorAll<HTMLElement>('[data-sheet-tab]').forEach((b) => {
-					const on = b === btn;
-					b.classList.toggle('is-active', on);
-					b.setAttribute('aria-selected', on ? 'true' : 'false');
-				});
-				root.querySelectorAll<HTMLElement>('[data-sheet-panel]').forEach((p) => {
-					const on = p.getAttribute('data-sheet-panel') === i;
-					p.classList.toggle('is-active', on);
-					p.hidden = !on;
-				});
-			});
-		});
-	});
-}
-
 function bindPdfEmbeds() {
 	document.querySelectorAll<HTMLElement>('.pdf-shell').forEach((root) => {
 		if (root.dataset.bound) return;
@@ -3071,14 +3093,16 @@ function rebindPageWidgets() {
 	bindBreadcrumbActions();
 	bindMiddleEllipsis();
 	bindPdfEmbeds();
-	bindSheetTabs();
+	bindExcelViewers();
 	bindVideoPosters();
 	bindTocSpy();
 	// 顶栏铺满按钮不在中间栏，软导航后只需同步状态
 	syncFocusReadButtons();
-	// 先公式再 mermaid（避免互相干扰）
+	// 先公式再图示（避免互相干扰）
 	renderKatexBlocks();
 	void renderMermaidBlocks();
+	void renderPlantumlBlocks();
+	void renderGraphvizBlocks();
 	// 固定模式：单独成行的图/视频/音频加 is-media-line
 	markStandaloneMediaLines();
 }
@@ -3140,8 +3164,11 @@ async function softNavigate(href: string, opts?: { push?: boolean }) {
 
 		// body 页面态 class（媒体页 is-image-page 等）——保留运行时类，勿整串覆盖
 		// （旧逻辑 document.body.className = next 会清掉抽屉态等，且偶发布局未刷新）
+		// 注意：is-sheet-app-page / is-xs-page 等必须算页面态！
+		// excel-viewer 会 classList.add，若不在此列表会被 keepRuntime 粘住，
+		// 离开表格后仍 overflow:hidden → 中栏滚动条消失。
 		const PAGE_STATE =
-			/^is-(?:text|home|image|video|audio|pdf|binary|media|source|file|markdown)-page$/;
+			/^is-(?:text|home|image|video|audio|pdf|binary|media|source|file|markdown|sheet|sheet-app|xs|office|xlsx)-page$/;
 		const nextBodyClass = doc.body.className || '';
 		const pageStates = nextBodyClass
 			.split(/\s+/)
@@ -3466,10 +3493,66 @@ function bindViewPersistence() {
 }
 
 /**
- * 手机端（尤其 iOS）常忽略 a[download]，PDF 还会直接打开预览。
- * 统一：fetch → Blob → 触发下载；支持分享时走系统「存储到文件」。
+ * 是否按「移动端」处理下载（分享 / 强制 Blob）。
+ * PC 桌面应走浏览器原生 a[download]，避免 Windows 等也弹 Web Share。
  */
-async function forceDownloadFile(url: string, filename: string): Promise<void> {
+function isMobileClient(): boolean {
+	// UA Client Hints（Chromium）：最可靠
+	const uaData = (
+		navigator as Navigator & {
+			userAgentData?: { mobile?: boolean };
+		}
+	).userAgentData;
+	if (uaData && typeof uaData.mobile === 'boolean') {
+		return uaData.mobile;
+	}
+
+	const ua = navigator.userAgent || '';
+	if (/Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua)) {
+		return true;
+	}
+	// iPadOS 13+ 常伪装成 Mac，但带多点触控
+	if (
+		/iPad/i.test(ua) ||
+		(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+	) {
+		return true;
+	}
+	return false;
+}
+
+/** 仅 PC：Blob URL + a[download]，不走 share */
+async function downloadViaBlobAnchor(url: string, filename: string): Promise<void> {
+	const name = (filename || 'download').replace(/[/\\?%*:|"<>]/g, '_').trim() || 'download';
+	let abs = url;
+	try {
+		abs = new URL(url, location.href).href;
+	} catch {
+		/* keep */
+	}
+	const res = await fetch(abs, { credentials: 'same-origin', cache: 'no-cache' });
+	if (!res.ok) throw new Error(`HTTP ${res.status}`);
+	const blob = await res.blob();
+	const objectUrl = URL.createObjectURL(blob);
+	try {
+		const a = document.createElement('a');
+		a.href = objectUrl;
+		a.download = name;
+		a.rel = 'noopener';
+		a.style.display = 'none';
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+	} finally {
+		window.setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+	}
+}
+
+/**
+ * 移动端：fetch → Blob → 优先 Web Share「存储到文件」；否则 Blob 锚点。
+ * （iOS 常忽略 a[download]，PDF 会直接打开预览）
+ */
+async function forceDownloadFileMobile(url: string, filename: string): Promise<void> {
 	const name = (filename || 'download').replace(/[/\\?%*:|"<>]/g, '_').trim() || 'download';
 	let abs = url;
 	try {
@@ -3500,7 +3583,7 @@ async function forceDownloadFile(url: string, filename: string): Promise<void> {
 		if (e instanceof Error && e.name === 'AbortError') return;
 	}
 
-	// 通用：Blob URL + download（Chrome/Android 较稳）
+	// 无 Share 时：Blob URL + download
 	const objectUrl = URL.createObjectURL(blob);
 	try {
 		const a = document.createElement('a');
@@ -3540,13 +3623,30 @@ function bindForceDownloads() {
 				decodeURIComponent(url.pathname.split('/').pop() || '') ||
 				'download';
 
+			/*
+			 * PC / 桌面：不拦截，交给浏览器原生 download（最稳、无 Share 面板）。
+			 * blob: 链在部分桌面浏览器上原生可能不稳 → 仍用 Blob 锚点强制一次。
+			 */
+			if (!isMobileClient()) {
+				if (href.startsWith('blob:') || url.protocol === 'blob:') {
+					ev.preventDefault();
+					ev.stopPropagation();
+					void downloadViaBlobAnchor(url.href, filename).catch(() => {
+						window.open(url.href, '_blank', 'noopener');
+					});
+				}
+				// 普通 /content/ 同源：放行原生 <a download>
+				return;
+			}
+
+			// —— 移动端：拦截 + 分享/强制下载 ——
 			ev.preventDefault();
 			ev.stopPropagation();
 
 			const prevLabel = a.getAttribute('aria-label') || '';
 			a.setAttribute('aria-busy', 'true');
 			a.classList.add('is-downloading');
-			void forceDownloadFile(url.href, filename)
+			void forceDownloadFileMobile(url.href, filename)
 				.catch(() => {
 					// 兜底：带 dl=1 让开发服尽量 attachment（静态托管仍可能预览）
 					const fallback = new URL(url.href);
@@ -3572,9 +3672,11 @@ bindBreadcrumbActions();
 bindForceDownloads();
 bindMiddleEllipsis();
 bindFocusRead();
+bindCenterFullscreen();
 bindFileTreeSort();
 bindTocSpy();
 bindPdfEmbeds();
+bindExcelViewers();
 bindVideoPosters();
 bindSmoothAnchors();
 bindSoftNav();
@@ -3584,8 +3686,12 @@ bindVisualViewportShell();
 restoreViewState();
 renderKatexBlocks();
 markStandaloneMediaLines();
-void renderMermaidBlocks().then(() => {
-	// Mermaid 渲染后高度变化，再恢复一次主栏滚动
+void Promise.all([
+	renderMermaidBlocks(),
+	renderPlantumlBlocks(),
+	renderGraphvizBlocks(),
+]).then(() => {
+	// 图示渲染后高度变化，再恢复一次主栏滚动
 	restoreViewState();
 	markStandaloneMediaLines();
 });

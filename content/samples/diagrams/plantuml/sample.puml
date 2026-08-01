@@ -1,0 +1,14 @@
+@startuml sample
+skinparam backgroundColor transparent
+actor User
+rectangle WebMD {
+  User --> (Open page)
+  (Open page) --> (Markdown)
+  (Open page) --> (PlantUML)
+  (Open page) --> (Tables / PDF)
+}
+note right of WebMD
+  PlantUML 样例
+  站内 @plantuml/core 客户端渲染
+end note
+@enduml

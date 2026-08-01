@@ -54,15 +54,6 @@ function findFfmpeg(): string | null {
 	return ffmpegPathCache;
 }
 
-/** @deprecated 请用 findSiblingResDir；保留导出以免外部引用断掉 */
-export function findVideoResDir(
-	contentDir: string,
-	relVideoPath: string,
-): { abs: string; relPosix: string; name: string } | null {
-	const r = findSiblingResDir(contentDir, relVideoPath);
-	return r ? { abs: r.abs, relPosix: r.relPosix, name: r.name } : null;
-}
-
 /** 封面文件是否可用：存在、是文件、非空、扩展名合法 */
 function isValidPosterFile(absPath: string): boolean {
 	try {

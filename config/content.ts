@@ -14,8 +14,10 @@ export default {
 	 *   `_Res_` + **完整文件名（含扩展名）**
 	 *   foo.mp4   → _Res_foo.mp4/poster.jpg
 	 *   bar.docx  → _Res_bar.docx/preview.pdf   （LibreOffice）
-	 *   a.xlsx    → _Res_a.xlsx/Sheet1.csv      （SheetJS，不依赖 LO）
-	 * 制作站点时生成；已有不覆盖。旧名 `_Res_foo` 仅兼容查找。
+	 *   a.docx   → _Res_a.docx/preview.pdf      （LibreOffice，可选）
+	 *   drawio   → _Res_*.drawio/preview.svg    （作者导出）
+	 * 制作站点时生成旁路；已有有效文件不覆盖。旧名 `_Res_foo` 仅兼容查找。
+	 * content 分类见 docs/content-model.md
 	 */
 	resDirPrefix: '_Res_',
 } as const;

@@ -1,0 +1,8 @@
+flowchart TB
+  subgraph page [独立文件页]
+    A[.mermaid 源文件] --> B[renderMermaidShell]
+    B --> C[HTML 壳 webmd-diagram]
+    C --> D[浏览器 mermaid.js]
+    D --> E[SVG 挂到画布]
+  end
+  note1[不经 Markdown / marked]

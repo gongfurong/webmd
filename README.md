@@ -1,98 +1,82 @@
 # WebMD
 
-个人 Wiki：**静态 HTML**（正文嵌入页面）+ **GitHub 风 Markdown** + 左树 / 右大纲 / 分页 / 搜索。
+个人 **静态 Wiki**：以 `content/` 为真相，GitHub 风 Markdown + 左树 / 右大纲 / 多格式预览 / 搜索。  
+技术栈轻量（Vite + 自研 SSG），**无** Astro/Starlight 运行时；可部署 Cloudflare Pages。
 
-对齐 `starlight-vanilla` 的使用体验，技术栈更轻：Vite + markdown-it + Pagefind，**无 Astro/Starlight 运行时**。
+---
 
-## 命令
+## 文档（人 & AI）
+
+完整体系在 **[docs/README.md](./docs/README.md)**：
+
+| 文档 | 用途 |
+|------|------|
+| [docs/product.md](./docs/product.md) | 产品、目标、原则、边界 |
+| [docs/requirements.md](./docs/requirements.md) | 需求与验收 |
+| [docs/features.md](./docs/features.md) | 功能行为 |
+| [docs/architecture.md](./docs/architecture.md) | 架构与 dist |
+| [docs/content-model.md](./docs/content-model.md) | content 分类与 `_Res_*` |
+| [docs/development.md](./docs/development.md) | 命令与扩展 |
+| [docs/conventions.md](./docs/conventions.md) | 规范（含 AI 协议） |
+| [docs/roadmap.md](./docs/roadmap.md) | 进度 |
+| [docs/deployment.md](./docs/deployment.md) | 部署 |
+
+---
+
+## 快速开始
 
 ```bash
 cd D:\AI\WebMD
 npm install
-npm run dev       # 开发（同管线按需渲染完整 HTML）
-npm run build     # 静态站点 → dist/ + Pagefind
-npm run preview   # 预览 dist
+npm run dev       # http://localhost:18087/
+npm run build     # 生成 dist/（可先删 dist 再 build）
+npm run preview
 ```
 
 | 命令 | 说明 |
 |------|------|
-| `dev` | `ensure-port` + Vite；页面 HTML 与生产同模板，正文已渲染 |
-| `build` | 类型检查 → 打 client → **SSG 全站 HTML** → Pagefind |
-| `preview` | 本地静态预览 `dist/`（接近 Cloudflare） |
+| `dev` | 开发；预览 `/pages/...`，原件 `/content/...` |
+| `build` | typecheck + Vite + SSG |
+| `scan` | 树 + 可选预生成旁路资源 |
+| `typecheck` | TypeScript |
 
-**端口**：`vite.config.ts` 默认 `18087`；本项目旧进程由 `ensure-port` 释放；其它占用则 Vite 换端口。
+---
 
-## 功能清单（对标 starlight-vanilla）
+## content 分类（摘要）
 
-| 能力 | WebMD |
-|------|--------|
-| 左文件夹树（含后缀，`_res` 不进树） | ✅ 仅展开当前路径 |
-| 中 GitHub 风 md（`github-markdown-css` + hljs） | ✅ 表/删除线/任务列表/锚点 |
-| 右大纲 + 滚动高亮 | ✅ |
-| 窄屏「本页大纲」+ 抽屉导航 | ✅ |
-| 多格式（图/音视频/pdf/文本/代码） | ✅ 嵌入页内 |
-| CSV / Excel | ✅ CSV→HTML 表；xlsx→CSV→HTML 表（scan/build/dev） |
-| Word / PPT | ✅ LibreOffice→PDF + PDF.js（有 LO 时预生成） |
-| PDF | ✅ PDF.js 阅读器 |
-| 路径面包屑 | ✅ |
-| 上一页 / 下一页 | ✅ |
-| 栏宽拖拽 + 收起展开 | ✅ localStorage |
-| 代码语言标题 + 复制 | ✅ |
-| 站内搜索 | ✅ Pagefind（build 后） |
-| 静态部署 / 404 | ✅ 全文在 HTML 中 |
-| `/f/...` 预览路由 vs `/content/...` 原始文件 | ✅ |
-
-## 配置
-
-| 文件 | 内容 |
-|------|------|
-| `vite.config.ts` | 端口、dev 中间件、client 打包 |
-| `site.config.ts` | 站点主入口 |
-| `config/layout.ts` | 栏宽、断点 |
-| `config/content.ts` | content / `_res` |
-| `config/markdown.ts` | markdown-it |
-
-## 目录
-
-```
-content/           # 内容真相
-src/client.ts      # 静态页交互
-src/style.css      # 布局 + GitHub md 微调
-scripts/build-site.ts
-scripts/scan-content.ts   # 制作站点公共入口（树 + 封面 + Excel→CSV + Office→PDF）
-scripts/lib/              # scan / markdown / spreadsheet-preview / office-preview / …
-dist/              # 发布产物
-docs/              # 项目设计文档（非访客 wiki）
+```text
+content/
+  knowledge/     # 主题知识（AI、量子、comfyui…）
+  notes/         # 短笔记
+  media/         # image | video | audio
+  samples/       # 格式验收样例
+  guides/ reference/ scripts/
+  index.md
 ```
 
-### 制作站点时预览资源（与 dev/build 同源）
+旁路：`_Res_<完整文件名>/`（不进树）。细则 → [content-model.md](./docs/content-model.md)。
 
-| 步骤 | 何时跑 | 产出 |
-|------|--------|------|
-| 扫盘写 `tree.json` | scan / dev 启动 / content 变更 / build | `public/tree.json` |
-| 视频封面 | 同上，有 **ffmpeg** | `_Res_*.mp4/poster.jpg` |
-| **Excel→CSV** | 同上，**不依赖** LibreOffice | `_Res_*.xlsx/*.csv` |
-| Word/PPT→PDF | 同上，有 **LibreOffice** | `_Res_*.docx/preview.pdf` 等 |
-| 页面渲染 | dev 请求 / SSG | CSV/xlsx→HTML 表；PDF/Office→PDF.js |
+---
 
-访客与线上静态托管**不需要**安装 LibreOffice / ffmpeg。
+## dist 分区
 
-## 部署 Cloudflare Pages
-
-详细说明见 **[docs/cloudflare-pages.md](./docs/cloudflare-pages.md)**。
-
-| 项 | 值 |
-|----|-----|
-| Build command | `npm run build` |
-| Output directory | `dist` |
-| Node | **`22.22.2`**（仓库 `.nvmrc` / `.node-version`） |
-| 环境变量（推荐再设） | `NODE_VERSION=22.22.2` |
-
-`public/_headers` 会进入产物，用于缓存策略。线上为纯静态，**不需要** Workers。
-
-本机对齐构建 Node：
-
-```bash
-nvm use   # 读取 .nvmrc → 22.22.2
-npm run build && npm run preview
+```text
+dist/
+  content/    # content 拷贝
+  pages/      # 预览 HTML（路径对齐 content）
+  assets/     # JS/CSS
+  index.html  # 站首页
 ```
+
+---
+
+## 部署
+
+Build：`npm run build` · Output：`dist` · Node：`22.22.2`  
+→ [docs/deployment.md](./docs/deployment.md)
+
+---
+
+## 仓库
+
+https://github.com/gongfurong/webmd  

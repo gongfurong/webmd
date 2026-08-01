@@ -1,0 +1,11 @@
+erDiagram
+  PAGE ||--o{ HEADING : contains
+  PAGE ||--o{ ASSET : may_have
+  PAGE {
+    string path
+    string kind
+  }
+  HEADING {
+    string id
+    string text
+  }

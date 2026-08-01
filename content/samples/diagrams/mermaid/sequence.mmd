@@ -1,0 +1,8 @@
+sequenceDiagram
+  participant U as 用户
+  participant W as WebMD
+  participant S as SheetJS
+  U->>W: 打开 sample.xlsx
+  W->>S: fetch + XLSX.read
+  S-->>W: workbook
+  W-->>U: x-spreadsheet 网格

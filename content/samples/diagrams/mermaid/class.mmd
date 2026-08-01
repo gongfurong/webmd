@@ -1,0 +1,17 @@
+classDiagram
+  class TypeAdapter {
+    +prepare()
+    +shell()
+    +bind()
+    +style()
+  }
+  class MermaidAdapter {
+    +bind()
+  }
+  class ExcelAdapter {
+    +shell()
+    +bind()
+  }
+  TypeAdapter <|-- MermaidAdapter
+  TypeAdapter <|-- ExcelAdapter
+  WebMD --> TypeAdapter : 注册表
