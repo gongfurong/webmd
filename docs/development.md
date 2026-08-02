@@ -75,7 +75,7 @@ content/
 | `scripts/scan-content.ts` | 制作入口 |
 | `src/client.ts` | 布局、软导航/缓存、路径栏、全屏、下载分流、绑定预览 |
 | `src/previews/*` | 图示 bind |
-| `src/excel-viewer.ts` | 表格 bind（`mode:read` + 显示向操作） |
+| `src/excel-viewer.ts` | 表格 bind（`mode:read`；无加载文案；重载无确认；铺满+滚动条槽） |
 | `src/search/*` | 搜索 |
 | `public/_headers` | Cloudflare Pages 缓存头 |
 | `site.config.ts` + `config/*` | 配置 |
@@ -104,7 +104,9 @@ content/
 | 软导航总 loading | 是否未命中会话缓存；Network 是否 `no-cache` 旧代码 |
 | 手机 Excel 弹键盘 | 是否仍 `mode:edit` 或 hide-input 未禁焦点 |
 | 手机全屏无反应 | 应走伪全屏 `is-center-pseudo-fs`；看 body class |
-| 正文很窄 | 路径栏版心是否 fixed；`localStorage webmd-content-width-v2` |
+| 正文很窄 | 路径栏版心是否 fixed；`localStorage webmd-content-width-v2`；表格页应强制铺满 |
+| 收起侧栏无分割线/右竖条 | `has-toc-col` 是否在收起时仍为真；gutter 是否 1px |
+| 表格右上白洞 | 库 moreResize −60；应被 toolbar 100% !important 压住 |
 | 404 预览 | URL 是否 `/pages/...`；matchFileByUrl |
 | 图示不显示 | 控制台；动态 import；消毒是否吃掉 DOM |
 | 导出图画不出来 | `_Res_*/preview.*` 是否存在；是否 is-image-page 藏壳 |

@@ -89,7 +89,7 @@ export function renderSheetApp(opts: {
 		`</div>` +
 		`<button type="button" class="webmd-code__copy" data-xs-copy title="复制当前工作表为 CSV" aria-label="复制当前工作表为 CSV">${SHEET_ICON_COPY}${SHEET_ICON_CHECK}</button>` +
 		`</div>` +
-		`<div class="xs-status" data-xs-status>正在加载表格引擎…</div>` +
+		`<div class="xs-status" data-xs-status hidden></div>` +
 		`<div class="xs-error" data-xs-err hidden></div>` +
 		`<div class="xs-host" data-xs-host></div>` +
 		`</div>`

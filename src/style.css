@@ -8,8 +8,9 @@
 	--header-h: 60px;
 	--wiki-nav: 280px;
 	--wiki-toc: 240px;
-	--wiki-g-nav: 5px;
-	--wiki-g-toc: 5px;
+	/* 三栏之间仅一条细分割线（JS 同步为 1px；拖拽热区见 .wiki-gutter::after） */
+	--wiki-g-nav: 1px;
+	--wiki-g-toc: 1px;
 	--bottom-bar-h: 2.5rem;
 	/* 左文件 / 中路径 / 右大纲：统一顶栏高度 */
 	--pane-bar-h: 2.5rem;
@@ -1889,17 +1890,21 @@ html:has(body[data-search-modal-open]) {
 }
 
 .app-shell.nav-collapsed {
-	/* 左栏 + 拖缝列宽为 0，中栏吃满；勿 display:none 拖缝（会打乱 auto-place） */
-	grid-template-columns: 0 0 minmax(0, 1fr);
+	/*
+	 * 收起：竖条展开钮列 | 1px 分割线（属左侧） | 中栏
+	 * 线不画在中栏上；全屏时整列去掉（见 is-center-pseudo-fs / :fullscreen）
+	 */
+	grid-template-columns: var(--rail-w, 2.5rem) var(--wiki-g-nav, 1px) minmax(0, 1fr);
 }
 .app-shell.nav-collapsed .wiki-nav {
+	/* 列宽留给 rail，导航本体隐藏 */
 	visibility: hidden;
 	pointer-events: none;
 	overflow: hidden;
 }
 .app-shell.nav-collapsed .wiki-gutter--nav {
-	/* 仍占第 2 列（宽 0），禁止 display:none */
-	visibility: hidden;
+	/* 展开/收起同一条细线；收起时不可拖宽 */
+	visibility: visible;
 	pointer-events: none;
 }
 
@@ -1927,45 +1932,86 @@ html:has(body[data-search-modal-open]) {
 	grid-row: 1;
 }
 
-.app-shell.toc-collapsed .wiki-center,
+/* 收起且仍有右栏能力：中栏 | 1px 线（属右） | 竖条列 */
+.app-shell.toc-collapsed.has-toc-col .wiki-center {
+	grid-template-columns: minmax(0, 1fr) var(--wiki-g-toc, 1px) var(--rail-w, 2.5rem);
+}
+/* 无右栏断点（窄屏等）：不留线、不留竖条列 */
 .app-shell:not(.has-toc-col) .wiki-center {
 	grid-template-columns: minmax(0, 1fr) 0 0;
 }
-.app-shell.toc-collapsed .wiki-toc,
-.app-shell.toc-collapsed .wiki-gutter--toc,
-.app-shell:not(.has-toc-col) .wiki-toc,
+.app-shell.toc-collapsed.has-toc-col .wiki-toc {
+	visibility: hidden;
+	pointer-events: none;
+	overflow: hidden;
+	/* 列宽仍占 --rail-w，留给竖条按钮 */
+}
+.app-shell:not(.has-toc-col) .wiki-toc {
+	visibility: hidden;
+	pointer-events: none;
+	overflow: hidden;
+}
+.app-shell.toc-collapsed.has-toc-col .wiki-gutter--toc {
+	visibility: visible;
+	pointer-events: none;
+	overflow: hidden;
+}
 .app-shell:not(.has-toc-col) .wiki-gutter--toc {
 	visibility: hidden;
 	pointer-events: none;
 	overflow: hidden;
-	/* 禁止 display:none，保持列占位与固定 column 映射 */
 }
 
+/*
+ * 分割 gutter：列宽 1px 画线；伪元素扩热区，避免中间 5～6px 空白缝。
+ * 侧栏边框交给这条线，勿再 border-right/left 叠双线。
+ */
 .wiki-gutter {
 	cursor: col-resize;
 	touch-action: none;
-	background: transparent;
+	background: var(--border);
 	position: relative;
 	z-index: 3;
+	/* 线宽由 grid 列宽控制（--wiki-g-*） */
+	min-width: 0;
+}
+.wiki-gutter::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	/* 左右各约 4px 可拖，总热区 ~9px，视觉仍是 1px 线 */
+	left: 50%;
+	width: 9px;
+	transform: translateX(-50%);
+	cursor: col-resize;
 }
 .wiki-gutter:hover,
 .wiki-gutter:active,
 body.is-col-resizing .wiki-gutter {
-	background: color-mix(in srgb, var(--accent) 22%, transparent);
+	background: var(--accent);
+}
+.wiki-gutter:hover::after,
+.wiki-gutter:active::after,
+body.is-col-resizing .wiki-gutter::after {
+	/* 热区可略亮，便于感知可拖 */
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-/* 左栏 */
+/*
+ * 左/右栏：中间导航内容区白底；顶栏（文件/大纲）与底栏仍用 pane-bar 的灰底。
+ */
 .wiki-nav {
 	min-width: 0;
 	min-height: 0;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
-	background: var(--bg-sidebar);
-	border-right: 1px solid var(--border);
+	background: var(--bg);
+	/* 分割线由 .wiki-gutter 承担 */
+	border-right: none;
 }
 
-/* 右栏大纲 */
 .wiki-toc {
 	min-width: 0;
 	min-height: 0;
@@ -1973,7 +2019,13 @@ body.is-col-resizing .wiki-gutter {
 	display: flex;
 	flex-direction: column;
 	background: var(--bg);
-	border-left: 1px solid var(--border);
+	border-left: none;
+}
+/* 内容区明确白底（文件树 / 大纲列表） */
+.wiki-nav .tree-body,
+.wiki-nav .file-tree,
+.wiki-toc .doc-toc {
+	background: var(--bg);
 }
 
 /*
@@ -2804,10 +2856,26 @@ body.is-sheet-app-page .center-scroll > .markdown-body {
 	overflow: hidden;
 	align-self: stretch !important;
 }
-/* 铺满：表格页强制吃满中栏（覆盖固定版心 max-width 残留） */
+/*
+ * 表格页始终吃满中栏（固定/铺满都一样）。
+ * 否则 fixed 的 --content-readable-max + margin:auto 会在收起右侧大纲后
+ * 留下大块空白（表格仍夹在版心里，右侧空一截）。
+ * 特异性须压过 html[data-content-width='fixed'] .center-scroll > .markdown-body
+ */
+html[data-content-width='fixed'] body.is-sheet-app-page .center-scroll > .markdown-body,
 html[data-content-width='fill'] body.is-sheet-app-page .center-scroll > .markdown-body,
+body.is-sheet-app-page .center-scroll > .markdown-body {
+	width: 100% !important;
+	max-width: none !important;
+	margin-inline: 0 !important;
+	align-self: stretch !important;
+}
+html[data-content-width='fixed'] body.is-sheet-app-page .markdown-body > .sheet-app,
 html[data-content-width='fill'] body.is-sheet-app-page .markdown-body > .sheet-app,
-html[data-content-width='fill'] body.is-sheet-app-page .sheet-app .xs-host {
+html[data-content-width='fixed'] body.is-sheet-app-page .sheet-app .xs-host,
+html[data-content-width='fill'] body.is-sheet-app-page .sheet-app .xs-host,
+body.is-sheet-app-page .markdown-body > .sheet-app,
+body.is-sheet-app-page .sheet-app .xs-host {
 	width: 100% !important;
 	max-width: none !important;
 	margin-inline: 0 !important;
@@ -2874,6 +2942,7 @@ body.is-center-pseudo-fs {
 	width: 100%;
 	height: 100%;
 }
+/* 中栏全屏：左右栏、竖条、分割线全部隐藏，只留中间 */
 body.is-center-pseudo-fs .app-header,
 body.is-center-pseudo-fs .wiki-nav,
 body.is-center-pseudo-fs .wiki-toc,
@@ -2881,14 +2950,28 @@ body.is-center-pseudo-fs .wiki-gutter,
 body.is-center-pseudo-fs .wiki-edge-btn,
 body.is-center-pseudo-fs .wiki-rail-btn {
 	display: none !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+	width: 0 !important;
+	min-width: 0 !important;
+	max-width: 0 !important;
+	border: none !important;
+	padding: 0 !important;
+	margin: 0 !important;
 }
-body.is-center-pseudo-fs .app-shell {
+body.is-center-pseudo-fs .app-shell,
+body.is-center-pseudo-fs .app-shell.nav-collapsed,
+body.is-center-pseudo-fs .app-shell.toc-collapsed,
+body.is-center-pseudo-fs .app-shell.nav-edge-visible,
+body.is-center-pseudo-fs .app-shell.panels-collapsed {
 	height: 100% !important;
 	min-height: 0 !important;
+	/* 无左右列、无分割线列 */
 	grid-template-columns: minmax(0, 1fr) !important;
 	grid-template-rows: 1fr !important;
 }
-body.is-center-pseudo-fs .wiki-center {
+body.is-center-pseudo-fs .wiki-center,
+body.is-center-pseudo-fs .app-shell.toc-collapsed .wiki-center {
 	grid-template-columns: minmax(0, 1fr) 0 0 !important;
 	height: 100% !important;
 	min-height: 0 !important;
@@ -2958,6 +3041,31 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	flex-direction: column;
 	min-height: 0;
 }
+/*
+ * 底栏 sheet 标签 +「…」：库默认 padding 0 30px 偏右；尽量贴左。
+ * 只读时加号已隐藏，首项仍会留出图标位，一并收紧。
+ */
+.xs-host .x-spreadsheet-bottombar {
+	padding-left: 2px !important;
+	padding-right: 8px !important;
+	justify-content: flex-start;
+}
+.xs-host .x-spreadsheet-bottombar .x-spreadsheet-menu {
+	padding-left: 0;
+	margin-left: 0;
+}
+.xs-host .x-spreadsheet-bottombar .x-spreadsheet-menu > li {
+	padding-left: 0.5em;
+	padding-right: 0.65em;
+}
+/* 首项：+ / … 控件区，只读隐藏 + 后勿占空 */
+.xs-host .x-spreadsheet-bottombar .x-spreadsheet-menu > li:first-child {
+	padding-left: 2px;
+	padding-right: 4px;
+}
+.xs-host .x-spreadsheet-bottombar .x-spreadsheet-menu > li .x-spreadsheet-icon {
+	margin: 0 2px;
+}
 /* 内容只读：隐藏底栏「添加工作表」；改名/删除由 JS 捕获拦截 */
 .xs-host.is-xs-readonly .x-spreadsheet-bottombar .x-spreadsheet-icon-img.add,
 .xs-host.is-xs-readonly .x-spreadsheet-bottombar .x-spreadsheet-icon.add {
@@ -2982,22 +3090,27 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	caret-color: transparent !important;
 }
 .xs-host .x-spreadsheet {
-	height: 100%;
+	width: 100% !important;
+	max-width: 100% !important;
+	height: 100% !important;
 	min-height: 0;
 	flex: 1 1 auto;
 	display: flex;
 	flex-direction: column;
+	box-sizing: border-box !important;
 	/* 允许工具栏下拉溢出到表体区域显示 */
 	overflow: visible;
 }
 /*
- * 工具栏：全宽排出常用按钮（不用 max-content，否则 moreResize 量窄会全进 …）。
+ * 工具栏：必须 100% 贴满（压过库 moreResize 的 widthFn()-60，否则右上角白洞）。
+ * 不用 max-content（会把按钮量窄后全进 …）。
  * z-index 高于 sheet，避免字体/颜色/「更多」下拉被表体盖住。
  */
 .xs-host .x-spreadsheet-toolbar {
 	width: 100% !important;
 	max-width: 100% !important;
-	box-sizing: border-box;
+	min-width: 100% !important;
+	box-sizing: border-box !important;
 	background: var(--bg-muted, #f6f8fa);
 	border-bottom: 1px solid var(--border, #e0e2e4);
 	position: relative;
@@ -3010,13 +3123,133 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	flex-wrap: nowrap;
 	gap: 0;
 	padding-left: 6px !important;
-	padding-right: 12px !important;
+	/* 右缘贴齐，勿再留 12px 空（滚动条在表体区，不在工具栏） */
+	padding-right: 4px !important;
 }
+/* 库 more 按钮无内容时由 JS 隐藏；兜底不占位 */
+.xs-host .x-spreadsheet-toolbar-btn[style*='display: none'],
+.xs-host .x-spreadsheet-toolbar-btn[style*='display:none'] {
+	margin: 0 !important;
+	min-width: 0 !important;
+	padding: 0 !important;
+	border: none !important;
+}
+/*
+ * 格子与滚动条分区（不重叠、贴最右/最底）：
+ * - view 宽高减掉 gutter；sheet border-box 100% + 内边距作槽
+ * - 纵条贴最右、横条贴最底；角块填交叉处（见 .xs-scrollbar-corner）
+ */
 .xs-host .x-spreadsheet-sheet {
 	position: relative;
 	z-index: 1;
 	flex: 1 1 auto;
 	min-height: 0;
+	width: 100% !important;
+	max-width: 100% !important;
+	box-sizing: border-box !important;
+	padding-right: 12px !important;
+	padding-bottom: 12px !important;
+	/* 槽底色 = 滚动条轨道 */
+	background: var(--bg-muted, #f5f6f7);
+	overflow: hidden;
+}
+.xs-host .x-spreadsheet-scrollbar {
+	opacity: 1;
+	z-index: 25;
+	background: var(--bg-muted, #f5f6f7) !important;
+	border: none;
+	border-radius: 0;
+	box-sizing: border-box !important;
+	scrollbar-width: thin;
+	scrollbar-color: color-mix(in srgb, var(--fg-muted, #80868b) 50%, var(--bg-muted, #f5f6f7))
+		var(--bg-muted, #f5f6f7);
+	-webkit-overflow-scrolling: touch;
+}
+/* 横条：贴最底，右端到纵条左沿 */
+.xs-host .x-spreadsheet-scrollbar.horizontal {
+	height: 12px !important;
+	left: 0 !important;
+	right: 12px !important;
+	bottom: 0 !important;
+	top: auto !important;
+	width: auto !important;
+	overflow-x: scroll;
+	overflow-y: hidden;
+}
+/* 纵条：贴最右，底端到横条上沿 */
+.xs-host .x-spreadsheet-scrollbar.vertical {
+	width: 12px !important;
+	top: 0 !important;
+	right: 0 !important;
+	bottom: 12px !important;
+	left: auto !important;
+	height: auto !important;
+	overflow-x: hidden;
+	overflow-y: scroll;
+}
+/* 右下角衔接（库两滚动条交叉处） */
+.xs-host .xs-scrollbar-corner,
+.xs-host [data-xs-sb-corner] {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	width: 12px;
+	height: 12px;
+	z-index: 26;
+	pointer-events: none;
+	background: var(--bg-muted, #f5f6f7);
+	box-sizing: border-box;
+	border-left: 1px solid var(--border, #e0e2e4);
+	border-top: 1px solid var(--border, #e0e2e4);
+}
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
+	width: 12px;
+	height: 12px;
+	display: block;
+	background: var(--bg-muted, #f5f6f7);
+}
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-track {
+	background: var(--bg-muted, #f5f6f7);
+}
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--fg-muted, #80868b) 48%, var(--bg-muted, #f5f6f7));
+	border-radius: 6px;
+	border: 2px solid var(--bg-muted, #f5f6f7);
+	min-height: 24px;
+	min-width: 24px;
+}
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb:hover,
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb:active {
+	background: color-mix(in srgb, var(--fg-muted, #80868b) 68%, var(--bg-muted, #f5f6f7));
+}
+.xs-host .x-spreadsheet-bottombar {
+	flex: 0 0 auto;
+	width: 100% !important;
+	max-width: 100% !important;
+	box-sizing: border-box !important;
+}
+@media (pointer: coarse) {
+	.xs-host .x-spreadsheet-sheet {
+		padding-right: 14px !important;
+		padding-bottom: 14px !important;
+	}
+	.xs-host .x-spreadsheet-scrollbar.horizontal {
+		height: 14px !important;
+		right: 14px !important;
+	}
+	.xs-host .x-spreadsheet-scrollbar.vertical {
+		width: 14px !important;
+		bottom: 14px !important;
+	}
+	.xs-host .xs-scrollbar-corner,
+	.xs-host [data-xs-sb-corner] {
+		width: 14px;
+		height: 14px;
+	}
+	.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
+		width: 14px;
+		height: 14px;
+	}
 }
 .xs-host .x-spreadsheet-toolbar-btn:has(.x-spreadsheet-icon-img.print),
 .xs-host .x-spreadsheet-toolbar-btn[data-xs-hidden-print],
@@ -3398,7 +3631,20 @@ html[data-theme='dark'] .xs-host .x-spreadsheet-item.active,
 }
 html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar,
 .xs-host.is-xs-dark .x-spreadsheet-scrollbar {
-	background: var(--bg);
+	background: var(--bg-muted) !important;
+	border-color: var(--border) !important;
+	scrollbar-color: color-mix(in srgb, var(--fg-muted) 55%, var(--bg-muted)) var(--bg-muted);
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar,
+html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-track,
+.xs-host.is-xs-dark .x-spreadsheet-scrollbar::-webkit-scrollbar,
+.xs-host.is-xs-dark .x-spreadsheet-scrollbar::-webkit-scrollbar-track {
+	background: var(--bg-muted) !important;
+}
+html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb,
+.xs-host.is-xs-dark .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--fg-muted) 50%, var(--bg-muted)) !important;
+	border-color: var(--bg-muted) !important;
 }
 html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar .x-spreadsheet-scrollbar-track,
 .xs-host.is-xs-dark .x-spreadsheet-scrollbar .x-spreadsheet-scrollbar-track {
@@ -5815,7 +6061,10 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	background: var(--bg-muted);
 }
 
-/* 展开态：侧栏底部收起 — 与 .wiki-pager__btn 同一套常态/hover */
+/*
+ * 展开态：侧栏底部收起 — 与中栏 .wiki-pager__btn 同灰底。
+ * 内容区白底，底栏独立灰条（勿 transparent 透成白）。
+ */
 .wiki-collapse-btn {
 	flex: 0 0 auto;
 	display: flex;
@@ -5828,7 +6077,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	padding: 0 0.9rem;
 	border: none;
 	border-top: 1px solid var(--border);
-	background: transparent;
+	background: var(--bg-muted);
 	box-sizing: border-box;
 	cursor: pointer;
 	color: var(--fg-muted);
@@ -5859,10 +6108,10 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 }
 
 /*
- * 收起态：左右全高长条
- * - 顶部：闭合态图标
- * - 中部：>> / << 展开提示
- * - 底部：同样展开提示（对齐展开态底栏高度，上中下都能点）
+ * 收起态：左右全高竖条按钮（侧栏灰底）
+ * - 与展开侧栏同色系；竖条与中栏之间另有 1px .wiki-gutter（属左右，不属中栏）
+ * - 顶部图标 / 中部 >> << / 底部同样可点
+ * - 中栏全屏时整体隐藏（见 is-center-pseudo-fs / 不进 :fullscreen 树）
  */
 :root {
 	--rail-w: 2.5rem;
@@ -5878,7 +6127,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	margin: 0;
 	padding: 0;
 	border: none;
-	background: var(--bg-muted);
+	background: var(--bg-sidebar, var(--bg-muted));
 	color: var(--fg-muted);
 	cursor: pointer;
 	display: none;
@@ -5893,7 +6142,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	display: flex;
 }
 .wiki-rail-btn.wiki-edge-btn:hover {
-	background: color-mix(in srgb, var(--accent) 10%, var(--bg-muted));
+	background: color-mix(in srgb, var(--accent) 10%, var(--bg-sidebar, var(--bg-muted)));
 	color: var(--accent);
 }
 /* 顶部图标区：与 pane-bar 同高 */
@@ -5980,14 +6229,15 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	justify-content: center;
 	min-height: 0;
 }
-/* 底部展开：与展开态 wiki-collapse-btn 同高，视觉可点 */
+/* 底部展开：与展开态底栏同高，整条可点 */
+/* 收起竖条底部：同样灰底底栏 */
 .wiki-rail-btn__foot {
 	flex: 0 0 var(--bottom-bar-h, 2.5rem);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	border-top: 1px solid var(--border);
-	background: var(--bg-muted);
+	background: var(--bg-muted) !important;
 	box-sizing: border-box;
 }
 .wiki-rail-btn.wiki-edge-btn:hover .wiki-rail-btn__foot {
@@ -6011,21 +6261,27 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	user-select: none;
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+/*
+ * 竖条贴壳左右缘；与中栏之间的细线由 gutter 列画（不归中栏、竖条自身不画边）。
+ */
 .wiki-edge-btn--nav {
 	left: 0;
-	border-inline-end: 1px solid var(--border);
+	border-inline-end: none;
 }
 .wiki-edge-btn--toc {
 	right: 0;
-	border-inline-start: 1px solid var(--border);
+	border-inline-start: none;
 }
 
-/* 收起时中栏给长条让位 */
+/*
+ * 收起时竖条占独立 grid 列（--rail-w），中栏不必再 padding 让位。
+ * （旧方案 padding 会把「线」视觉上算进中栏）
+ */
 .app-shell.nav-edge-visible .wiki-main {
-	padding-inline-start: var(--rail-w);
+	padding-inline-start: 0;
 }
 .app-shell.toc-edge-visible .wiki-main {
-	padding-inline-end: var(--rail-w);
+	padding-inline-end: 0;
 }
 
 /*
@@ -6257,7 +6513,8 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		visibility: visible !important;
 		pointer-events: auto !important;
 		border-right: 1px solid var(--border);
-		background: var(--bg-sidebar);
+		/* 内容白底；顶栏仍是 pane-bar 灰 */
+		background: var(--bg);
 		overflow: hidden;
 		/* 防止某些引擎仍按内容 min-size 占隐式列 */
 		min-width: 0 !important;
@@ -6296,6 +6553,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		pointer-events: auto !important;
 		border-left: 1px solid var(--border);
 		border-right: none;
+		/* 与左栏抽屉一致：内容白底 */
 		background: var(--bg);
 		overflow: hidden;
 	}

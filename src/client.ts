@@ -45,7 +45,8 @@ try {
 }
 
 const STORAGE = 'webmd-layout-v2';
-const GUTTER = 6;
+/** 三栏分割线宽度（细线）；拖拽热区靠 CSS 伪元素扩大，不占额外空白 */
+const GUTTER = 1;
 
 type LayoutState = {
 	nav: number;
@@ -241,8 +242,9 @@ function applyLayout(s: LayoutState) {
 
 	const navW = navOpen ? s.nav : 0;
 	const tocW = tocOpen ? s.toc : 0;
-	const gNav = navOpen ? GUTTER : 0;
-	const gToc = tocOpen ? GUTTER : 0;
+	// 收起侧栏时仍保留 1px 分割线（抽屉模式不占列）
+	const gNav = drawerUi ? 0 : GUTTER;
+	const gToc = drawerUi || !tocAvailable ? 0 : GUTTER;
 
 	shell.style.setProperty('--wiki-nav', `${navW}px`);
 	shell.style.setProperty('--wiki-g-nav', `${gNav}px`);
@@ -254,7 +256,10 @@ function applyLayout(s: LayoutState) {
 	shell.classList.toggle('nav-collapsed', !drawerUi && s.navCollapsed);
 	// 抽屉模式：不要 toc-collapsed，否则 visibility/pointer-events 锁死抽屉
 	shell.classList.toggle('toc-collapsed', !tocOpen && !drawerUi);
-	shell.classList.toggle('has-toc-col', tocOpen || drawerUi);
+	// has-toc-col = 右栏「占位列」存在（展开大纲 或 收起竖条+分割线），
+	// 勿用 tocOpen：收起时若去掉 has-toc-col，:not(.has-toc-col) 会把 gutter/rail 列清成 0
+	// → 右侧无分割线、无大纲竖条图标。
+	shell.classList.toggle('has-toc-col', tocAvailable || drawerUi);
 	shell.classList.toggle('nav-edge-visible', !drawerUi && s.navCollapsed);
 	shell.classList.toggle('toc-edge-visible', tocAvailable && s.tocCollapsed);
 	shell.classList.toggle('is-narrow', narrow);

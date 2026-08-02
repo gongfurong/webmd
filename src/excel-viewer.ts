@@ -63,6 +63,7 @@ type XsSheetInternal = {
 	};
 	toolbar?: { reset?: () => void };
 	table?: { render?: () => void };
+	reload?: () => XsSheetInternal;
 	trigger?: (name: string, ...args: unknown[]) => void;
 };
 
@@ -76,6 +77,12 @@ type XsInstance = {
 	on?: (event: string, cb: (...args: unknown[]) => void) => void;
 	sheet?: XsSheetInternal;
 };
+
+/**
+ * 滚动条槽宽（与 style.css 里 sheet padding / scrollbar 尺寸一致）。
+ * 库默认把条叠在画布上；我们把 view 减掉槽宽，再用 padding 把条放到右/下独立区域。
+ */
+const XS_SCROLLBAR_GUTTER = 12;
 
 type XsFactory = (
 	el: HTMLElement | string,
@@ -1073,8 +1080,9 @@ function hideXsPrintButton(host: HTMLElement): void {
 }
 
 /**
- * 工具栏：先给足宽度让 moreResize 排出常用按钮，再去掉库的 -60 空隙。
- * 不要 max-content（会把按钮量窄后全进「更多」）。
+ * 工具栏贴满宿主宽。
+ * 库 moreResize 会写 `width: widthFn()-60`，右侧留下 ~60px 白洞（红框空白）；
+ * 用 !important 压掉，并在「更多」为空时隐藏其按钮。
  */
 function reflowXsToolbar(host: HTMLElement): void {
 	const tb = host.querySelector<HTMLElement>('.x-spreadsheet-toolbar');
@@ -1082,11 +1090,34 @@ function reflowXsToolbar(host: HTMLElement): void {
 	// 用 100% 贴宿主，勿写死像素（侧栏开合后易留右侧空白）
 	tb.style.setProperty('width', '100%', 'important');
 	tb.style.setProperty('max-width', '100%', 'important');
+	tb.style.setProperty('min-width', '100%', 'important');
 	tb.style.setProperty('box-sizing', 'border-box', 'important');
+	// 清掉库残留的固定 px（部分路径只改 style.width 不带 important）
+	if (tb.style.width && tb.style.width !== '100%') {
+		tb.style.setProperty('width', '100%', 'important');
+	}
 	hideXsPrintButton(host);
 	// moreResize 之后再按左侧自定义条宽度收库按钮
 	if (tb.querySelector(':scope > [data-xs-ops-bar]')) {
 		balanceToolbarWithOps(host);
+	} else {
+		hideEmptyToolbarMore(tb);
+	}
+}
+
+/** 「更多」无溢出按钮时隐藏，避免右上角空占位 */
+function hideEmptyToolbarMore(toolbar: HTMLElement): void {
+	const moreContent = toolbar.querySelector<HTMLElement>(
+		'.x-spreadsheet-toolbar-more',
+	);
+	const moreBtn = moreContent
+		? moreContent.closest<HTMLElement>('.x-spreadsheet-toolbar-btn')
+		: null;
+	if (!moreBtn) return;
+	if (!moreContent || moreContent.childElementCount === 0) {
+		moreBtn.style.setProperty('display', 'none', 'important');
+	} else {
+		moreBtn.style.removeProperty('display');
 	}
 }
 
@@ -1390,7 +1421,6 @@ function balanceToolbarWithOps(host: HTMLElement): void {
 	}
 
 	if (moreContent.childElementCount > 0) {
-		moreBtn.style.display = '';
 		moreBtn.style.removeProperty('display');
 		// 量「更多」内按钮总宽，只写 more 面板自身（勿波及色板/线框等子下拉）
 		let sumW = 12;
@@ -1417,13 +1447,22 @@ function balanceToolbarWithOps(host: HTMLElement): void {
 				el.style.removeProperty('width');
 				el.style.removeProperty('max-width');
 			});
-	} else if (
-		dropdownContent?.classList.contains('x-spreadsheet-dropdown-content')
-	) {
-		dropdownContent.style.removeProperty('width');
-		dropdownContent.style.removeProperty('max-width');
-		delete dropdownContent.dataset.xsMorePanel;
+	} else {
+		// 无溢出：隐藏「…」，否则右上角会留一块空白占位
+		moreBtn.style.setProperty('display', 'none', 'important');
+		if (
+			dropdownContent?.classList.contains('x-spreadsheet-dropdown-content')
+		) {
+			dropdownContent.style.removeProperty('width');
+			dropdownContent.style.removeProperty('max-width');
+			delete dropdownContent.dataset.xsMorePanel;
+		}
 	}
+
+	// 再次压掉 moreResize 的 widthFn()-60 白洞
+	toolbar.style.setProperty('width', '100%', 'important');
+	toolbar.style.setProperty('max-width', '100%', 'important');
+	toolbar.style.setProperty('min-width', '100%', 'important');
 }
 
 function syncXsThemeClass(root: HTMLElement, host?: HTMLElement | null): void {
@@ -1636,14 +1675,17 @@ function measureHostSize(host: HTMLElement): { w: number; h: number } {
 		) {
 			return Math.floor(main.clientWidth || window.innerWidth || 0);
 		}
-		const candidates = [
-			mdBody?.clientWidth,
+		// 优先中栏 main/scroll（左栏收起后最先变宽）；勿用 .wiki-center
+		//（含大纲列时会偏大）。host 若残留旧 px 宽会偏小，放最后。
+		const ordered = [
+			main?.clientWidth,
 			scroll?.clientWidth,
+			mdBody?.clientWidth,
 			sheetRoot?.clientWidth,
 			host.parentElement?.clientWidth,
 			host.clientWidth,
 		];
-		for (const c of candidates) {
+		for (const c of ordered) {
 			const n = Math.floor(c || 0);
 			if (n >= 200) return n;
 		}
@@ -1667,6 +1709,7 @@ function measureHostSize(host: HTMLElement): { w: number; h: number } {
 			footerTop != null && footerTop > hostTop + 80
 				? footerTop - 4
 				: main.getBoundingClientRect().bottom - 4;
+		// 返回外框尺寸（含滚动条槽）；画布再扣 gutter 见 canvasViewSize
 		w = Math.max(320, measureAvailW());
 		h = Math.max(280, Math.floor(bottom - hostTop));
 	} else {
@@ -1685,19 +1728,105 @@ function measureHostSize(host: HTMLElement): { w: number; h: number } {
 	return { w, h };
 }
 
+/** 表格引擎 view 用：格子区域 = 外框 − 右/下滚动条槽 */
+function canvasViewSize(host: HTMLElement): { w: number; h: number } {
+	const { w, h } = measureHostSize(host);
+	return {
+		w: Math.max(320, w - XS_SCROLLBAR_GUTTER),
+		h: Math.max(240, h - XS_SCROLLBAR_GUTTER),
+	};
+}
+
+/**
+ * 库 sheetReset 会写死 sheet/scrollbar 的 px 宽高，右下角常留一截空灰。
+ * 在 reload 后强制：表格区 100% 贴满 host，纵条贴最右、横条贴最底（角块衔接）。
+ */
+function fitSheetChrome(host: HTMLElement): void {
+	const g = XS_SCROLLBAR_GUTTER;
+	const root = host.querySelector<HTMLElement>('.x-spreadsheet');
+	const sheet = host.querySelector<HTMLElement>('.x-spreadsheet-sheet');
+	const vSb = host.querySelector<HTMLElement>(
+		'.x-spreadsheet-scrollbar.vertical',
+	);
+	const hSb = host.querySelector<HTMLElement>(
+		'.x-spreadsheet-scrollbar.horizontal',
+	);
+	if (root) {
+		root.style.setProperty('width', '100%', 'important');
+		root.style.setProperty('max-width', '100%', 'important');
+		root.style.setProperty('height', '100%', 'important');
+		root.style.setProperty('box-sizing', 'border-box', 'important');
+	}
+	if (sheet) {
+		// 100% 含右/下 gutter（border-box），与 canvasViewSize 扣槽一致
+		sheet.style.setProperty('width', '100%', 'important');
+		sheet.style.setProperty('max-width', '100%', 'important');
+		sheet.style.setProperty('box-sizing', 'border-box', 'important');
+		sheet.style.setProperty('flex', '1 1 auto', 'important');
+		sheet.style.setProperty('min-height', '0', 'important');
+		sheet.style.removeProperty('height');
+	}
+	// 纵条：从顶贴到横条上沿，贴最右
+	if (vSb) {
+		vSb.style.setProperty('top', '0', 'important');
+		vSb.style.setProperty('right', '0', 'important');
+		vSb.style.setProperty('bottom', `${g}px`, 'important');
+		vSb.style.setProperty('left', 'auto', 'important');
+		vSb.style.setProperty('width', `${g}px`, 'important');
+		vSb.style.setProperty('height', 'auto', 'important');
+		vSb.style.setProperty('max-height', 'none', 'important');
+	}
+	// 横条：从左贴到纵条左沿，贴最底
+	if (hSb) {
+		hSb.style.setProperty('left', '0', 'important');
+		hSb.style.setProperty('right', `${g}px`, 'important');
+		hSb.style.setProperty('bottom', '0', 'important');
+		hSb.style.setProperty('top', 'auto', 'important');
+		hSb.style.setProperty('height', `${g}px`, 'important');
+		hSb.style.setProperty('width', 'auto', 'important');
+		hSb.style.setProperty('max-width', 'none', 'important');
+	}
+	// 右下角衔接块（两槽交叉，避免灰空）
+	let corner = host.querySelector<HTMLElement>('[data-xs-sb-corner]');
+	if (!corner && sheet) {
+		corner = document.createElement('div');
+		corner.dataset.xsSbCorner = '1';
+		corner.className = 'xs-scrollbar-corner';
+		sheet.appendChild(corner);
+	}
+	if (corner) {
+		corner.style.setProperty('width', `${g}px`, 'important');
+		corner.style.setProperty('height', `${g}px`, 'important');
+	}
+}
+
+/** 侧栏开合后需完整 sheetReset；仅 reRender 不会更新 sheet/overlayer 宽度 */
+function reloadXsLayout(
+	xs: XsInstance | null | undefined,
+	host?: HTMLElement | null,
+): void {
+	if (!xs) return;
+	if (typeof xs.sheet?.reload === 'function') {
+		xs.sheet.reload();
+	} else {
+		xs.reRender?.();
+	}
+	if (host) fitSheetChrome(host);
+}
+
 /**
  * 测量并必要时写入宿主尺寸。
  * 返回 { w, h, changed }；changed=false 时调用方勿 reRender（防工具栏闪烁死循环）。
  */
 function layoutHost(host: HTMLElement): { w: number; h: number; changed: boolean } {
 	const isFs = isHostInFullscreen(host);
-	const fillMode =
-		document.documentElement.dataset.contentWidth !== 'fixed';
-	const { w: rawW, h } = measureHostSize(host);
-	let w = rawW;
+	// 表格页始终按中栏实际宽度铺满（不受「固定版心」夹窄），
+	// 否则收起侧栏后 host 仍卡在旧 px 宽，右侧空白。
+	const fillMode = true;
+	const outer = measureHostSize(host);
 	let changed = false;
 
-	const hCss = `${h}px`;
+	const hCss = `${outer.h}px`;
 	if (host.style.height !== hCss || host.style.minHeight !== hCss) {
 		host.style.setProperty('height', hCss, 'important');
 		host.style.setProperty('min-height', hCss, 'important');
@@ -1706,23 +1835,26 @@ function layoutHost(host: HTMLElement): { w: number; h: number; changed: boolean
 
 	if (fillMode && !isFs) {
 		const needW =
-			host.style.width !== '100%' || host.style.maxWidth === `${w}px`;
+			host.style.width !== '100%' ||
+			(host.style.maxWidth !== '' && host.style.maxWidth !== 'none');
 		if (needW) {
 			host.style.setProperty('width', '100%', 'important');
 			host.style.setProperty('max-width', 'none', 'important');
 			changed = true;
 		}
 		void host.offsetWidth;
-		w = Math.max(320, Math.floor(host.clientWidth || w));
 	} else {
-		const wCss = `${w}px`;
+		// 全屏：用测量像素钉死外框
+		const wCss = `${outer.w}px`;
 		if (host.style.width !== wCss || host.style.maxWidth !== wCss) {
 			host.style.setProperty('width', wCss, 'important');
 			host.style.setProperty('max-width', wCss, 'important');
 			changed = true;
 		}
 	}
-	return { w, h, changed };
+	// 返回画布尺寸（供 layout key / 引擎 view）
+	const canvas = canvasViewSize(host);
+	return { w: canvas.w, h: canvas.h, changed };
 }
 
 /** 会话脏标记（类型栏已统一为类型+复制，无旁注文案） */
@@ -1751,7 +1883,6 @@ export function bindExcelViewers(): void {
 		const errEl = root.querySelector<HTMLElement>('[data-xs-err]');
 		const copyBtn = root.querySelector<HTMLButtonElement>('[data-xs-copy]');
 		const fileUrl = root.dataset.fileUrl || '';
-		const fileName = root.dataset.fileName || 'workbook';
 		const sourceKind = (root.dataset.sourceKind || 'xlsx').toLowerCase();
 
 		if (!host || !fileUrl) {
@@ -1806,18 +1937,15 @@ export function bindExcelViewers(): void {
 		const getOpsHandlers = (): XsToolbarOpsHandlers => ({
 			onReload: () => {
 				if (!XLSXref || !x_spreadsheet) return;
+				// 直接重载：不二次确认、不写状态条（顶栏 soft-nav loading 已足够）
 				void (async () => {
-					const ok = await confirmDiscardIfDirty('重新加载');
-					if (!ok || destroyed || !XLSXref || !x_spreadsheet) return;
+					if (destroyed || !XLSXref || !x_spreadsheet) return;
 					try {
-						if (status) {
-							status.hidden = false;
-							status.textContent = '正在重新加载表格…';
-						}
+						if (status) status.hidden = true;
+						if (errEl) errEl.hidden = true;
 						wb = await readWorkbook(XLSXref, fileUrl, sourceKind);
 						const data = stox(XLSXref, wb, density);
 						if (!data.length) throw new Error('工作簿为空');
-						if (status) status.hidden = true;
 						clearDirty();
 						mountGrid(data);
 						if (!destroyed) relayout();
@@ -1880,7 +2008,7 @@ export function bindExcelViewers(): void {
 				try {
 					const { w, h, changed } = layoutHost(host);
 					const key = `${w}x${h}`;
-					// 尺寸未变：不 reRender（否则工具栏 moreResize 反复重写 DOM → 闪烁）
+					// 尺寸未变：不 reload（否则工具栏 moreResize 反复重写 DOM → 闪烁）
 					if (!force && !changed && key === lastLayoutKey) {
 						if (!host.querySelector('[data-xs-ops-bar]')) {
 							injectOps();
@@ -1888,8 +2016,10 @@ export function bindExcelViewers(): void {
 						return;
 					}
 					lastLayoutKey = key;
-					// 只 reRender，不要 window.dispatchEvent('resize')
-					xs.reRender?.();
+					// 完整 sheetReset：侧栏开合后更新 canvas / overlayer / 滚动条槽
+					// （仅 reRender 不会改 sheet 宽度 → 右侧空白）
+					reloadXsLayout(xs, host);
+					fitSheetChrome(host);
 					hideXsPrintButton(host);
 					reflowXsToolbar(host);
 					// moreResize 会清空 toolbar-btns，把操作栏挂回最左
@@ -1940,13 +2070,14 @@ export function bindExcelViewers(): void {
 				style: sheetDefaultStyle(fontPt),
 				view: {
 					// 仅测量，勿在回调里写 host 样式（会触发 RO → 闪烁）
-					height: () => Math.max(240, measureHostSize(host).h),
+					// 宽高已扣右/下滚动条槽，条走 padding 区不与格子重叠
+					height: () => Math.max(240, canvasViewSize(host).h),
 					// 至少 640，避免 moreResize 把按钮全塞进「更多」
 					width: () =>
 						Math.max(
 							640,
-							measureHostSize(host).w,
-							host.clientWidth || 0,
+							canvasViewSize(host).w,
+							Math.max(0, (host.clientWidth || 0) - XS_SCROLLBAR_GUTTER),
 						),
 				},
 				row: {
@@ -1973,6 +2104,7 @@ export function bindExcelViewers(): void {
 				captureLogicalFromXs();
 			});
 			layoutHost(host);
+			fitSheetChrome(host);
 			hideXsPrintButton(host);
 			applySheetReadonlyChrome(host);
 			reflowXsToolbar(host);
@@ -1988,6 +2120,8 @@ export function bindExcelViewers(): void {
 				window.dispatchEvent(new Event('resize'));
 				window.setTimeout(() => {
 					if (destroyed) return;
+					// resize 会触发库 sheetReset，再贴一次最右/最底
+					fitSheetChrome(host);
 					hideXsPrintButton(host);
 					applySheetReadonlyChrome(host);
 					reflowXsToolbar(host);
@@ -2072,56 +2206,6 @@ export function bindExcelViewers(): void {
 		};
 		window.addEventListener('keydown', onSelectAllKey, true);
 
-		/**
-		 * 有未保存修改时的确认：用页内条，不用 window.confirm
-		 * （原生对话框会打断浏览器 Fullscreen，且像「整页刷新」）。
-		 */
-		const confirmDiscardIfDirty = (action: string): Promise<boolean> => {
-			if (!sessionDirty) return Promise.resolve(true);
-			return new Promise((resolve) => {
-				let bar = root.querySelector<HTMLElement>('[data-xs-confirm]');
-				if (!bar) {
-					bar = document.createElement('div');
-					bar.className = 'xs-confirm';
-					bar.dataset.xsConfirm = '1';
-					bar.setAttribute('role', 'status');
-					const after =
-						root.querySelector('.webmd-code__bar') || root.firstChild;
-					if (after?.parentElement === root) {
-						root.insertBefore(bar, after.nextSibling);
-					} else {
-						root.insertBefore(bar, root.firstChild);
-					}
-				}
-				bar.hidden = false;
-				const safeAction = action
-					.replace(/&/g, '&amp;')
-					.replace(/</g, '&lt;')
-					.replace(/>/g, '&gt;');
-				bar.innerHTML =
-					`<span class="xs-confirm__msg">浏览器内有修改。${safeAction}将丢弃这些修改（仅重绘中栏表格，不刷新页面、不写源文件）。</span>` +
-					`<span class="xs-confirm__actions">` +
-					`<button type="button" class="xs-confirm__btn xs-confirm__btn--ok" data-xs-confirm-ok>继续</button>` +
-					`<button type="button" class="xs-confirm__btn" data-xs-confirm-cancel>取消</button>` +
-					`</span>`;
-				const done = (ok: boolean) => {
-					bar!.hidden = true;
-					bar!.innerHTML = '';
-					resolve(ok);
-				};
-				bar.querySelector('[data-xs-confirm-ok]')?.addEventListener(
-					'click',
-					() => done(true),
-					{ once: true },
-				);
-				bar.querySelector('[data-xs-confirm-cancel]')?.addEventListener(
-					'click',
-					() => done(false),
-					{ once: true },
-				);
-			});
-		};
-
 		// —— 复制当前会话活动表为 CSV（优先 getData，保证含浏览器内改动）——
 		copyBtn?.addEventListener('click', async () => {
 			if (!XLSXref || !xs) return;
@@ -2179,19 +2263,9 @@ export function bindExcelViewers(): void {
 
 		void (async () => {
 			try {
-				if (status) {
-					status.hidden = false;
-					status.textContent = '正在加载表格引擎…';
-				}
-				// 引擎与解析并行准备：xlsx 模块 + 表格引擎；文件走内存/HTTP 缓存
-				if (status) {
-					const hit =
-						(sourceKind === 'csv' && sheetFileTextCache.has(fileUrl)) ||
-						(sourceKind !== 'csv' && sheetFileBufCache.has(fileUrl));
-					status.textContent = hit
-						? `正在打开 ${fileName}…`
-						: '正在加载表格引擎…';
-				}
+				// 不展示「加载引擎/解析/渲染」文案：顶栏 soft-nav loading 已足够
+				if (status) status.hidden = true;
+				if (errEl) errEl.hidden = true;
 				const [XLSX, xsFactory] = await Promise.all([
 					import('xlsx'),
 					loadXsFactory(),
@@ -2200,11 +2274,9 @@ export function bindExcelViewers(): void {
 				XLSXref = XLSX;
 				x_spreadsheet = xsFactory;
 
-				if (status) status.textContent = `正在解析 ${fileName}…`;
 				wb = await readWorkbook(XLSX, fileUrl, sourceKind);
 				if (destroyed) return;
 
-				if (status) status.textContent = '正在渲染表格…';
 				const data = stox(XLSX, wb, density);
 				if (!data.length) throw new Error('工作簿为空');
 
@@ -2240,10 +2312,17 @@ export function bindExcelViewers(): void {
 						relayout();
 					})
 				: null;
+		// 观察中栏/壳层宽度（左栏收起、右大纲开合、拖拽改宽）
 		const center = document.querySelector(
 			'[data-wiki-scroll], .center-scroll',
 		);
+		const wikiMain = document.querySelector('[data-wiki-main], .wiki-main');
+		const wikiCenter = document.querySelector('.wiki-center');
+		const appShell = document.querySelector('.app-shell');
 		if (center) ro?.observe(center);
+		if (wikiMain && wikiMain !== center) ro?.observe(wikiMain);
+		if (wikiCenter) ro?.observe(wikiCenter);
+		if (appShell) ro?.observe(appShell);
 		// 勿 ro.observe(root/host)：写 height/width 会持续触发
 
 		root.addEventListener(

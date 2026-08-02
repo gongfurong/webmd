@@ -123,7 +123,30 @@ dist/
 | 环境 | 实现 |
 |------|------|
 | 支持 Fullscreen API | `wiki-main.requestFullscreen()` |
-| iOS 等 | `body.is-center-pseudo-fs` 固定铺满，藏侧栏/顶栏 |
+| iOS 等 | `body.is-center-pseudo-fs` 固定铺满，藏侧栏/顶栏/**分割线**/收起竖条 |
+
+全屏验收：**只显示中栏**，无左右栏、无 1px gutter、无 edge rail。
+
+### 4.3 宽屏壳布局（grid）
+
+| 项 | 说明 |
+|----|------|
+| 外层 | `nav \| gutter(1px) \| center`；`center` 内 `main \| gutter(1px) \| toc` |
+| 收起左 | 列：`rail-w \| 1px \| 1fr`；edge 竖条绝对贴左 |
+| 收起右 | `has-toc-col` 仍为真；`main \| 1px \| rail-w`；edge 竖条贴右 |
+| `has-toc-col` | 右栏**能力**（宽屏大纲断点内），**非**「大纲是否展开」 |
+| 色 | 侧栏内容 `--bg`；顶/底栏 `--bg-muted`；gutter `--border` |
+| 入口 | `src/client.ts` `applyLayout`；样式 `src/style.css` |
+
+### 4.4 表格客户端（摘要）
+
+| 项 | 说明 |
+|----|------|
+| 加载 | 无表内 loading 文案；错误 `data-xs-err` |
+| 重载 | 无 `confirmDiscardIfDirty`；直接 `readWorkbook` + `mountGrid` |
+| 尺寸 | `layoutHost` 铺满中栏；侧栏 RO → `sheet.reload` + `fitSheetChrome` |
+| 滚动条 | view 扣 `XS_SCROLLBAR_GUTTER`；sheet padding 作右/下槽 |
+| 工具栏 | 压 `moreResize` 的 −60 宽；空「更多」隐藏 |
 
 ---
 
@@ -135,7 +158,7 @@ dist/
 | 图片/音视频 | poster? | media-stage | 少 | `/content` 原件 |
 | PDF | — | pdf 壳 | PDF.js | 原 pdf 或 base64 |
 | Office | preview.pdf | pdf 壳 | PDF.js | 预览 pdf；下载原件 |
-| 表 | — | sheet-app（类型+复制） | excel-viewer `mode:read` + 列宽等 | fetch 原 csv/xlsx |
+| 表 | — | sheet-app（类型+复制，状态条 hidden） | excel-viewer `mode:read` + 铺满/滚动条槽 | fetch 原 csv/xlsx |
 | Mermaid 等 | — | webmd-diagram | previews/* | DSL 属性 |
 | 画布源 | 作者导出 | 同图片 | — | `_Res_*/preview.*` |
 | 其它 | — | 下载卡 | — | 原件下载 |
