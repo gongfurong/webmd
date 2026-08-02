@@ -3136,10 +3136,9 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	border: none !important;
 }
 /*
- * 表格滚动条：
- * - 库容器仍负责 scrollTop/Left 与比例
- * - 系统条在手机上几乎不画 → 自绘 .xs-sb-ui 拇指常驻可见
- * - 勿 height/width:auto 盖掉库 scrollbar.set 的 px
+ * 表格滚动条 = 全站 thin-scrollbar 同一套（见文件后部统一规则）。
+ * 库用独立 overflow 容器承载 scroll；几何由 scrollbar.set 写 height/width。
+ * 只补交叉轴厚度 + 轨道底，不自绘第二套拇指。
  */
 .xs-host .x-spreadsheet-sheet {
 	position: relative;
@@ -3150,77 +3149,32 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	max-width: 100% !important;
 	box-sizing: border-box !important;
 	overflow: hidden;
-	touch-action: none; /* 表体平移由我们 touch pan 接管，避免整页跟滚 */
+	/* 库 overlayer bindTouch 平移；勿 none 以免 PC 滚轮/选区异常 */
+	touch-action: manipulation;
 }
 .xs-host .x-spreadsheet-scrollbar {
 	opacity: 1;
 	z-index: 25;
-	background: var(--bg-muted, #f5f6f7) !important;
+	/* 轨道底与全站 thumb 对比：略亮于透明 track，便于辨认 */
+	background: color-mix(in srgb, var(--bg-muted, #f6f8fa) 92%, var(--border, #d0d7de)) !important;
 	border: none;
 	border-radius: 0;
 	box-sizing: border-box !important;
 	pointer-events: auto;
-	position: absolute; /* 与库一致，保险 */
 }
-/* 横条：库写 width；交叉轴给高度 */
+/* 横条：库写 width；交叉轴最小高度（与 thin 8px 对齐略加便于拖） */
 .xs-host .x-spreadsheet-scrollbar.horizontal {
-	height: 14px !important;
-	min-height: 14px !important;
+	height: 10px !important;
+	min-height: 10px !important;
 	overflow-x: scroll;
 	overflow-y: hidden;
 }
-/* 纵条：库写 height；交叉轴给宽度 */
+/* 纵条：库写 height；交叉轴最小宽度 */
 .xs-host .x-spreadsheet-scrollbar.vertical {
-	width: 14px !important;
-	min-width: 14px !important;
+	width: 10px !important;
+	min-width: 10px !important;
 	overflow-x: hidden;
 	overflow-y: scroll;
-}
-/* 自绘拇指开启后隐藏系统条（PC/手机统一自绘，进度一致） */
-.xs-host .x-spreadsheet-scrollbar.is-xs-sb-custom {
-	scrollbar-width: none;
-	-ms-overflow-style: none;
-}
-.xs-host .x-spreadsheet-scrollbar.is-xs-sb-custom::-webkit-scrollbar {
-	display: none !important;
-	width: 0 !important;
-	height: 0 !important;
-}
-/* 自绘层铺满库轨道 */
-.xs-host .xs-sb-ui {
-	position: absolute;
-	inset: 0;
-	z-index: 2;
-	pointer-events: none; /* 点轨道仍落到 sb；拇指单独开 */
-}
-.xs-host .xs-sb-ui__thumb {
-	position: absolute;
-	left: 2px;
-	top: 2px;
-	box-sizing: border-box;
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--fg-muted, #80868b) 48%, var(--bg-muted, #f5f6f7));
-	border: 1px solid color-mix(in srgb, var(--fg-muted) 15%, transparent);
-	pointer-events: auto;
-	touch-action: none;
-	will-change: transform;
-	transition: background 0.12s ease, opacity 0.12s ease;
-}
-.xs-host .xs-sb-ui--v .xs-sb-ui__thumb {
-	right: 2px;
-	left: 2px;
-	width: auto;
-	min-height: 28px;
-}
-.xs-host .xs-sb-ui--h .xs-sb-ui__thumb {
-	bottom: 2px;
-	top: 2px;
-	height: auto;
-	min-width: 28px;
-}
-.xs-host .xs-sb-ui__thumb:hover,
-.xs-host .xs-sb-ui__thumb.is-active {
-	background: color-mix(in srgb, var(--fg-muted, #80868b) 68%, var(--bg-muted, #f5f6f7));
 }
 .xs-host .x-spreadsheet-bottombar {
 	flex: 0 0 auto;
@@ -3228,20 +3182,15 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	max-width: 100% !important;
 	box-sizing: border-box !important;
 }
+/* 触屏：轨道略粗一点，仍用同一套 thin 拇指样式 */
 @media (pointer: coarse) {
 	.xs-host .x-spreadsheet-scrollbar.horizontal {
-		height: 16px !important;
-		min-height: 16px !important;
+		height: 12px !important;
+		min-height: 12px !important;
 	}
 	.xs-host .x-spreadsheet-scrollbar.vertical {
-		width: 16px !important;
-		min-width: 16px !important;
-	}
-	.xs-host .xs-sb-ui--v .xs-sb-ui__thumb {
-		min-height: 36px;
-	}
-	.xs-host .xs-sb-ui--h .xs-sb-ui__thumb {
-		min-width: 36px;
+		width: 12px !important;
+		min-width: 12px !important;
 	}
 }
 /* 滚动条旁灰垫：行号列下方 / 右下角交叉，与轨道同色，消除露白 */
@@ -6310,7 +6259,8 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 .doc-toc,
 .inline-toc__nav,
 .webmd-ms-search .ms-panel-body,
-.webmd-ms-search .ms-results {
+.webmd-ms-search .ms-results,
+.xs-host .x-spreadsheet-scrollbar {
 	scrollbar-width: thin;
 	scrollbar-color: color-mix(in srgb, var(--fg-muted) 45%, transparent) transparent;
 }
@@ -6320,9 +6270,11 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 .doc-toc::-webkit-scrollbar,
 .inline-toc__nav::-webkit-scrollbar,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar,
-.webmd-ms-search .ms-results::-webkit-scrollbar {
+.webmd-ms-search .ms-results::-webkit-scrollbar,
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
 	width: 8px;
 	height: 8px;
+	/* 表格容器交叉轴已 10px，拇指用 8px 与全站一致 */
 }
 .thin-scrollbar::-webkit-scrollbar-track,
 .tree-body::-webkit-scrollbar-track,
@@ -6330,7 +6282,8 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 .doc-toc::-webkit-scrollbar-track,
 .inline-toc__nav::-webkit-scrollbar-track,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar-track,
-.webmd-ms-search .ms-results::-webkit-scrollbar-track {
+.webmd-ms-search .ms-results::-webkit-scrollbar-track,
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-track {
 	background: transparent;
 }
 .thin-scrollbar::-webkit-scrollbar-thumb,
@@ -6339,7 +6292,8 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 .doc-toc::-webkit-scrollbar-thumb,
 .inline-toc__nav::-webkit-scrollbar-thumb,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar-thumb,
-.webmd-ms-search .ms-results::-webkit-scrollbar-thumb {
+.webmd-ms-search .ms-results::-webkit-scrollbar-thumb,
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb {
 	background: color-mix(in srgb, var(--fg-muted) 35%, transparent);
 	border-radius: 999px;
 	border: 2px solid transparent;
@@ -6351,7 +6305,8 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 .doc-toc::-webkit-scrollbar-thumb:hover,
 .inline-toc__nav::-webkit-scrollbar-thumb:hover,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar-thumb:hover,
-.webmd-ms-search .ms-results::-webkit-scrollbar-thumb:hover {
+.webmd-ms-search .ms-results::-webkit-scrollbar-thumb:hover,
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb:hover {
 	background: color-mix(in srgb, var(--fg-muted) 55%, transparent);
 	border: 2px solid transparent;
 	background-clip: padding-box;
