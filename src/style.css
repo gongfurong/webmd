@@ -5049,13 +5049,14 @@ body.is-col-resizing video {
 .wiki-breadcrumb__info-btn:hover {
 	color: var(--accent);
 }
-/* 文件信息弹层：水平居中、贴路径栏下方（JS fixed）；须高于表格选区蓝框 */
+/* 文件信息弹层：水平居中、贴路径栏下方；宽度由 JS 按屏宽/路径自适应（尽量一行） */
 .wiki-breadcrumb__popover {
 	z-index: 10060;
 	box-sizing: border-box;
-	min-width: 16rem;
-	/* max-width / 位置由 JS 按视口居中写入 */
+	min-width: min(16rem, calc(100vw - 2rem));
+	/* width / max-width / 位置由 JS 写入 */
 	padding: 0.85rem 1rem 0.9rem;
+	overflow-x: hidden;
 	border: 1px solid var(--border);
 	border-radius: 0.65rem;
 	background: var(--bg-elevated, var(--bg));
@@ -5130,13 +5131,17 @@ body.is-col-resizing video {
 	font-size: 0.8125rem;
 	font-weight: 500;
 	line-height: 1.45;
-	/* 默认单行；超长再由 JS 改为 wrap */
+	/* 默认单行、不出现滚动条；仅 .is-overflow 时横向滚动 */
 	white-space: nowrap;
-	overflow-x: auto;
+	overflow-x: hidden;
 	overflow-y: hidden;
 	user-select: text;
 	cursor: text;
 	-webkit-overflow-scrolling: touch;
+	scrollbar-width: thin;
+}
+.wiki-breadcrumb__popover-path.is-overflow {
+	overflow-x: auto;
 }
 .wiki-breadcrumb__popover-path.is-wrap {
 	white-space: pre-wrap;
@@ -5144,33 +5149,50 @@ body.is-col-resizing video {
 	word-break: break-word;
 	overflow-x: hidden;
 }
+/* 弹层本身：默认不滚，仅内容超高时 */
+.wiki-breadcrumb__popover.is-overflow-y {
+	overflow-y: auto;
+}
 .wiki-breadcrumb__popover-path--encoded {
 	font-size: 0.75rem;
 	color: var(--fg-muted);
 }
-/* 大小 / 格式：横向两列放在 URL 上方 */
+/* 大小 / 格式：同一行（大小 23 KB · 格式 文件） */
 .wiki-breadcrumb__popover-facts {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-	gap: 0.45rem 0.75rem;
-	margin-bottom: 0.55rem;
-	padding-bottom: 0.55rem;
-	border-bottom: 1px solid var(--border);
-}
-.wiki-breadcrumb__popover-facts .wiki-breadcrumb__popover-block {
-	margin-top: 0;
-}
-.wiki-breadcrumb__popover-value {
-	margin: 0;
-	padding: 0.35rem 0.5rem;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.35rem 0.5rem;
+	margin: 0 0 0.55rem;
+	padding: 0.4rem 0.55rem;
 	border-radius: 0.4rem;
 	background: var(--bg-muted);
 	border: 1px solid var(--border);
-	color: var(--fg);
 	font-size: 0.8125rem;
+	line-height: 1.35;
+}
+.wiki-breadcrumb__popover-fact {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0.3rem;
+	white-space: nowrap;
+}
+.wiki-breadcrumb__popover-fact-k {
+	font-size: 0.68rem;
+	font-weight: 650;
+	color: var(--fg-muted);
+	letter-spacing: 0.02em;
+}
+.wiki-breadcrumb__popover-fact-v {
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
-	line-height: 1.35;
+	color: var(--fg);
+}
+.wiki-breadcrumb__popover-fact-sep {
+	color: var(--fg-muted);
+	opacity: 0.55;
+	user-select: none;
+	padding: 0 0.1rem;
 }
 .wiki-breadcrumb__popover-meta {
 	margin-top: 0.45rem;
@@ -5179,21 +5201,27 @@ body.is-col-resizing video {
 }
 .wiki-breadcrumb__popover-actions {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 0.4rem;
+	flex-wrap: nowrap;
+	align-items: stretch;
+	gap: 0.35rem;
 	margin-top: 0.6rem;
 }
 .wiki-breadcrumb__popover-btn {
+	flex: 1 1 0;
+	min-width: 0;
 	margin: 0;
-	padding: 0.3rem 0.65rem;
+	padding: 0.3rem 0.35rem;
 	border: 1px solid var(--border);
 	border-radius: 0.35rem;
 	background: var(--accent-solid, var(--accent));
 	color: #fff;
-	font-size: 0.75rem;
+	font-size: 0.7rem;
 	font-weight: 600;
 	font-family: inherit;
+	line-height: 1.25;
 	cursor: pointer;
+	white-space: nowrap;
+	text-align: center;
 }
 .wiki-breadcrumb__popover-btn:hover {
 	filter: brightness(1.05);
@@ -5604,12 +5632,30 @@ html[data-content-width='fixed'] .center-scroll .home-hero {
 	margin-right: auto;
 }
 
-/* 铺满：正文贴中栏，无额外居中空白（所有类型） */
+/* 铺满：正文贴中栏自适应宽度，无居中夹紧（所有类型）；底部分页栏高度固定 */
 html[data-content-width='fill'] .center-scroll > .markdown-body,
 html[data-content-width='fill'] .center-scroll > .inline-toc {
 	max-width: none !important;
 	width: 100% !important;
 	margin-inline: 0 !important;
+	box-sizing: border-box !important;
+	align-self: stretch !important;
+}
+html[data-content-width='fill'] .center-scroll .home-hero {
+	max-width: none !important;
+	width: 100% !important;
+	margin-inline: 0 !important;
+}
+/* 铺满时 MD 正文略留左右内边距，仍吃满中栏 */
+html[data-content-width='fill'] body.is-markdown-page .center-scroll,
+html[data-content-width='fill'] body.is-home-page .center-scroll {
+	padding-left: 1rem;
+	padding-right: 1rem;
+}
+html[data-content-width='fill'] body.is-markdown-page .center-scroll > .markdown-body,
+html[data-content-width='fill'] body.is-home-page .center-scroll > .markdown-body {
+	max-width: none !important;
+	width: 100% !important;
 }
 /*
  * 固定模式：单独成行媒体居中（文内 Markdown 插图，非全页媒体舞台）

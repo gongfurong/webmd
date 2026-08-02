@@ -14,6 +14,7 @@ import {
 	renderSiteHome,
 } from './scripts/lib/render-page';
 import { buildSearchIndex } from './scripts/lib/search-index';
+import { getWebmdBuildInfo } from './scripts/lib/version';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const contentDir = path.join(root, 'content');
@@ -21,6 +22,8 @@ const contentDir = path.join(root, 'content');
 const port = Number(process.env.PORT) || 18087;
 // 默认 0.0.0.0：同 Wi‑Fi 手机可访问；仅本机可设 HOST=127.0.0.1
 const host = process.env.HOST || '0.0.0.0';
+
+const webmdBuild = getWebmdBuildInfo();
 
 function runScan(): void {
 	const script = path.join(root, 'scripts/scan-content.ts');
@@ -272,6 +275,13 @@ function sendContentFile(
 export default defineConfig({
 	root,
 	publicDir: 'public',
+	// 客户端可读构建版本（仅调试/对齐；不参与缓存失效）
+	define: {
+		__WEBMD_VERSION__: JSON.stringify(webmdBuild.version),
+		__WEBMD_COMMIT__: JSON.stringify(webmdBuild.commit),
+		__WEBMD_BUILT_AT__: JSON.stringify(webmdBuild.builtAt),
+		__WEBMD_LABEL__: JSON.stringify(webmdBuild.label),
+	},
 	server: {
 		host,
 		port,

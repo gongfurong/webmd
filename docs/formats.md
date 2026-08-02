@@ -34,7 +34,7 @@
 
 | 格式 | 状态 | 方案 |
 |------|------|------|
-| `.csv` `.xlsx` `.xls` `.ods` | ✅ | SheetJS + x-spreadsheet；读原件；不写源 |
+| `.csv` `.xlsx` `.xls` `.ods` | ✅ | SheetJS + x-spreadsheet；读原件；**单元格只读**；可调列宽/缩放等显示；不写源 |
 
 ### 2.3 版式
 

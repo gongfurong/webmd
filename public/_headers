@@ -2,11 +2,41 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
 
+#
+# 业界常见静态站分层缓存（Cloudflare Pages 认 _headers）：
+# - 带 hash 的 assets：长缓存 immutable
+# - HTML 预览页：短 max-age + SWR（可先用缓存再后台校验）
+# - content 原件：中等缓存 + SWR
+# - 索引 JSON：短缓存 + SWR
+#
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
-/pagefind/*
-  Cache-Control: public, max-age=3600
+# 预览 HTML（/pages/...）
+/pages/*
+  Cache-Control: public, max-age=60, stale-while-revalidate=86400
 
+# 站级 HTML
+/
+  Cache-Control: public, max-age=60, stale-while-revalidate=86400
+
+/index.html
+  Cache-Control: public, max-age=60, stale-while-revalidate=86400
+
+/404.html
+  Cache-Control: public, max-age=60, stale-while-revalidate=3600
+
+# 原 content 拷贝（md/媒体/xlsx 等）
 /content/*
-  Cache-Control: public, max-age=300
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+
+# 树 / 搜索索引（构建会变，勿长缓存）
+/tree.json
+  Cache-Control: public, max-age=60, stale-while-revalidate=3600
+
+/search-index.json
+  Cache-Control: public, max-age=60, stale-while-revalidate=3600
+
+/manifest.webmanifest
+  Cache-Control: public, max-age=86400

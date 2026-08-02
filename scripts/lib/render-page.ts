@@ -18,6 +18,7 @@ import {
 	wrapAsMarkdown,
 } from './markdown';
 import {
+	pageBuildFields,
 	renderBreadcrumb,
 	renderHomePage,
 	renderInlineTocHtml,
@@ -277,6 +278,7 @@ export function renderFilePage(
 		navWidth: site.layout.navWidth,
 		tocWidth: site.layout.tocWidth,
 		headerHeight: site.layout.headerHeight,
+		...pageBuildFields(),
 	});
 }
 
@@ -352,6 +354,7 @@ export function renderSiteHome(
 		navWidth: site.layout.navWidth,
 		tocWidth: site.layout.tocWidth,
 		headerHeight: site.layout.headerHeight,
+		...pageBuildFields(),
 	});
 }
 

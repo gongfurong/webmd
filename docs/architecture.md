@@ -57,11 +57,11 @@
 | 路径 | 职责 |
 |------|------|
 | `content/` | 用户内容真相 |
-| `src/client.ts` | 壳交互总入口 |
+| `src/client.ts` | 壳交互总入口（布局、软导航/缓存、路径栏、全屏…） |
 | `src/previews/*` | 图示 bind |
-| `src/excel-viewer.ts` | 表格 bind |
+| `src/excel-viewer.ts` | 表格 bind（只读文本 + 显示向操作） |
 | `src/search/*` | 搜索 |
-| `scripts/lib/*` | 扫盘、渲染、shell、prepare |
+| `scripts/lib/*` | 扫盘、渲染、shell、prepare、`version.ts` |
 | `config/*` · `site.config.ts` | 配置 |
 | `docs/` | 项目元文档 |
 
@@ -99,6 +99,32 @@ dist/
 
 客户端：软导航替换中栏 → 再 bind PDF/表/图示/复制等。
 
+### 4.1 软导航与缓存（运行期）
+
+```text
+点击站内链
+  → 会话 HTML 缓存命中？ ──是──► 秒开（无 loading 条）
+  │                              └─ 后台 SWR（ETag/正文）不同则静默更新
+  └─否─► loading 条（路径栏上）→ fetch HTML（HTTP cache default）
+         → 写入会话缓存 → 应用 DOM → bind
+```
+
+| 层 | 机制 | 失效 |
+|----|------|------|
+| HTTP / CDN | `public/_headers` Cache-Control | max-age / SWR / Purge |
+| 会话 HTML | 内存 Map，TTL≈10min，≤48 页 | 超时、LRU、整页刷新 |
+| 表格文件 | 内存 ArrayBuffer/文本，≤12 | LRU、整页刷新 |
+| JS/CSS | Vite content-hash + immutable | 改代码换文件名 |
+
+**版本号**（`scripts/lib/version.ts` + vite `define`）只写入 meta / `window.__WEBMD__`，**不**触发全站缓存清空。
+
+### 4.2 中栏全屏
+
+| 环境 | 实现 |
+|------|------|
+| 支持 Fullscreen API | `wiki-main.requestFullscreen()` |
+| iOS 等 | `body.is-center-pseudo-fs` 固定铺满，藏侧栏/顶栏 |
+
 ---
 
 ## 5. 分类型数据流（摘要）
@@ -109,7 +135,7 @@ dist/
 | 图片/音视频 | poster? | media-stage | 少 | `/content` 原件 |
 | PDF | — | pdf 壳 | PDF.js | 原 pdf 或 base64 |
 | Office | preview.pdf | pdf 壳 | PDF.js | 预览 pdf；下载原件 |
-| 表 | — | sheet-app | excel-viewer | fetch 原 csv/xlsx |
+| 表 | — | sheet-app（类型+复制） | excel-viewer `mode:read` + 列宽等 | fetch 原 csv/xlsx |
 | Mermaid 等 | — | webmd-diagram | previews/* | DSL 属性 |
 | 画布源 | 作者导出 | 同图片 | — | `_Res_*/preview.*` |
 | 其它 | — | 下载卡 | — | 原件下载 |

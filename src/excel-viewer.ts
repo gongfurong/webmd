@@ -838,20 +838,37 @@ export function prefetchSheetEngines(): void {
 	void import('xlsx');
 }
 
+/** 表格原文件内存缓存（再进同一表跳过网络与部分解码） */
+const SHEET_FILE_CACHE_MAX = 12;
+const sheetFileTextCache = new Map<string, string>();
+const sheetFileBufCache = new Map<string, ArrayBuffer>();
+
+function lruPut<T>(map: Map<string, T>, key: string, val: T, max: number): void {
+	if (map.has(key)) map.delete(key);
+	map.set(key, val);
+	while (map.size > max) {
+		const k = map.keys().next().value as string | undefined;
+		if (k == null) break;
+		map.delete(k);
+	}
+}
+
 async function readWorkbook(
 	XLSX: XlsxMod,
 	fileUrl: string,
 	sourceKind: string,
 ): Promise<WorkBook> {
-	// 允许磁盘缓存：同一 xlsx 反复打开不必每次 no-cache 全量下载
-	const res = await fetch(fileUrl, {
-		credentials: 'same-origin',
-		cache: 'default',
-	});
-	if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
 	if (sourceKind === 'csv') {
-		const text = await res.text();
+		let text = sheetFileTextCache.get(fileUrl);
+		if (text == null) {
+			const res = await fetch(fileUrl, {
+				credentials: 'same-origin',
+				cache: 'default',
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			text = await res.text();
+			lruPut(sheetFileTextCache, fileUrl, text, SHEET_FILE_CACHE_MAX);
+		}
 		return XLSX.read(text.replace(/^\uFEFF/, ''), {
 			type: 'string',
 			raw: false,
@@ -859,7 +876,16 @@ async function readWorkbook(
 		});
 	}
 
-	const buf = await res.arrayBuffer();
+	let buf = sheetFileBufCache.get(fileUrl);
+	if (buf == null) {
+		const res = await fetch(fileUrl, {
+			credentials: 'same-origin',
+			cache: 'default',
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		buf = await res.arrayBuffer();
+		lruPut(sheetFileBufCache, fileUrl, buf, SHEET_FILE_CACHE_MAX);
+	}
 	// 预览只需值/公式/日期；cellStyles/cellNF/sheetStubs 显著拖慢大表解析
 	return XLSX.read(buf, {
 		type: 'array',
@@ -2157,41 +2183,25 @@ export function bindExcelViewers(): void {
 					status.hidden = false;
 					status.textContent = '正在加载表格引擎…';
 				}
-				// 引擎与文件并行：引擎初始化的同时开始拉 xlsx
-				const xlsxP = import('xlsx');
-				const fileP = fetch(fileUrl, {
-					credentials: 'same-origin',
-					cache: 'default',
-				});
-				const [XLSX, xsFactory, fileRes] = await Promise.all([
-					xlsxP,
+				// 引擎与解析并行准备：xlsx 模块 + 表格引擎；文件走内存/HTTP 缓存
+				if (status) {
+					const hit =
+						(sourceKind === 'csv' && sheetFileTextCache.has(fileUrl)) ||
+						(sourceKind !== 'csv' && sheetFileBufCache.has(fileUrl));
+					status.textContent = hit
+						? `正在打开 ${fileName}…`
+						: '正在加载表格引擎…';
+				}
+				const [XLSX, xsFactory] = await Promise.all([
+					import('xlsx'),
 					loadXsFactory(),
-					fileP,
 				]);
 				if (destroyed) return;
 				XLSXref = XLSX;
 				x_spreadsheet = xsFactory;
 
 				if (status) status.textContent = `正在解析 ${fileName}…`;
-				if (!fileRes.ok) throw new Error(`HTTP ${fileRes.status}`);
-				if (sourceKind === 'csv') {
-					const text = await fileRes.text();
-					wb = XLSX.read(text.replace(/^\uFEFF/, ''), {
-						type: 'string',
-						raw: false,
-						cellDates: true,
-					});
-				} else {
-					const buf = await fileRes.arrayBuffer();
-					wb = XLSX.read(buf, {
-						type: 'array',
-						cellDates: true,
-						cellNF: false,
-						cellStyles: false,
-						cellFormula: true,
-						sheetStubs: false,
-					});
-				}
+				wb = await readWorkbook(XLSX, fileUrl, sourceKind);
 				if (destroyed) return;
 
 				if (status) status.textContent = '正在渲染表格…';

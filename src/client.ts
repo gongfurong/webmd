@@ -16,6 +16,34 @@ import { renderGraphvizBlocks } from './previews/graphviz';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
+/** 构建注入（vite define）；仅展示/调试，不驱动缓存失效 */
+declare const __WEBMD_VERSION__: string;
+declare const __WEBMD_COMMIT__: string;
+declare const __WEBMD_BUILT_AT__: string;
+declare const __WEBMD_LABEL__: string;
+
+const WEBMD_BUILD = {
+	version: typeof __WEBMD_VERSION__ !== 'undefined' ? __WEBMD_VERSION__ : '0.0.0',
+	commit: typeof __WEBMD_COMMIT__ !== 'undefined' ? __WEBMD_COMMIT__ : '',
+	builtAt: typeof __WEBMD_BUILT_AT__ !== 'undefined' ? __WEBMD_BUILT_AT__ : '',
+	label: typeof __WEBMD_LABEL__ !== 'undefined' ? __WEBMD_LABEL__ : '0.0.0',
+};
+
+// 控制台 / 调试：window.__WEBMD__
+try {
+	(
+		window as unknown as {
+			__WEBMD__?: typeof WEBMD_BUILD;
+		}
+	).__WEBMD__ = WEBMD_BUILD;
+	console.info(
+		`[WebMD] ${WEBMD_BUILD.label}` +
+			(WEBMD_BUILD.builtAt ? ` · built ${WEBMD_BUILD.builtAt}` : ''),
+	);
+} catch {
+	/* ignore */
+}
+
 const STORAGE = 'webmd-layout-v2';
 const GUTTER = 6;
 
@@ -967,7 +995,8 @@ function bindFileTreeSort() {
  * 固定模式 max ≈ 视口 − 左栏max − 右栏max − 缝 − 内边距
  * 收起侧栏 / 中栏变宽时 max 不跟着涨，正文在中栏内居中
  */
-const CONTENT_WIDTH_KEY = 'webmd-content-width';
+/** v2：默认改为铺满自适应；旧 key 不再读取以免卡在 fixed */
+const CONTENT_WIDTH_KEY = 'webmd-content-width-v2';
 type ContentWidthMode = 'fill' | 'fixed';
 
 /**
@@ -1111,9 +1140,9 @@ function updateContentReadableMax(_s?: LayoutState) {
 	}
 }
 
-/** 无用户记忆时：宽屏默认铺满，窄屏默认固定（侧栏为抽屉，固定≈用满且版心语义更清晰） */
+/** 无用户记忆时：默认铺满中栏（自适应可用宽度）；底栏分页高度固定不变 */
 function defaultContentWidth(): ContentWidthMode {
-	return isNarrowViewport() ? 'fixed' : 'fill';
+	return 'fill';
 }
 
 function loadContentWidth(): ContentWidthMode {
@@ -2017,13 +2046,13 @@ function revealInFileTree(path: string, kind: 'dir' | 'file' = 'dir') {
 	});
 }
 
-/** 文件信息弹层：水平居中；竖直贴在路径栏下方（不上下居中、不贴 info 图标） */
+/** 文件信息弹层：水平居中；宽度跟屏走，尽量一行显示完整路径（不先卡 560 再左右滚） */
 function positionPathPopover(pop: HTMLElement) {
 	const margin = 16;
-	const maxW = Math.min(560, window.innerWidth - margin * 2);
+	// 几乎全宽可用，仅留边距（旧逻辑 max 560 导致路径被夹窄、出横向滚动条）
+	const maxW = Math.max(280, window.innerWidth - margin * 2);
 	const maxH = window.innerHeight - margin * 2;
 
-	// 按两条 URL 的最长文本宽度自适应（尽量一行显示）
 	const plainEl = pop.querySelector<HTMLElement>('[data-path-popover-plain]');
 	const encEl = pop.querySelector<HTMLElement>('[data-path-popover-encoded]');
 	const sample = plainEl || encEl;
@@ -2036,19 +2065,23 @@ function positionPathPopover(pop: HTMLElement) {
 		measureTextWidthPx(plain, font),
 		measureTextWidthPx(enc, font),
 	);
-	const chromeX = 48;
-	const actionsMin = 320;
-	const minW = 16 * 16;
+	// 弹层左右 padding + code 内边距 + 边框
+	const chromeX = 56;
+	const actionsMin = 360;
+	const minW = Math.min(320, maxW);
+	// 理想宽度 = 最长路径一行 + 边距；不超过屏宽
 	const ideal = Math.ceil(textW + chromeX);
 	const width = Math.min(maxW, Math.max(minW, ideal, actionsMin));
 
+	// 屏宽够 → 单行不换行、不滚；只有整屏仍放不下才换行
 	const canSingleLine = ideal <= maxW;
 	[plainEl, encEl].forEach((el) => {
 		if (!el) return;
 		el.classList.toggle('is-wrap', !canSingleLine);
+		el.classList.remove('is-overflow');
 	});
+	pop.classList.remove('is-overflow-y');
 
-	// 竖直：贴路径栏 / 顶栏下方
 	const crumb =
 		pop.closest('.wiki-breadcrumb') ||
 		document.querySelector('.pane-bar--center') ||
@@ -2064,11 +2097,52 @@ function positionPathPopover(pop: HTMLElement) {
 	pop.style.width = `${Math.round(width)}px`;
 	pop.style.maxWidth = `${maxW}px`;
 	pop.style.maxHeight = `${Math.max(120, maxH - (top - margin))}px`;
-	pop.style.overflowY = 'auto';
+	pop.style.overflowY = 'hidden';
+	pop.style.overflowX = 'hidden';
 	pop.style.transform = 'none';
 	const left = Math.max(margin, (window.innerWidth - width) / 2);
 	pop.style.left = `${Math.round(left)}px`;
 	pop.style.top = `${top}px`;
+
+	// 量完若仍略宽：优先再拉宽弹层（不超过 maxW），避免左右滚动条
+	requestAnimationFrame(() => {
+		let need = width;
+		[plainEl, encEl].forEach((el) => {
+			if (!el || el.classList.contains('is-wrap')) return;
+			const sw = el.scrollWidth;
+			const cw = el.clientWidth;
+			if (sw > cw + 1) {
+				// code 比内容窄 → 弹层需再加 (sw - cw)
+				need = Math.max(need, width + (sw - cw) + 8);
+			}
+		});
+		need = Math.min(maxW, need);
+		if (need > width + 1) {
+			pop.style.width = `${Math.round(need)}px`;
+			const left2 = Math.max(margin, (window.innerWidth - need) / 2);
+			pop.style.left = `${Math.round(left2)}px`;
+		}
+		requestAnimationFrame(() => {
+			[plainEl, encEl].forEach((el) => {
+				if (!el || el.classList.contains('is-wrap')) {
+					el?.classList.remove('is-overflow');
+					return;
+				}
+				// 仍超（极长 URL 整屏都放不下）才允许横向滚
+				el.classList.toggle(
+					'is-overflow',
+					el.scrollWidth > el.clientWidth + 1,
+				);
+			});
+			pop.classList.toggle(
+				'is-overflow-y',
+				pop.scrollHeight > pop.clientHeight + 1,
+			);
+			if (pop.classList.contains('is-overflow-y')) {
+				pop.style.overflowY = 'auto';
+			}
+		});
+	});
 }
 
 function openPathPopover(anchor: HTMLElement) {
@@ -2168,12 +2242,16 @@ function bindPathReveal() {
 		// 关闭按钮
 		if (t.closest('[data-path-popover-close]')) {
 			ev.preventDefault();
+			ev.stopPropagation();
 			closeAllPathPopovers();
 			return;
 		}
 
-		// 点在弹层内（选中文字 / 按钮）不关闭
-		if (t.closest('[data-path-popover]')) return;
+		// 点在弹层内（含路径选区、复制按钮）：绝不关闭
+		if (t.closest('[data-path-popover], .wiki-breadcrumb__popover')) {
+			ev.stopPropagation();
+			return;
+		}
 
 		// 路径栏根目录图标 → 左侧树滚到顶部（不进主页）
 		const treeRoot = t.closest('[data-tree-scroll-root]') as HTMLElement | null;
@@ -2197,7 +2275,7 @@ function bindPathReveal() {
 			return;
 		}
 
-		// 仅 info 按钮打开文件信息弹层（路径 trail 不再弹出）
+		// 仅 info 按钮打开/关闭文件信息弹层
 		const infoBtn = t.closest('[data-path-reveal-btn]') as HTMLElement | null;
 		if (infoBtn) {
 			ev.preventDefault();
@@ -2206,10 +2284,8 @@ function bindPathReveal() {
 			return;
 		}
 
-		// 点外部关闭
-		if (!t.closest('.wiki-breadcrumb__popover')) {
-			closeAllPathPopovers();
-		}
+		// 点弹层外空白：关闭
+		closeAllPathPopovers();
 	});
 
 	document.addEventListener('keydown', (ev) => {
@@ -2227,10 +2303,20 @@ function bindPathReveal() {
 		}
 	});
 
-	// 滚动 / 改尺寸时关掉，避免悬浮错位
+	// 页面滚动/改尺寸时关掉；弹层内部滚动（路径条）不关
 	window.addEventListener(
 		'scroll',
-		() => {
+		(ev) => {
+			const raw = ev.target;
+			const el =
+				raw instanceof Element
+					? raw
+					: raw instanceof Node
+						? raw.parentElement
+						: null;
+			if (el?.closest?.('[data-path-popover], .wiki-breadcrumb__popover')) {
+				return;
+			}
 			closeAllPathPopovers();
 		},
 		true,
@@ -3328,15 +3414,234 @@ let softNavGen = 0;
 /** 中断上一次软导航的 fetch */
 let softNavAbort: AbortController | null = null;
 
+/**
+ * 软导航「页面内」会话缓存（业界 SPA：keep-alive + TTL + SWR）
+ * - 先展示缓存 → 后台对比远端（ETag/正文）→ 不同才更新并（若仍在该页）静默刷新
+ * - 离开后保留 SOFT_NAV_CACHE_TTL_MS，超时卸载；条数 LRU 上限
+ * - 与 HTTP/CDN 缓存是两层；整页刷新清空本 Map
+ */
+const SOFT_NAV_CACHE_MAX = 48;
+/** 离开后保留时长：10 分钟无再访问则卸载 */
+const SOFT_NAV_CACHE_TTL_MS = 10 * 60 * 1000;
+type SoftNavCacheEntry = {
+	html: string;
+	/** 最近一次访问（进入或离开时刷新），用于 TTL */
+	lastAccess: number;
+	/** 条件请求，304 表示未改 */
+	etag?: string;
+	lastModified?: string;
+};
+const softNavHtmlCache = new Map<string, SoftNavCacheEntry>();
+const softNavPrefetching = new Set<string>();
+/** 正在后台 revalidate 的 key，避免重复打 */
+const softNavRevalidating = new Set<string>();
+let softNavCacheSweepTimer: number | null = null;
+
 function normalizePathname(p: string): string {
 	if (!p || p === '/') return '/';
 	// 统一无尾斜杠再比，避免 /a 与 /a/ 被当成同页误判
 	return p.replace(/\/+$/, '') || '/';
 }
 
+function softNavCacheKey(url: URL): string {
+	return normalizePathname(url.pathname) + (url.search || '');
+}
+
+function softNavCacheKeyFromPath(pathname: string, search = ''): string {
+	return normalizePathname(pathname) + (search || '');
+}
+
+function softNavIsCurrentKey(key: string): boolean {
+	try {
+		return softNavCacheKey(new URL(location.href)) === key;
+	} catch {
+		return false;
+	}
+}
+
+/** 扫掉超过 TTL 的条目 */
+function pruneSoftNavCache(now = Date.now()): void {
+	for (const [k, e] of softNavHtmlCache) {
+		if (now - e.lastAccess > SOFT_NAV_CACHE_TTL_MS) {
+			softNavHtmlCache.delete(k);
+		}
+	}
+	// 仍超上限：按 lastAccess 最旧删
+	while (softNavHtmlCache.size > SOFT_NAV_CACHE_MAX) {
+		let oldestKey: string | null = null;
+		let oldestAt = Infinity;
+		for (const [k, e] of softNavHtmlCache) {
+			if (e.lastAccess < oldestAt) {
+				oldestAt = e.lastAccess;
+				oldestKey = k;
+			}
+		}
+		if (oldestKey == null) break;
+		softNavHtmlCache.delete(oldestKey);
+	}
+}
+
+function ensureSoftNavCacheSweeper(): void {
+	if (softNavCacheSweepTimer != null) return;
+	softNavCacheSweepTimer = window.setInterval(() => {
+		pruneSoftNavCache();
+	}, 60_000);
+}
+
+function getSoftNavCacheEntry(key: string): SoftNavCacheEntry | null {
+	pruneSoftNavCache();
+	const e = softNavHtmlCache.get(key);
+	if (!e) return null;
+	const now = Date.now();
+	if (now - e.lastAccess > SOFT_NAV_CACHE_TTL_MS) {
+		softNavHtmlCache.delete(key);
+		return null;
+	}
+	// 再访问：续命 + LRU 挪到末尾
+	e.lastAccess = now;
+	softNavHtmlCache.delete(key);
+	softNavHtmlCache.set(key, e);
+	return e;
+}
+
+function getSoftNavCache(key: string): string | null {
+	return getSoftNavCacheEntry(key)?.html ?? null;
+}
+
+function putSoftNavCache(
+	key: string,
+	html: string,
+	meta?: { etag?: string; lastModified?: string },
+): void {
+	if (!key || !html) return;
+	const now = Date.now();
+	const prev = softNavHtmlCache.get(key);
+	if (softNavHtmlCache.has(key)) softNavHtmlCache.delete(key);
+	softNavHtmlCache.set(key, {
+		html,
+		lastAccess: now,
+		etag: meta?.etag ?? prev?.etag,
+		lastModified: meta?.lastModified ?? prev?.lastModified,
+	});
+	pruneSoftNavCache(now);
+	ensureSoftNavCacheSweeper();
+}
+
+/**
+ * 离开某页时调用：刷新该页 lastAccess，开始「离开后 TTL」计时。
+ * 在 TTL 内再点回来仍命中；超时才卸载。
+ */
+function markSoftNavPageLeft(pathname: string, search = location.search): void {
+	const key = softNavCacheKeyFromPath(pathname, search);
+	const e = softNavHtmlCache.get(key);
+	if (!e) return;
+	e.lastAccess = Date.now();
+	// 挪到末尾，避免刚离开就被 LRU 挤掉
+	softNavHtmlCache.delete(key);
+	softNavHtmlCache.set(key, e);
+}
+
+/**
+ * 后台对比远端：有缓存先给用户看；仅当 200 且正文不同才更新缓存，
+ * 若用户仍停留在该 URL 则静默换页（无 loading）。
+ * 优先 ETag/Last-Modified 条件请求（304=未改）；无校验头则比 HTML 字符串。
+ */
+async function revalidateSoftNavPage(url: URL, key: string): Promise<void> {
+	if (softNavRevalidating.has(key)) return;
+	softNavRevalidating.add(key);
+	try {
+		const prev = softNavHtmlCache.get(key);
+		const headers: Record<string, string> = { Accept: 'text/html' };
+		if (prev?.etag) headers['If-None-Match'] = prev.etag;
+		if (prev?.lastModified) headers['If-Modified-Since'] = prev.lastModified;
+
+		const res = await fetch(url.pathname + url.search, {
+			headers,
+			credentials: 'same-origin',
+			// 强制走协商/网络校验，避免只啃磁盘旧副本
+			cache: 'no-cache',
+		});
+
+		// 未修改
+		if (res.status === 304) {
+			if (prev) {
+				putSoftNavCache(key, prev.html, {
+					etag: res.headers.get('ETag') || prev.etag,
+					lastModified:
+						res.headers.get('Last-Modified') || prev.lastModified,
+				});
+			}
+			return;
+		}
+		if (!res.ok) return;
+
+		const html = await res.text();
+		const etag = res.headers.get('ETag') || undefined;
+		const lastModified = res.headers.get('Last-Modified') || undefined;
+
+		// 正文相同：只刷新元数据
+		if (prev && prev.html === html) {
+			putSoftNavCache(key, html, { etag, lastModified });
+			return;
+		}
+
+		// 不同：写入新缓存；若仍在该页则静默应用
+		putSoftNavCache(key, html, { etag, lastModified });
+		if (!softNavIsCurrentKey(key) || softNavBusy) return;
+
+		const doc = new DOMParser().parseFromString(html, 'text/html');
+		// 仍在同页：不 pushState，不打断滚动过多（尽量保留 scroll）
+		const scrollEl = document.querySelector<HTMLElement>('[data-wiki-scroll]');
+		const keepScroll = scrollEl?.scrollTop ?? 0;
+		applySoftNavDocument(doc, url, false);
+		if (scrollEl && keepScroll > 0) {
+			forcePaneScrollTop(scrollEl, keepScroll);
+		}
+	} catch {
+		/* 后台校验失败忽略，继续用缓存 */
+	} finally {
+		softNavRevalidating.delete(key);
+	}
+}
+
+/** 悬停/触摸时预取页面 HTML，点开即可命中缓存 */
+function prefetchSoftNavPage(href: string): void {
+	let url: URL;
+	try {
+		url = new URL(href, location.href);
+	} catch {
+		return;
+	}
+	if (url.origin !== location.origin) return;
+	const key = softNavCacheKey(url);
+	if (softNavHtmlCache.has(key) || softNavPrefetching.has(key)) return;
+	softNavPrefetching.add(key);
+	void (async () => {
+		try {
+			const res = await fetch(url.pathname + url.search, {
+				headers: { Accept: 'text/html' },
+				credentials: 'same-origin',
+				// 允许浏览器 HTTP 缓存；与软导航一致
+				cache: 'default',
+			});
+			if (!res.ok) return;
+			const html = await res.text();
+			putSoftNavCache(key, html, {
+				etag: res.headers.get('ETag') || undefined,
+				lastModified: res.headers.get('Last-Modified') || undefined,
+			});
+		} catch {
+			/* 预取失败忽略 */
+		} finally {
+			softNavPrefetching.delete(key);
+		}
+	})();
+}
+
 /**
  * 软导航加载条：仅进度条，无文字。
  * 位置：header 下方、中栏路径栏上方（插在 [data-wiki-main] 内路径栏之前）。
+ * 缓存命中时不调用，避免「再打开还转圈」。
  */
 function setSoftNavLoading(on: boolean, _label?: string) {
 	const main = document.querySelector<HTMLElement>('[data-wiki-main]');
@@ -3376,6 +3681,114 @@ function setSoftNavLoading(on: boolean, _label?: string) {
 	}
 }
 
+/** 把已解析的 Document 应用到当前壳（路径栏/中栏/大纲/底栏） */
+function applySoftNavDocument(doc: Document, url: URL, push: boolean): void {
+	// 标题
+	document.title = doc.title || document.title;
+
+	// body 页面态 class（媒体页 is-image-page 等）——保留运行时类，勿整串覆盖
+	// 注意：is-sheet-app-page / is-xs-page 等必须算页面态！
+	const PAGE_STATE =
+		/^is-(?:text|home|image|video|audio|pdf|binary|media|source|file|markdown|sheet|sheet-app|xs|office|xlsx)-page$/;
+	const nextBodyClass = doc.body.className || '';
+	const pageStates = nextBodyClass
+		.split(/\s+/)
+		.filter((c) => PAGE_STATE.test(c));
+	const keepRuntime = Array.from(document.body.classList).filter(
+		(c) => c && c !== 'wiki-body' && !PAGE_STATE.test(c),
+	);
+	document.body.className = ['wiki-body', ...pageStates, ...keepRuntime]
+		.filter((c, i, arr) => c && arr.indexOf(c) === i)
+		.join(' ');
+
+	// 路径栏（固定顶栏，不在滚动区内）
+	const nextCrumb = doc.querySelector('[data-wiki-crumb]');
+	const curCrumb = document.querySelector('[data-wiki-crumb]');
+	if (nextCrumb && curCrumb) {
+		curCrumb.innerHTML = nextCrumb.innerHTML;
+	}
+
+	// 中间滚动区：文内大纲 + article
+	const nextScroll = doc.querySelector('[data-wiki-scroll]');
+	const curScroll = document.querySelector<HTMLElement>('[data-wiki-scroll]');
+	if (nextScroll && curScroll) {
+		forcePaneScrollTop(curScroll, 0);
+		curScroll.innerHTML = nextScroll.innerHTML;
+		forcePaneScrollTop(curScroll, 0);
+	} else if (!curScroll) {
+		location.href = url.href;
+		return;
+	}
+
+	// 右侧大纲
+	const nextToc = doc.querySelector('#doc-toc');
+	const curToc = document.querySelector<HTMLElement>('#doc-toc');
+	if (nextToc && curToc) {
+		forcePaneScrollTop(curToc, 0);
+		curToc.innerHTML = nextToc.innerHTML;
+		forcePaneScrollTop(curToc, 0);
+	}
+
+	// 底部分页
+	const nextFooter = doc.querySelector('.wiki-page-footer');
+	const curFooter = document.querySelector('.wiki-page-footer');
+	if (nextFooter && curFooter) curFooter.innerHTML = nextFooter.innerHTML;
+
+	// 先改 URL，再同步树高亮
+	if (push) {
+		history.pushState({ soft: true }, '', url.pathname + url.search + url.hash);
+	}
+
+	syncTreeActiveFromDoc(doc);
+	refreshWikiPagerFromTree();
+
+	if (isDrawerViewport()) {
+		setNavDrawer(false);
+		setTocDrawer(false);
+	}
+	closeAllDrawers();
+	exitCenterPseudoFullscreen();
+
+	rebindPageWidgets();
+	if (document.querySelector('[data-sheet-app]')) {
+		prefetchSheetEngines();
+	}
+	reassertContentWidthMode();
+	applyLayout(loadState());
+	updateContentReadableMax();
+
+	const saved = loadViewState(url.pathname);
+	const scrollEl = document.querySelector<HTMLElement>('[data-wiki-scroll]');
+	const tocEl = document.querySelector<HTMLElement>('#doc-toc');
+	const applyMainScroll = () => {
+		if (!scrollEl) return;
+		if (url.hash) {
+			const id = decodeURIComponent(url.hash.slice(1));
+			const target = id ? document.getElementById(id) : null;
+			if (target) scrollElWithinPane(target, scrollEl, { behavior: 'auto', offset: 12 });
+			else forcePaneScrollTop(scrollEl, 0);
+		} else if (!push && saved && saved.scrollMain > 0) {
+			forcePaneScrollTop(scrollEl, saved.scrollMain);
+		} else {
+			forcePaneScrollTop(scrollEl, 0);
+		}
+		if (tocEl) {
+			if (!push && saved) forcePaneScrollTop(tocEl, saved.scrollToc || 0);
+			else forcePaneScrollTop(tocEl, 0);
+		}
+		pinDocumentScroll();
+	};
+	applyMainScroll();
+	requestAnimationFrame(() => {
+		applyMainScroll();
+		requestAnimationFrame(applyMainScroll);
+	});
+	window.setTimeout(applyMainScroll, 50);
+	window.setTimeout(applyMainScroll, 200);
+	window.setTimeout(applyMainScroll, 400);
+	syncAppHeaderOffset();
+}
+
 async function softNavigate(href: string, opts?: { push?: boolean }) {
 	const push = opts?.push !== false;
 	const url = new URL(href, location.href);
@@ -3388,180 +3801,70 @@ async function softNavigate(href: string, opts?: { push?: boolean }) {
 		return;
 	}
 
+	const cacheKey = softNavCacheKey(url);
+	const cachedHtml = getSoftNavCache(cacheKey);
+
 	// 连点：中断上一次 fetch，只跟最后一次（无中间页队列）
 	softNavAbort?.abort();
 	const ac = new AbortController();
 	softNavAbort = ac;
 	const gen = ++softNavGen;
 
-	// 离开当前页前记下滚动与目录展开（仅第一次打断时记旧页；被覆盖的中间目标不记）
+	// 离开当前页前记下滚动与目录展开（仅第一次打断时记旧页）
 	if (!softNavBusy) {
 		saveViewState(location.pathname);
+		// 离开页：续上会话缓存 TTL（离开后保留一段时间再卸载）
+		markSoftNavPageLeft(location.pathname, location.search);
 	}
-	// 立刻打断大纲 smooth / 惯性滚动，避免 fetch 期间动画还在改 scrollTop
 	cancelMainPaneScrollAnimations();
 
 	softNavBusy = true;
-	// 立刻显示加载，不必等 HTML 完全就绪
-	const shortName = decodeURIComponent(
-		url.pathname.split('/').filter(Boolean).pop() || '',
-	);
-	setSoftNavLoading(
-		true,
-		shortName ? `正在打开 ${shortName}…` : '正在加载…',
-	);
-	// 防止异常路径卡死 busy
+	// 缓存命中：先秒开、不 loading；后台 revalidate。未命中才显示进度条
+	const fromCache = Boolean(cachedHtml);
+	if (!fromCache) {
+		setSoftNavLoading(true);
+	}
+
 	const busyWatch = window.setTimeout(() => {
 		if (softNavGen === gen) {
 			softNavBusy = false;
 			setSoftNavLoading(false);
 		}
 	}, 15000);
+
 	try {
-		const res = await fetch(url.pathname + url.search, {
-			headers: { Accept: 'text/html' },
-			credentials: 'same-origin',
-			cache: 'no-cache',
-			signal: ac.signal,
-		});
-		// 已被更新的点击取代
-		if (gen !== softNavGen || ac.signal.aborted) return;
-		if (!res.ok) {
-			location.href = url.href;
-			return;
+		let html = cachedHtml;
+		if (!html) {
+			const res = await fetch(url.pathname + url.search, {
+				headers: { Accept: 'text/html' },
+				credentials: 'same-origin',
+				// 允许 HTTP 磁盘缓存；内存缓存另管「再打开不 loading」
+				cache: 'default',
+				signal: ac.signal,
+			});
+			if (gen !== softNavGen || ac.signal.aborted) return;
+			if (!res.ok) {
+				location.href = url.href;
+				return;
+			}
+			html = await res.text();
+			if (gen !== softNavGen || ac.signal.aborted) return;
+			putSoftNavCache(cacheKey, html, {
+				etag: res.headers.get('ETag') || undefined,
+				lastModified: res.headers.get('Last-Modified') || undefined,
+			});
 		}
-		const html = await res.text();
-		if (gen !== softNavGen || ac.signal.aborted) return;
+
 		const doc = new DOMParser().parseFromString(html, 'text/html');
-		// 解析完再确认一次：避免慢响应覆盖最新页
 		if (gen !== softNavGen || ac.signal.aborted) return;
 
-		// 标题
-		document.title = doc.title || document.title;
+		applySoftNavDocument(doc, url, push);
 
-		// body 页面态 class（媒体页 is-image-page 等）——保留运行时类，勿整串覆盖
-		// （旧逻辑 document.body.className = next 会清掉抽屉态等，且偶发布局未刷新）
-		// 注意：is-sheet-app-page / is-xs-page 等必须算页面态！
-		// excel-viewer 会 classList.add，若不在此列表会被 keepRuntime 粘住，
-		// 离开表格后仍 overflow:hidden → 中栏滚动条消失。
-		const PAGE_STATE =
-			/^is-(?:text|home|image|video|audio|pdf|binary|media|source|file|markdown|sheet|sheet-app|xs|office|xlsx)-page$/;
-		const nextBodyClass = doc.body.className || '';
-		const pageStates = nextBodyClass
-			.split(/\s+/)
-			.filter((c) => PAGE_STATE.test(c));
-		const keepRuntime = Array.from(document.body.classList).filter(
-			(c) => c && c !== 'wiki-body' && !PAGE_STATE.test(c),
-		);
-		document.body.className = ['wiki-body', ...pageStates, ...keepRuntime]
-			.filter((c, i, arr) => c && arr.indexOf(c) === i)
-			.join(' ');
-
-		// 路径栏（固定顶栏，不在滚动区内）
-		const nextCrumb = doc.querySelector('[data-wiki-crumb]');
-		const curCrumb = document.querySelector('[data-wiki-crumb]');
-		if (nextCrumb && curCrumb) {
-			curCrumb.innerHTML = nextCrumb.innerHTML;
+		// 先缓存后校验：后台对比远端，不同且仍在该页则静默换新
+		if (fromCache && gen === softNavGen) {
+			void revalidateSoftNavPage(url, cacheKey);
 		}
-
-		// 中间滚动区：文内大纲 + article
-		const nextScroll = doc.querySelector('[data-wiki-scroll]');
-		const curScroll = document.querySelector<HTMLElement>('[data-wiki-scroll]');
-		if (nextScroll && curScroll) {
-			// 换页前先强力清零：替换 innerHTML 后浏览器常保留旧 scrollTop（大纲定位后尤甚）
-			forcePaneScrollTop(curScroll, 0);
-			curScroll.innerHTML = nextScroll.innerHTML;
-			forcePaneScrollTop(curScroll, 0);
-		} else if (!curScroll) {
-			// 结构异常：硬跳转
-			location.href = url.href;
-			return;
-		}
-
-		// 右侧大纲
-		const nextToc = doc.querySelector('#doc-toc');
-		const curToc = document.querySelector<HTMLElement>('#doc-toc');
-		if (nextToc && curToc) {
-			forcePaneScrollTop(curToc, 0);
-			curToc.innerHTML = nextToc.innerHTML;
-			forcePaneScrollTop(curToc, 0);
-		}
-
-		// 底部分页
-		const nextFooter = doc.querySelector('.wiki-page-footer');
-		const curFooter = document.querySelector('.wiki-page-footer');
-		if (nextFooter && curFooter) curFooter.innerHTML = nextFooter.innerHTML;
-
-		// 先改 URL，再同步树高亮
-		if (push) {
-			history.pushState({ soft: true }, '', url.pathname + url.search + url.hash);
-		}
-
-		// 左侧高亮（不替换整棵树；不恢复旧 openDirs，避免盖掉当前高亮路径）
-		syncTreeActiveFromDoc(doc);
-		// 软导航带来的 footer 仍是构建期顺序；按当前树排序刷新上一页/下一页
-		refreshWikiPagerFromTree();
-
-		// 换页后务必关掉抽屉（并清 transform 动画干扰中栏绘制）
-		if (isDrawerViewport()) {
-			setNavDrawer(false);
-			setTocDrawer(false);
-		}
-		closeAllDrawers();
-		// 软导航离开时退出伪全屏，避免 class 粘在 body 上
-		exitCenterPseudoFullscreen();
-
-		rebindPageWidgets();
-		// 若目标是表格页，后台预热引擎（本次已绑定时可能已在加载）
-		if (document.querySelector('[data-sheet-app]')) {
-			prefetchSheetEngines();
-		}
-		// 软导航会换路径栏按钮 DOM：重申用户锁定的固定/铺满
-		reassertContentWidthMode();
-		// 大纲有无随页面变：必须重算分栏，否则 txt/pdf 会留下空大纲列
-		applyLayout(loadState());
-		updateContentReadableMax();
-
-		/*
-		 * 中栏滚动：
-		 * - 点文件/分页等前进导航：一律回顶（用户期望「换页从开头读」）
-		 * - 浏览器后退/前进（push=false）：恢复该页上次位置
-		 * - URL 带 # 锚点：滚到标题（不恢复旧 scroll）
-		 * 大纲定位后换页：必须用 forcePaneScrollTop，普通 pin 在 iOS 上不够。
-		 */
-		const saved = loadViewState(url.pathname);
-		const scrollEl = document.querySelector<HTMLElement>('[data-wiki-scroll]');
-		const tocEl = document.querySelector<HTMLElement>('#doc-toc');
-		const applyMainScroll = () => {
-			if (!scrollEl) return;
-			if (url.hash) {
-				const id = decodeURIComponent(url.hash.slice(1));
-				const target = id ? document.getElementById(id) : null;
-				if (target) scrollElWithinPane(target, scrollEl, { behavior: 'auto', offset: 12 });
-				else forcePaneScrollTop(scrollEl, 0);
-			} else if (!push && saved && saved.scrollMain > 0) {
-				forcePaneScrollTop(scrollEl, saved.scrollMain);
-			} else {
-				forcePaneScrollTop(scrollEl, 0);
-			}
-			if (tocEl) {
-				if (!push && saved) forcePaneScrollTop(tocEl, saved.scrollToc || 0);
-				else forcePaneScrollTop(tocEl, 0);
-			}
-			pinDocumentScroll();
-		};
-		applyMainScroll();
-		// 图片/字体/mermaid 改高度后可能把滚动顶偏，多帧再钉一次
-		requestAnimationFrame(() => {
-			applyMainScroll();
-			requestAnimationFrame(applyMainScroll);
-		});
-		window.setTimeout(applyMainScroll, 50);
-		window.setTimeout(applyMainScroll, 200);
-		window.setTimeout(applyMainScroll, 400);
-		syncAppHeaderOffset();
 	} catch (err) {
-		// 被更新点击 abort：静默结束，由新请求负责 UI
 		if (
 			(err instanceof DOMException && err.name === 'AbortError') ||
 			(err instanceof Error && err.name === 'AbortError') ||
@@ -3572,10 +3875,8 @@ async function softNavigate(href: string, opts?: { push?: boolean }) {
 		location.href = url.href;
 	} finally {
 		window.clearTimeout(busyWatch);
-		// 仅最新世代收尾；被取代的请求不关 loading（新请求还在）
 		if (gen === softNavGen) {
 			setSoftNavLoading(false);
-			// 去掉软导航半透明后强制中栏重绘（防 iOS 空白层残留）
 			const scrollEl = document.querySelector<HTMLElement>('[data-wiki-scroll]');
 			if (scrollEl) {
 				void scrollEl.offsetHeight;
@@ -3589,10 +3890,15 @@ async function softNavigate(href: string, opts?: { push?: boolean }) {
 }
 
 function bindSoftNav() {
-	// 悬停/触摸文件树里的表格链接触发引擎预热，减轻首开等待
-	const warmSheetIfLink = (a: HTMLAnchorElement) => {
-		const href = a.getAttribute('href') || '';
-		if (/\.(xlsx|xls|ods|csv)(\/)?([?#].*)?$/i.test(href) || /\/pages\/.*\.(xlsx|xls|ods|csv)/i.test(href)) {
+	// 悬停：预取页面 HTML + 表格引擎（点开秒开/少 loading）
+	const warmLink = (a: HTMLAnchorElement) => {
+		const href = a.getAttribute('href') || a.href;
+		if (!href) return;
+		prefetchSoftNavPage(href);
+		if (
+			/\.(xlsx|xls|ods|csv)(\/)?([?#].*)?$/i.test(href) ||
+			/\/pages\/.*\.(xlsx|xls|ods|csv)/i.test(href)
+		) {
 			prefetchSheetEngines();
 		}
 	};
@@ -3600,11 +3906,22 @@ function bindSoftNav() {
 		'pointerenter',
 		(ev) => {
 			const a = (ev.target as HTMLElement | null)?.closest?.(
-				'#file-tree a[href]',
+				'#file-tree a[href], .wiki-page-footer a[href]',
 			) as HTMLAnchorElement | null;
-			if (a) warmSheetIfLink(a);
+			if (a) warmLink(a);
 		},
 		true,
+	);
+	// 触摸设备无 hover：touchstart 也预取
+	document.addEventListener(
+		'touchstart',
+		(ev) => {
+			const a = (ev.target as HTMLElement | null)?.closest?.(
+				'#file-tree a[href], .wiki-page-footer a[href]',
+			) as HTMLAnchorElement | null;
+			if (a) warmLink(a);
+		},
+		{ capture: true, passive: true },
 	);
 	document.addEventListener(
 		'click',
@@ -3613,7 +3930,7 @@ function bindSoftNav() {
 			if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
 			const a = (ev.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
 			if (!a || !isSoftNavLink(a)) return;
-			if (a.closest('#file-tree')) warmSheetIfLink(a);
+			if (a.closest('#file-tree') || a.closest('.wiki-page-footer')) warmLink(a);
 			// 仅拦截站内导航相关区域 + 正文内链
 			if (
 				!a.closest('#file-tree') &&
@@ -3634,7 +3951,6 @@ function bindSoftNav() {
 			) {
 				return;
 			}
-			// 已被其它逻辑取消时，仍尝试软导航（勿因 defaultPrevented 直接放弃）
 			ev.preventDefault();
 			ev.stopPropagation();
 			void softNavigate(url.href, { push: true });
@@ -3645,6 +3961,17 @@ function bindSoftNav() {
 	window.addEventListener('popstate', () => {
 		void softNavigate(location.href, { push: false });
 	});
+
+	// 首屏当前页也写入缓存，返回首页/再进本页可秒开
+	try {
+		const key = softNavCacheKey(new URL(location.href));
+		if (!softNavHtmlCache.has(key)) {
+			// 用当前 DOM 序列化成本高且缺完整 head；改为后台拉一份
+			prefetchSoftNavPage(location.href);
+		}
+	} catch {
+		/* ignore */
+	}
 }
 
 /* ========== 刷新 / 软导航：保持滚动条与目录展开 ========== */

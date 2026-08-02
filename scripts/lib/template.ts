@@ -7,6 +7,7 @@ import site from '../../site.config';
 import type { Heading } from './markdown';
 import type { TreeFile, TreeNode } from './scan';
 import { pageHref } from './scan';
+import { getWebmdBuildInfo } from './version';
 
 function esc(s: string): string {
 	return s
@@ -340,7 +341,8 @@ const ICON_PANEL_FILES = `<svg class="panel-btn__glyph panel-btn__glyph--files" 
 const ICON_PANEL_TOC = `<svg class="panel-btn__glyph panel-btn__glyph--toc" width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path class="panel-btn__toc-fill" d="M2.5 3.25C2.5 2.56 3.06 2 3.75 2h8.5c.69 0 1.25.56 1.25 1.25v9.5c0 .69-.56 1.25-1.25 1.25h-8.5C3.06 14 2.5 13.44 2.5 12.75v-9.5Z"/><path class="panel-btn__toc-lines" d="M5 5.25h6M5 8h6M5 10.75h4" stroke-linecap="round"/></svg>`;
 
 /** 防 FOUC：主题 + 正文宽度（宽屏默认 fill，窄屏默认 fixed，与 client defaultContentWidth 一致） */
-const THEME_BOOT_SCRIPT = `(function(){try{var k='webmd-theme';var p=localStorage.getItem(k);var t=(p==='light'||p==='dark')?p:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;var w=localStorage.getItem('webmd-content-width');if(w==='fixed'||w==='fill')r.dataset.contentWidth=w;else r.dataset.contentWidth=matchMedia('(max-width: 640px)').matches?'fixed':'fill';r.style.setProperty('--content-readable-max','100%');}catch(e){document.documentElement.dataset.theme='light';try{document.documentElement.dataset.contentWidth=matchMedia('(max-width: 640px)').matches?'fixed':'fill';document.documentElement.style.setProperty('--content-readable-max','100%');}catch(e2){document.documentElement.dataset.contentWidth='fill';}}})();`;
+// 默认铺满中栏（自适应宽度）；用户若手动选过 fixed/fill 则尊重 localStorage
+const THEME_BOOT_SCRIPT = `(function(){try{var k='webmd-theme';var p=localStorage.getItem(k);var t=(p==='light'||p==='dark')?p:(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;var w=localStorage.getItem('webmd-content-width-v2');if(w==='fixed'||w==='fill')r.dataset.contentWidth=w;else r.dataset.contentWidth='fill';r.style.setProperty('--content-readable-max','100%');}catch(e){document.documentElement.dataset.theme='light';try{document.documentElement.dataset.contentWidth='fill';document.documentElement.style.setProperty('--content-readable-max','100%');}catch(e2){document.documentElement.dataset.contentWidth='fill';}}})();`;
 
 function renderThemeToggle(): string {
 	return `<button type="button" class="theme-toggle" data-theme-toggle title="切换深色模式" aria-label="切换深色模式" aria-pressed="false">${ICON_THEME_SUN}${ICON_THEME_MOON}</button>`;
@@ -411,23 +413,29 @@ export function renderBreadcrumb(
 	const pathAttr = esc(file.path);
 	const downloadHref = esc(file.url);
 	const downloadName = esc(file.name);
-	const infoBlocks: string[] = [];
+	// 大小 / 格式同一行：大小 23 KB · 格式 文件
+	const factParts: string[] = [];
 	if (sizeLabel) {
-		infoBlocks.push(
-			`<div class="wiki-breadcrumb__popover-block">` +
-				`<span class="wiki-breadcrumb__popover-label">大小</span>` +
-				`<div class="wiki-breadcrumb__popover-value">${esc(sizeLabel)}</div>` +
-				`</div>`,
+		factParts.push(
+			`<span class="wiki-breadcrumb__popover-fact">` +
+				`<span class="wiki-breadcrumb__popover-fact-k">大小</span>` +
+				`<span class="wiki-breadcrumb__popover-fact-v">${esc(sizeLabel)}</span>` +
+				`</span>`,
 		);
 	}
 	if (kindLabel) {
-		infoBlocks.push(
-			`<div class="wiki-breadcrumb__popover-block">` +
-				`<span class="wiki-breadcrumb__popover-label">格式</span>` +
-				`<div class="wiki-breadcrumb__popover-value">${esc(kindLabel)}</div>` +
-				`</div>`,
+		factParts.push(
+			`<span class="wiki-breadcrumb__popover-fact">` +
+				`<span class="wiki-breadcrumb__popover-fact-k">格式</span>` +
+				`<span class="wiki-breadcrumb__popover-fact-v">${esc(kindLabel)}</span>` +
+				`</span>`,
 		);
 	}
+	const infoFactsHtml = factParts.length
+		? `<div class="wiki-breadcrumb__popover-facts">${factParts.join(
+				`<span class="wiki-breadcrumb__popover-fact-sep" aria-hidden="true">·</span>`,
+			)}</div>`
+		: '';
 	const actions = `<div class="wiki-breadcrumb__actions">
 		<button type="button" class="wiki-breadcrumb__icon-btn wiki-breadcrumb__info-btn" data-path-reveal-btn title="文件信息" aria-label="文件信息" aria-haspopup="dialog" aria-expanded="false">${ICON_INFO}</button>
 		${renderContentWidthBtn()}
@@ -441,7 +449,7 @@ export function renderBreadcrumb(
 			<span class="wiki-breadcrumb__popover-title">文件信息</span>
 			<button type="button" class="wiki-breadcrumb__popover-close" data-path-popover-close title="关闭" aria-label="关闭">×</button>
 		</div>
-		${infoBlocks.length ? `<div class="wiki-breadcrumb__popover-facts">${infoBlocks.join('')}</div>` : ''}
+		${infoFactsHtml}
 		<div class="wiki-breadcrumb__popover-block">
 			<span class="wiki-breadcrumb__popover-label">可读 URL（非转义）</span>
 			<code class="wiki-breadcrumb__popover-path" data-path-popover-text data-path-popover-plain></code>
@@ -498,12 +506,44 @@ export type PageModel = {
 	navWidth: number;
 	tocWidth: number;
 	headerHeight: number;
+	/** 构建版本（仅展示/调试，不参与缓存失效） */
+	buildLabel?: string;
+	buildVersion?: string;
+	buildCommit?: string;
+	builtAt?: string;
 };
+
+/** 注入到 PageModel 的构建信息（不参与缓存策略） */
+export function pageBuildFields(): Pick<
+	PageModel,
+	'buildLabel' | 'buildVersion' | 'buildCommit' | 'builtAt'
+> {
+	const b = getWebmdBuildInfo();
+	return {
+		buildLabel: b.label,
+		buildVersion: b.version,
+		buildCommit: b.commit || undefined,
+		builtAt: b.builtAt,
+	};
+}
 
 export function renderPage(m: PageModel): string {
 	const desc = m.description
 		? `\n  <meta name="description" content="${esc(m.description)}" />`
 		: '';
+	const buildMeta =
+		m.buildLabel || m.buildVersion
+			? `\n  <meta name="webmd-version" content="${esc(m.buildLabel || m.buildVersion || '')}" />` +
+				(m.buildVersion
+					? `\n  <meta name="webmd-version-semver" content="${esc(m.buildVersion)}" />`
+					: '') +
+				(m.buildCommit
+					? `\n  <meta name="webmd-commit" content="${esc(m.buildCommit)}" />`
+					: '') +
+				(m.builtAt
+					? `\n  <meta name="webmd-built-at" content="${esc(m.builtAt)}" />`
+					: '')
+			: '';
 	return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -514,7 +554,7 @@ export function renderPage(m: PageModel): string {
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="${esc(m.siteTitle)}" />
+  <meta name="apple-mobile-web-app-title" content="${esc(m.siteTitle)}" />${buildMeta}
   <title>${esc(m.pageTitle)} | ${esc(m.siteTitle)}</title>${desc}
   <link rel="icon" href="${FAVICON}" />
   <link rel="apple-touch-icon" href="/icon.svg" />
@@ -632,6 +672,10 @@ export function renderHomePage(m: {
 	navWidth: number;
 	tocWidth: number;
 	headerHeight: number;
+	buildLabel?: string;
+	buildVersion?: string;
+	buildCommit?: string;
+	builtAt?: string;
 }): string {
 	const desc = m.siteDescription || '';
 	const crumb = `<nav class="wiki-breadcrumb" aria-label="主页">
@@ -682,6 +726,11 @@ export function renderHomePage(m: {
 		navWidth: m.navWidth,
 		tocWidth: m.tocWidth,
 		headerHeight: m.headerHeight,
+		buildLabel: m.buildLabel,
+		buildVersion: m.buildVersion,
+		buildCommit: m.buildCommit,
+		builtAt: m.builtAt,
+		...(!m.buildLabel && !m.buildVersion ? pageBuildFields() : {}),
 	});
 }
 
@@ -710,5 +759,6 @@ export function render404Page(m: {
 		navWidth: m.navWidth,
 		tocWidth: m.tocWidth,
 		headerHeight: m.headerHeight,
+		...pageBuildFields(),
 	});
 }

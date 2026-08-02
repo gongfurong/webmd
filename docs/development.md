@@ -56,7 +56,8 @@ content/
 | scan | 否 | 否 |
 | 视频/Office prepare | 否 | 是（不覆盖有效文件） |
 | SSG / dev render | 否 | 否 |
-| 客户端表格编辑 | 否 | 否 |
+| 客户端表格会话显示调整 | 否 | 否 |
+| 客户端改单元格写源 | 否 | 否 |
 
 ---
 
@@ -69,12 +70,14 @@ content/
 | `scripts/lib/markdown.ts` | MD、代码栏、PDF 壳、下载卡、URL 改写 |
 | `scripts/lib/*-preview.ts` | 各类型 shell（Node） |
 | `scripts/lib/diagram-export-preview.ts` | 画布/导图旁路图 |
+| `scripts/lib/version.ts` | 构建版本（semver + commit）；**不**驱动缓存 |
 | `scripts/build-site.ts` | SSG |
 | `scripts/scan-content.ts` | 制作入口 |
-| `src/client.ts` | 布局、下载分流、绑定预览 |
+| `src/client.ts` | 布局、软导航/缓存、路径栏、全屏、下载分流、绑定预览 |
 | `src/previews/*` | 图示 bind |
-| `src/excel-viewer.ts` | 表格 bind |
+| `src/excel-viewer.ts` | 表格 bind（`mode:read` + 显示向操作） |
 | `src/search/*` | 搜索 |
+| `public/_headers` | Cloudflare Pages 缓存头 |
 | `site.config.ts` + `config/*` | 配置 |
 
 ---
@@ -97,6 +100,11 @@ content/
 
 | 问题 | 检查 |
 |------|------|
+| 当前构建是哪一版 | 控制台 `[WebMD]` / `window.__WEBMD__` / meta `webmd-version` |
+| 软导航总 loading | 是否未命中会话缓存；Network 是否 `no-cache` 旧代码 |
+| 手机 Excel 弹键盘 | 是否仍 `mode:edit` 或 hide-input 未禁焦点 |
+| 手机全屏无反应 | 应走伪全屏 `is-center-pseudo-fs`；看 body class |
+| 正文很窄 | 路径栏版心是否 fixed；`localStorage webmd-content-width-v2` |
 | 404 预览 | URL 是否 `/pages/...`；matchFileByUrl |
 | 图示不显示 | 控制台；动态 import；消毒是否吃掉 DOM |
 | 导出图画不出来 | `_Res_*/preview.*` 是否存在；是否 is-image-page 藏壳 |

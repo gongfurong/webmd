@@ -2,7 +2,7 @@
 
 > **给谁看**：产品决策、开发维护、AI 辅助编程。  
 > **不给谁看**：站点访客（访客内容在 `content/`）。  
-> **版本**：与代码 `0.2.x` 对齐（2026-08）。
+> **版本**：与代码 `0.2.x` 对齐（2026-08）；构建标签见控制台 / `window.__WEBMD__`。
 
 ---
 
@@ -91,4 +91,10 @@ WebMD/
 - [ ] 新文件类型 → `preview-framework.md` + `formats.md`（+ `diagrams.md`）  
 - [ ] content 分类 → `content-model.md` + `content/**/README.md`  
 - [ ] 进度 → `roadmap.md`  
-- [ ] 部署 → `deployment.md`  
+- [ ] 部署 / 缓存 / 版本 → `deployment.md`  
+- [ ] 软导航 / 路径栏 / 表格只读 → `features.md` + `architecture.md`  
+
+### 近期易漏同步点（2026-08 续）
+
+路径栏 info/树定位/伪全屏；软导航缓存+SWR；表格 `mode:read`；默认铺满；构建版本号；`_headers` 分层缓存。  
+
