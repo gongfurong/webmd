@@ -2547,7 +2547,8 @@ body.is-file-page .markdown-body > .webmd-code > pre {
 	transform: rotate(180deg);
 }
 .tree-group-btn[data-mode='files-first'],
-.tree-group-btn[data-mode='dirs-first'] {
+.tree-group-btn[data-mode='dirs-first'],
+.tree-group-btn.is-active {
 	color: var(--accent);
 	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 	background: var(--nav-active-bg);
@@ -6555,78 +6556,79 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		-webkit-overflow-scrolling: touch;
 	}
 	/*
-	 * 文件抽屉顶栏：两行灰底，名序/单开/混排完整显示（不裁字、不挤没）。
+	 * 文件抽屉顶栏：与 PC 同一行布局（文件 | 名序/单开/文上 | 滚顶底）。
+	 * 仅略收按钮间距以适配窄抽屉；不换行。
 	 */
 	.wiki-nav .tree-top {
 		flex: 0 0 auto;
-		height: auto !important;
-		min-height: var(--pane-bar-h);
-		max-height: none !important;
-		flex-wrap: wrap;
+		height: var(--pane-bar-h) !important;
+		min-height: var(--pane-bar-h) !important;
+		max-height: var(--pane-bar-h) !important;
+		flex-wrap: nowrap !important;
 		align-items: center;
-		row-gap: 0;
-		column-gap: 0.25rem;
-		padding: 0 0.5rem;
-		overflow: visible;
+		gap: 0.15rem;
+		padding: 0 0.4rem 0 0.5rem;
+		overflow: hidden;
 		background: var(--bg-muted);
 		border-bottom: 1px solid var(--border);
 		z-index: 2;
 	}
 	.wiki-nav .tree-top .pane-title-group {
-		flex: 1 1 auto;
+		flex: 0 1 auto;
 		min-width: 0;
-		max-width: calc(100% - 5rem);
-		height: var(--pane-bar-h);
+		max-width: 4.5rem;
+		height: 100%;
 		display: inline-flex;
 		align-items: center;
+	}
+	.wiki-nav .tree-top .pane-title-tools {
+		flex: 1 1 auto;
+		order: 0;
+		display: inline-flex !important;
+		flex-wrap: nowrap !important;
+		justify-content: flex-end;
+		align-items: center;
+		min-width: 0;
+		width: auto;
+		gap: 0.2rem;
+		margin: 0;
+		padding: 0;
+		border-top: none;
+		background: transparent;
+		overflow: hidden;
 	}
 	.wiki-nav .tree-top .pane-title-end {
 		flex: 0 0 auto;
 		margin-inline-start: 0;
-		height: var(--pane-bar-h);
+		height: 100%;
 		display: inline-flex;
 		align-items: center;
-		gap: 0.1rem;
+		gap: 0;
 	}
-	/* 抽屉模式无「收起」列，只留滚顶/底 */
+	/* 抽屉模式无侧栏「收起」钮，只留滚顶/底 */
 	.wiki-nav .tree-top .pane-collapse-btn {
 		display: none !important;
-	}
-	.wiki-nav .tree-top .pane-title-tools {
-		flex: 1 1 100%;
-		order: 3;
-		display: flex !important;
-		flex-wrap: wrap;
-		justify-content: flex-start;
-		align-items: center;
-		min-width: 100%;
-		width: 100%;
-		gap: 0.4rem;
-		box-sizing: border-box;
-		margin: 0 -0.5rem;
-		padding: 0.4rem 0.5rem 0.45rem;
-		border-top: 1px solid var(--border);
-		background: var(--bg-muted);
-		overflow: visible;
 	}
 	.wiki-nav .tree-top .tree-sort-btn,
 	.wiki-nav .tree-top .tree-group-btn,
 	.wiki-nav .tree-top .tree-accordion-btn {
 		flex: 0 0 auto;
 		display: inline-flex !important;
-		visibility: visible !important;
-		min-height: 2.05rem;
-		height: 2.05rem;
-		padding: 0 0.55rem;
-		/* 保证「名序」「单开」「混排/文上/夹上」整词可见 */
+		min-height: 1.75rem;
+		height: 1.75rem;
+		min-width: 0;
+		padding: 0 0.32rem;
+		gap: 0.12rem;
+		font-size: 0.72rem;
 		white-space: nowrap;
-		max-width: none;
-		overflow: visible;
 	}
-	.wiki-nav .tree-top .tree-sort-btn__label,
-	.wiki-nav .tree-top .tree-accordion-btn__label {
-		display: inline !important;
-		overflow: visible;
+	.wiki-nav .tree-top .tree-sort-btn__arrow {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+	.wiki-nav .tree-top .tree-home__label {
+		/* 窄时保留「文件」二字；过窄则由 max-width 省略 */
+		font-size: 0.8rem;
 	}
 
 	/* —— 右：大纲（对称左栏） —— */

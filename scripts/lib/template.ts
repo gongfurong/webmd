@@ -73,11 +73,12 @@ export function renderTreeHtml(
 	activePath: string,
 	opts?: { sort?: 'asc' | 'desc'; group?: TreeGroupMode },
 ): string {
+	// 默认与客户端一致：名升 + 文上（单开由按钮默认 is-on）
 	const sortOrder = opts?.sort === 'desc' ? 'desc' : 'asc';
 	const groupMode: TreeGroupMode =
-		opts?.group === 'files-first' || opts?.group === 'dirs-first'
+		opts?.group === 'mixed' || opts?.group === 'dirs-first' || opts?.group === 'files-first'
 			? opts.group
-			: 'mixed';
+			: 'files-first';
 
 	function isAncestorDir(dirPath: string): boolean {
 		if (!dirPath) return true;
@@ -200,7 +201,7 @@ export function renderTreeHtml(
 	</button>`;
 	// 单开/多开切换；默认单开（手风琴）。精确状态由客户端 localStorage 同步
 	const accordionBtn = `<button type="button" class="tree-accordion-btn is-on" data-tree-accordion data-on="1" title="单开：同层只展开一个文件夹（点击切换为多开）" aria-label="文件夹展开：单开" aria-pressed="true"><span class="tree-accordion-btn__label">单开</span></button>`;
-	// 三态短文案更清晰：混=纯名序；文=文件在上；夹=文件夹在上
+	// 三态：文上 / 夹上 / 混排；默认文上
 	const groupLabel =
 		groupMode === 'files-first' ? '文上' : groupMode === 'dirs-first' ? '夹上' : '混排';
 	const groupTitle =
@@ -209,7 +210,9 @@ export function renderTreeHtml(
 			: groupMode === 'dirs-first'
 				? '同层：文件夹在上、文件在下（点击切换）'
 				: '同层：不按类型，纯按文件名（点击切换）';
-	const groupBtn = `<button type="button" class="tree-group-btn" data-tree-group data-mode="${groupMode}" title="${groupTitle}" aria-label="类型排序：${groupLabel}">${groupLabel}</button>`;
+	const groupActive =
+		groupMode === 'files-first' || groupMode === 'dirs-first' ? ' is-active' : '';
+	const groupBtn = `<button type="button" class="tree-group-btn${groupActive}" data-tree-group data-mode="${groupMode}" title="${groupTitle}" aria-label="类型排序：${groupLabel}">${groupLabel}</button>`;
 
 	// 收起在标题栏最右（滚到底/顶在其左侧）
 	const collapseTop = `<button type="button" class="pane-collapse-btn pane-collapse-btn--nav" data-wiki-toggle="nav" data-wiki-header-collapse="nav" title="收起文件栏" aria-label="收起文件栏"><span aria-hidden="true">«</span></button>`;

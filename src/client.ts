@@ -691,7 +691,8 @@ function getTreeGroupMode(): TreeGroupMode {
 	} catch {
 		/* ignore */
 	}
-	return 'mixed';
+	// 默认：文件在上（文上）；名升 / 单开 见 getTreeSortOrder / getTreeAccordion
+	return 'files-first';
 }
 
 function setTreeGroupMode(mode: TreeGroupMode) {
@@ -843,6 +844,10 @@ function applyFileTreeSort(
 		groupBtn.textContent = label;
 		groupBtn.title = groupModeTitle(group);
 		groupBtn.setAttribute('aria-label', `类型排序：${label}`);
+		groupBtn.classList.toggle(
+			'is-active',
+			group === 'files-first' || group === 'dirs-first',
+		);
 	}
 
 	// 名序/分组变了 → 上一页/下一页按树中当前文件顺序重算
