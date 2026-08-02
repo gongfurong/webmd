@@ -1771,13 +1771,8 @@ function fitSheetChrome(host: HTMLElement): void {
 	}
 	// 横条不盖行号列 → 左下空白；两滚动条交叉 → 右下空白。垫灰底与轨道同色。
 	if (sheet) ensureScrollbarPads(sheet, hSb, vSb);
-	// 滚动条外观：与全站 thin-scrollbar 同一套（见 style.css）
-	vSb?.classList.add('thin-scrollbar');
-	hSb?.classList.add('thin-scrollbar');
-	// 清理曾注入的自绘层（旧版本残留）
-	host.querySelectorAll('.xs-sb-ui').forEach((el) => el.remove());
-	vSb?.classList.remove('is-xs-sb-custom');
-	hSb?.classList.remove('is-xs-sb-custom');
+	// 常驻拇指 + 端点按钮；表体滑动时库改 scrollTop → 拇指跟着动
+	bindXsScrollChrome(host);
 }
 
 /** 左下（行号下）+ 右下（纵横条交叉）灰垫，消除露白 */
@@ -1830,6 +1825,194 @@ function ensureScrollbarPads(
 	} else {
 		bl.hidden = true;
 		br.hidden = true;
+	}
+}
+
+/**
+ * 库 scrollbar 容器 + 自绘 chrome（拇指 + 两端一键到头/尾）。
+ * 表体滑动/滚轮都会改 sb.scrollTop|Left → scroll 事件刷新拇指（进度同步）。
+ * PC/手机同一套，隐藏系统条只留 chrome。
+ */
+function bindXsScrollChrome(host: HTMLElement): void {
+	const attach = (sb: HTMLElement | null, vertical: boolean) => {
+		if (!sb) return;
+		sb.classList.add('is-xs-sb-chrome');
+
+		let chrome = sb.querySelector<HTMLElement>(':scope > .xs-sb-chrome');
+		if (!chrome) {
+			chrome = document.createElement('div');
+			chrome.className = `xs-sb-chrome ${vertical ? 'xs-sb-chrome--v' : 'xs-sb-chrome--h'}`;
+			const startLabel = vertical ? '滚到顶部' : '滚到最左';
+			const endLabel = vertical ? '滚到底部' : '滚到最右';
+			const startGlyph = vertical ? '▲' : '◀';
+			const endGlyph = vertical ? '▼' : '▶';
+			chrome.innerHTML =
+				`<button type="button" class="xs-sb-btn xs-sb-btn--start" title="${startLabel}" aria-label="${startLabel}">${startGlyph}</button>` +
+				`<div class="xs-sb-track" data-xs-sb-track>` +
+				`<div class="xs-sb-thumb" data-xs-sb-thumb></div>` +
+				`</div>` +
+				`<button type="button" class="xs-sb-btn xs-sb-btn--end" title="${endLabel}" aria-label="${endLabel}">${endGlyph}</button>`;
+			sb.appendChild(chrome);
+
+			const track = chrome.querySelector<HTMLElement>('[data-xs-sb-track]')!;
+			const thumb = chrome.querySelector<HTMLElement>('[data-xs-sb-thumb]')!;
+			const startBtn = chrome.querySelector<HTMLButtonElement>('.xs-sb-btn--start')!;
+			const endBtn = chrome.querySelector<HTMLButtonElement>('.xs-sb-btn--end')!;
+
+			const maxScroll = () =>
+				Math.max(
+					0,
+					(vertical ? sb.scrollHeight : sb.scrollWidth) -
+						(vertical ? sb.clientHeight : sb.clientWidth),
+				);
+
+			const refresh = () => syncXsSbThumb(sb, track, thumb, vertical);
+			sb.addEventListener('scroll', refresh, { passive: true });
+
+			startBtn.addEventListener('click', (ev) => {
+				ev.preventDefault();
+				ev.stopPropagation();
+				if (vertical) sb.scrollTop = 0;
+				else sb.scrollLeft = 0;
+				refresh();
+			});
+			endBtn.addEventListener('click', (ev) => {
+				ev.preventDefault();
+				ev.stopPropagation();
+				if (vertical) sb.scrollTop = maxScroll();
+				else sb.scrollLeft = maxScroll();
+				refresh();
+			});
+
+			// 拖拇指
+			let dragging = false;
+			let startPtr = 0;
+			let startScr = 0;
+			thumb.addEventListener('pointerdown', (ev) => {
+				if (ev.button !== 0 && ev.pointerType === 'mouse') return;
+				ev.preventDefault();
+				ev.stopPropagation();
+				dragging = true;
+				startPtr = vertical ? ev.clientY : ev.clientX;
+				startScr = vertical ? sb.scrollTop : sb.scrollLeft;
+				thumb.classList.add('is-active');
+				thumb.setPointerCapture(ev.pointerId);
+			});
+			thumb.addEventListener('pointermove', (ev) => {
+				if (!dragging) return;
+				ev.preventDefault();
+				const trackLen = vertical ? track.clientHeight : track.clientWidth;
+				const content = vertical ? sb.scrollHeight : sb.scrollWidth;
+				const view = vertical ? sb.clientHeight : sb.clientWidth;
+				const ms = Math.max(0, content - view);
+				if (ms <= 0 || trackLen <= 0) return;
+				const thumbLen = Math.max(
+					24,
+					Math.round((trackLen * view) / content),
+				);
+				const travel = Math.max(1, trackLen - thumbLen);
+				const delta = (vertical ? ev.clientY : ev.clientX) - startPtr;
+				const next = startScr + (delta / travel) * ms;
+				if (vertical) sb.scrollTop = next;
+				else sb.scrollLeft = next;
+			});
+			const endDrag = (ev: PointerEvent) => {
+				if (!dragging) return;
+				dragging = false;
+				thumb.classList.remove('is-active');
+				try {
+					thumb.releasePointerCapture(ev.pointerId);
+				} catch {
+					/* ignore */
+				}
+			};
+			thumb.addEventListener('pointerup', endDrag);
+			thumb.addEventListener('pointercancel', endDrag);
+
+			// 点轨道跳转
+			track.addEventListener('pointerdown', (ev) => {
+				if ((ev.target as HTMLElement).closest?.('[data-xs-sb-thumb]'))
+					return;
+				ev.preventDefault();
+				const rect = track.getBoundingClientRect();
+				const trackLen = vertical ? track.clientHeight : track.clientWidth;
+				const content = vertical ? sb.scrollHeight : sb.scrollWidth;
+				const view = vertical ? sb.clientHeight : sb.clientWidth;
+				const ms = Math.max(0, content - view);
+				if (ms <= 0) return;
+				const thumbLen = Math.max(
+					24,
+					Math.round((trackLen * view) / content),
+				);
+				const click = vertical
+					? ev.clientY - rect.top
+					: ev.clientX - rect.left;
+				const ratio =
+					(click - thumbLen / 2) / Math.max(1, trackLen - thumbLen);
+				const next = Math.min(ms, Math.max(0, ratio * ms));
+				if (vertical) sb.scrollTop = next;
+				else sb.scrollLeft = next;
+			});
+		}
+
+		const track = sb.querySelector<HTMLElement>('[data-xs-sb-track]');
+		const thumb = sb.querySelector<HTMLElement>('[data-xs-sb-thumb]');
+		if (track && thumb) syncXsSbThumb(sb, track, thumb, vertical);
+
+		// 库 hide() 时 chrome 一并藏
+		const hidden =
+			sb.hidden || getComputedStyle(sb).display === 'none';
+		const ch = sb.querySelector<HTMLElement>(':scope > .xs-sb-chrome');
+		if (ch) ch.style.display = hidden ? 'none' : '';
+	};
+
+	attach(
+		host.querySelector<HTMLElement>('.x-spreadsheet-scrollbar.vertical'),
+		true,
+	);
+	attach(
+		host.querySelector<HTMLElement>(
+			'.x-spreadsheet-scrollbar.horizontal',
+		),
+		false,
+	);
+}
+
+function syncXsSbThumb(
+	sb: HTMLElement,
+	track: HTMLElement,
+	thumb: HTMLElement,
+	vertical: boolean,
+): void {
+	const trackLen = vertical ? track.clientHeight : track.clientWidth;
+	const content = vertical ? sb.scrollHeight : sb.scrollWidth;
+	const view = vertical ? sb.clientHeight : sb.clientWidth;
+	const scroll = vertical ? sb.scrollTop : sb.scrollLeft;
+	if (trackLen <= 0) return;
+	if (content <= view + 1) {
+		thumb.style.opacity = '0.4';
+		if (vertical) {
+			thumb.style.height = `${Math.round(trackLen * 0.4)}px`;
+			thumb.style.transform = 'translateY(0)';
+		} else {
+			thumb.style.width = `${Math.round(trackLen * 0.4)}px`;
+			thumb.style.transform = 'translateX(0)';
+		}
+		return;
+	}
+	thumb.style.opacity = '1';
+	const thumbLen = Math.max(24, Math.round((trackLen * view) / content));
+	const ms = content - view;
+	const travel = Math.max(1, trackLen - thumbLen);
+	const pos = (scroll / ms) * travel;
+	if (vertical) {
+		thumb.style.height = `${thumbLen}px`;
+		thumb.style.width = '';
+		thumb.style.transform = `translate3d(0,${pos}px,0)`;
+	} else {
+		thumb.style.width = `${thumbLen}px`;
+		thumb.style.height = '';
+		thumb.style.transform = `translate3d(${pos}px,0,0)`;
 	}
 }
 

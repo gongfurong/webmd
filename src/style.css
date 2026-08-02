@@ -3136,9 +3136,9 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	border: none !important;
 }
 /*
- * 表格滚动条 = 全站 thin-scrollbar 同一套（见文件后部统一规则）。
- * 库用独立 overflow 容器承载 scroll；几何由 scrollbar.set 写 height/width。
- * 只补交叉轴厚度 + 轨道底，不自绘第二套拇指。
+ * 表格滚动条 chrome（PC/手机同一套）：
+ * - 库容器仍用 scrollTop/Left 驱动表体（滑动格子 → scroll 事件 → 拇指跟着动）
+ * - 隐藏系统条；自绘：端点一键到头/尾 + 轨道 + 拇指（进度可见）
  */
 .xs-host .x-spreadsheet-sheet {
 	position: relative;
@@ -3149,32 +3149,127 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	max-width: 100% !important;
 	box-sizing: border-box !important;
 	overflow: hidden;
-	/* 库 overlayer bindTouch 平移；勿 none 以免 PC 滚轮/选区异常 */
 	touch-action: manipulation;
 }
 .xs-host .x-spreadsheet-scrollbar {
 	opacity: 1;
 	z-index: 25;
-	/* 轨道底与全站 thumb 对比：略亮于透明 track，便于辨认 */
-	background: color-mix(in srgb, var(--bg-muted, #f6f8fa) 92%, var(--border, #d0d7de)) !important;
+	background: var(--bg-muted, #f6f8fa) !important;
 	border: none;
 	border-radius: 0;
 	box-sizing: border-box !important;
 	pointer-events: auto;
+	/* 藏系统条，只露 chrome */
+	scrollbar-width: none;
+	-ms-overflow-style: none;
 }
-/* 横条：库写 width；交叉轴最小高度（与 thin 8px 对齐略加便于拖） */
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
+	display: none !important;
+	width: 0 !important;
+	height: 0 !important;
+}
+/* 纵条：库写 height；加宽以容纳端点钮 */
+.xs-host .x-spreadsheet-scrollbar.vertical {
+	width: 18px !important;
+	min-width: 18px !important;
+	overflow-x: hidden;
+	overflow-y: scroll;
+}
+/* 横条：库写 width */
 .xs-host .x-spreadsheet-scrollbar.horizontal {
-	height: 10px !important;
-	min-height: 10px !important;
+	height: 18px !important;
+	min-height: 18px !important;
 	overflow-x: scroll;
 	overflow-y: hidden;
 }
-/* 纵条：库写 height；交叉轴最小宽度 */
-.xs-host .x-spreadsheet-scrollbar.vertical {
-	width: 10px !important;
-	min-width: 10px !important;
-	overflow-x: hidden;
-	overflow-y: scroll;
+/* chrome 铺满库容器 */
+.xs-host .xs-sb-chrome {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	display: flex;
+	box-sizing: border-box;
+	background: var(--bg-muted, #f6f8fa);
+	pointer-events: none; /* 子项再开 */
+}
+.xs-host .xs-sb-chrome--v {
+	flex-direction: column;
+}
+.xs-host .xs-sb-chrome--h {
+	flex-direction: row;
+}
+.xs-host .xs-sb-btn {
+	flex: 0 0 16px;
+	width: 16px;
+	height: 16px;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 2px;
+	background: transparent;
+	color: var(--fg-muted, #656d76);
+	font-size: 8px;
+	line-height: 1;
+	cursor: pointer;
+	pointer-events: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+.xs-host .xs-sb-chrome--h .xs-sb-btn {
+	width: 16px;
+	height: 100%;
+	flex: 0 0 16px;
+}
+.xs-host .xs-sb-chrome--v .xs-sb-btn {
+	width: 100%;
+	height: 16px;
+	flex: 0 0 16px;
+}
+.xs-host .xs-sb-btn:hover,
+.xs-host .xs-sb-btn:active {
+	color: var(--fg, #1f2328);
+	background: color-mix(in srgb, var(--fg-muted) 12%, transparent);
+}
+.xs-host .xs-sb-track {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+	position: relative;
+	pointer-events: auto;
+	touch-action: none;
+}
+.xs-host .xs-sb-thumb {
+	position: absolute;
+	left: 2px;
+	top: 2px;
+	box-sizing: border-box;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--fg-muted) 40%, transparent);
+	border: 1px solid color-mix(in srgb, var(--fg-muted) 12%, transparent);
+	pointer-events: auto;
+	touch-action: none;
+	cursor: grab;
+	will-change: transform;
+}
+.xs-host .xs-sb-chrome--v .xs-sb-thumb {
+	right: 2px;
+	left: 2px;
+	width: auto;
+	min-height: 24px;
+}
+.xs-host .xs-sb-chrome--h .xs-sb-thumb {
+	top: 2px;
+	bottom: 2px;
+	height: auto;
+	min-width: 24px;
+}
+.xs-host .xs-sb-thumb:hover,
+.xs-host .xs-sb-thumb.is-active {
+	background: color-mix(in srgb, var(--fg-muted) 58%, transparent);
+	cursor: grabbing;
 }
 .xs-host .x-spreadsheet-bottombar {
 	flex: 0 0 auto;
@@ -3182,15 +3277,32 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	max-width: 100% !important;
 	box-sizing: border-box !important;
 }
-/* 触屏：轨道略粗一点，仍用同一套 thin 拇指样式 */
 @media (pointer: coarse) {
-	.xs-host .x-spreadsheet-scrollbar.horizontal {
-		height: 12px !important;
-		min-height: 12px !important;
-	}
 	.xs-host .x-spreadsheet-scrollbar.vertical {
-		width: 12px !important;
-		min-width: 12px !important;
+		width: 20px !important;
+		min-width: 20px !important;
+	}
+	.xs-host .x-spreadsheet-scrollbar.horizontal {
+		height: 20px !important;
+		min-height: 20px !important;
+	}
+	.xs-host .xs-sb-btn {
+		flex-basis: 18px;
+		font-size: 9px;
+	}
+	.xs-host .xs-sb-chrome--v .xs-sb-btn {
+		height: 18px;
+		flex: 0 0 18px;
+	}
+	.xs-host .xs-sb-chrome--h .xs-sb-btn {
+		width: 18px;
+		flex: 0 0 18px;
+	}
+	.xs-host .xs-sb-chrome--v .xs-sb-thumb {
+		min-height: 32px;
+	}
+	.xs-host .xs-sb-chrome--h .xs-sb-thumb {
+		min-width: 32px;
 	}
 }
 /* 滚动条旁灰垫：行号列下方 / 右下角交叉，与轨道同色，消除露白 */
