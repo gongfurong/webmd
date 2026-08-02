@@ -1829,19 +1829,28 @@ function ensureScrollbarPads(
 }
 
 /**
- * 库 scrollbar 容器 + 自绘 chrome（拇指 + 两端一键到头/尾）。
- * 表体滑动/滚轮都会改 sb.scrollTop|Left → scroll 事件刷新拇指（进度同步）。
- * PC/手机同一套，隐藏系统条只留 chrome。
+ * 滚动条 UI：chrome 挂在 sheet 上盖住库条（不塞进库条内部，避免与库 1px 内容条叠成「双条」）。
+ * 库条只做 scroll 引擎（不可见）；chrome = 端点一键 + 轨道 + 拇指。
+ * 表体滑动改 scrollTop → scroll 事件 → 拇指同步。
  */
 function bindXsScrollChrome(host: HTMLElement): void {
-	const attach = (sb: HTMLElement | null, vertical: boolean) => {
+	const sheet = host.querySelector<HTMLElement>('.x-spreadsheet-sheet');
+	if (!sheet) return;
+
+	const attach = (sb: HTMLElement | null, vertical: boolean, key: string) => {
 		if (!sb) return;
 		sb.classList.add('is-xs-sb-chrome');
 
-		let chrome = sb.querySelector<HTMLElement>(':scope > .xs-sb-chrome');
+		// 旧版塞进 sb 内部的 chrome 清掉
+		sb.querySelectorAll(':scope > .xs-sb-chrome').forEach((el) => el.remove());
+
+		let chrome = sheet.querySelector<HTMLElement>(
+			`:scope > .xs-sb-chrome[data-xs-sb="${key}"]`,
+		);
 		if (!chrome) {
 			chrome = document.createElement('div');
 			chrome.className = `xs-sb-chrome ${vertical ? 'xs-sb-chrome--v' : 'xs-sb-chrome--h'}`;
+			chrome.dataset.xsSb = key;
 			const startLabel = vertical ? '滚到顶部' : '滚到最左';
 			const endLabel = vertical ? '滚到底部' : '滚到最右';
 			const startGlyph = vertical ? '▲' : '◀';
@@ -1852,7 +1861,7 @@ function bindXsScrollChrome(host: HTMLElement): void {
 				`<div class="xs-sb-thumb" data-xs-sb-thumb></div>` +
 				`</div>` +
 				`<button type="button" class="xs-sb-btn xs-sb-btn--end" title="${endLabel}" aria-label="${endLabel}">${endGlyph}</button>`;
-			sb.appendChild(chrome);
+			sheet.appendChild(chrome);
 
 			const track = chrome.querySelector<HTMLElement>('[data-xs-sb-track]')!;
 			const thumb = chrome.querySelector<HTMLElement>('[data-xs-sb-thumb]')!;
@@ -1866,7 +1875,10 @@ function bindXsScrollChrome(host: HTMLElement): void {
 						(vertical ? sb.clientHeight : sb.clientWidth),
 				);
 
-			const refresh = () => syncXsSbThumb(sb, track, thumb, vertical);
+			const refresh = () => {
+				layoutXsSbChrome(sheet, sb, chrome!, vertical);
+				syncXsSbThumb(sb, track, thumb, vertical);
+			};
 			sb.addEventListener('scroll', refresh, { passive: true });
 
 			startBtn.addEventListener('click', (ev) => {
@@ -1884,7 +1896,6 @@ function bindXsScrollChrome(host: HTMLElement): void {
 				refresh();
 			});
 
-			// 拖拇指
 			let dragging = false;
 			let startPtr = 0;
 			let startScr = 0;
@@ -1929,7 +1940,6 @@ function bindXsScrollChrome(host: HTMLElement): void {
 			thumb.addEventListener('pointerup', endDrag);
 			thumb.addEventListener('pointercancel', endDrag);
 
-			// 点轨道跳转
 			track.addEventListener('pointerdown', (ev) => {
 				if ((ev.target as HTMLElement).closest?.('[data-xs-sb-thumb]'))
 					return;
@@ -1955,27 +1965,56 @@ function bindXsScrollChrome(host: HTMLElement): void {
 			});
 		}
 
-		const track = sb.querySelector<HTMLElement>('[data-xs-sb-track]');
-		const thumb = sb.querySelector<HTMLElement>('[data-xs-sb-thumb]');
-		if (track && thumb) syncXsSbThumb(sb, track, thumb, vertical);
-
-		// 库 hide() 时 chrome 一并藏
+		const track = chrome.querySelector<HTMLElement>('[data-xs-sb-track]');
+		const thumb = chrome.querySelector<HTMLElement>('[data-xs-sb-thumb]');
 		const hidden =
 			sb.hidden || getComputedStyle(sb).display === 'none';
-		const ch = sb.querySelector<HTMLElement>(':scope > .xs-sb-chrome');
-		if (ch) ch.style.display = hidden ? 'none' : '';
+		chrome.hidden = hidden;
+		if (!hidden && track && thumb) {
+			layoutXsSbChrome(sheet, sb, chrome, vertical);
+			syncXsSbThumb(sb, track, thumb, vertical);
+		}
 	};
 
 	attach(
 		host.querySelector<HTMLElement>('.x-spreadsheet-scrollbar.vertical'),
 		true,
+		'v',
 	);
 	attach(
 		host.querySelector<HTMLElement>(
 			'.x-spreadsheet-scrollbar.horizontal',
 		),
 		false,
+		'h',
 	);
+}
+
+/** 把 chrome 精确盖在库 scrollbar 矩形上（相对 sheet） */
+function layoutXsSbChrome(
+	sheet: HTMLElement,
+	sb: HTMLElement,
+	chrome: HTMLElement,
+	vertical: boolean,
+): void {
+	const sR = sheet.getBoundingClientRect();
+	const bR = sb.getBoundingClientRect();
+	if (bR.width < 2 || bR.height < 2) {
+		chrome.hidden = true;
+		return;
+	}
+	chrome.hidden = false;
+	const left = Math.round(bR.left - sR.left);
+	const top = Math.round(bR.top - sR.top);
+	const w = Math.round(bR.width);
+	const h = Math.round(bR.height);
+	chrome.style.left = `${left}px`;
+	chrome.style.top = `${top}px`;
+	chrome.style.width = `${w}px`;
+	chrome.style.height = `${h}px`;
+	chrome.style.right = 'auto';
+	chrome.style.bottom = 'auto';
+	void vertical;
 }
 
 function syncXsSbThumb(
@@ -1993,10 +2032,10 @@ function syncXsSbThumb(
 		thumb.style.opacity = '0.4';
 		if (vertical) {
 			thumb.style.height = `${Math.round(trackLen * 0.4)}px`;
-			thumb.style.transform = 'translateY(0)';
+			thumb.style.transform = 'translate3d(0,0,0)';
 		} else {
 			thumb.style.width = `${Math.round(trackLen * 0.4)}px`;
-			thumb.style.transform = 'translateX(0)';
+			thumb.style.transform = 'translate3d(0,0,0)';
 		}
 		return;
 	}

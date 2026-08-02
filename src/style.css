@@ -3136,9 +3136,10 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	border: none !important;
 }
 /*
- * 表格滚动条 chrome（PC/手机同一套）：
- * - 库容器仍用 scrollTop/Left 驱动表体（滑动格子 → scroll 事件 → 拇指跟着动）
- * - 隐藏系统条；自绘：端点一键到头/尾 + 轨道 + 拇指（进度可见）
+ * 表格滚动条（PC/手机同一套，仅一层）：
+ * - 库 .x-spreadsheet-scrollbar：不可见，只当 scroll 引擎
+ * - .xs-sb-chrome：盖在库条上的唯一 UI（▲/▼ 或 ◀/▶ + 轨道 + 拇指）
+ * 勿再给库条画 thin/webkit 系统拇指，否则必现「双层条」
  */
 .xs-host .x-spreadsheet-sheet {
 	position: relative;
@@ -3151,16 +3152,15 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	overflow: hidden;
 	touch-action: manipulation;
 }
-.xs-host .x-spreadsheet-scrollbar,
-.xs-host .x-spreadsheet-scrollbar.is-xs-sb-chrome {
+/* 库滚动容器：占位 + 可 scroll，视觉全透明 */
+.xs-host .x-spreadsheet-scrollbar {
+	z-index: 20;
 	opacity: 1;
-	z-index: 25;
-	background: var(--bg-muted, #f6f8fa) !important;
-	border: none;
-	border-radius: 0;
+	background: transparent !important;
+	border: none !important;
 	box-sizing: border-box !important;
-	pointer-events: auto;
-	/* 只露自绘 chrome，彻底藏系统条（含 Windows overlay） */
+	/* 不接收指针：交互全在 chrome 上 */
+	pointer-events: none !important;
 	scrollbar-width: none !important;
 	-ms-overflow-style: none !important;
 }
@@ -3172,29 +3172,37 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	height: 0 !important;
 	background: transparent !important;
 }
-/* 纵条：库写 height；加宽以容纳端点钮 */
+/* 库内部 1px 内容条（曾被当成「第二层滚动条」）彻底藏掉 */
+.xs-host .x-spreadsheet-scrollbar > div:not(.xs-sb-chrome) {
+	opacity: 0 !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+	/* 保留尺寸，否则 scrollHeight 会坏 */
+}
 .xs-host .x-spreadsheet-scrollbar.vertical {
 	width: 18px !important;
 	min-width: 18px !important;
-	overflow-x: hidden;
-	overflow-y: scroll;
+	overflow-x: hidden !important;
+	overflow-y: scroll !important;
 }
-/* 横条：库写 width */
 .xs-host .x-spreadsheet-scrollbar.horizontal {
 	height: 18px !important;
 	min-height: 18px !important;
-	overflow-x: scroll;
-	overflow-y: hidden;
+	overflow-x: scroll !important;
+	overflow-y: hidden !important;
 }
-/* chrome 铺满库容器 */
+/* 唯一可见层：相对 sheet 绝对定位（left/top/width/height 由 JS 对齐库条） */
 .xs-host .xs-sb-chrome {
 	position: absolute;
-	inset: 0;
-	z-index: 2;
+	z-index: 26;
 	display: flex;
 	box-sizing: border-box;
 	background: var(--bg-muted, #f6f8fa);
-	pointer-events: none; /* 子项再开 */
+	border: 1px solid var(--border, #d0d7de);
+	pointer-events: none;
+}
+.xs-host .xs-sb-chrome[hidden] {
+	display: none !important;
 }
 .xs-host .xs-sb-chrome--v {
 	flex-direction: column;
@@ -3204,15 +3212,13 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 }
 .xs-host .xs-sb-btn {
 	flex: 0 0 16px;
-	width: 16px;
-	height: 16px;
 	margin: 0;
 	padding: 0;
 	border: none;
 	border-radius: 2px;
 	background: transparent;
 	color: var(--fg-muted, #656d76);
-	font-size: 8px;
+	font-size: 9px;
 	line-height: 1;
 	cursor: pointer;
 	pointer-events: auto;
@@ -3244,6 +3250,7 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	position: relative;
 	pointer-events: auto;
 	touch-action: none;
+	background: color-mix(in srgb, var(--bg-muted) 70%, var(--border));
 }
 .xs-host .xs-sb-thumb {
 	position: absolute;
@@ -3251,8 +3258,8 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	top: 2px;
 	box-sizing: border-box;
 	border-radius: 999px;
-	background: color-mix(in srgb, var(--fg-muted) 40%, transparent);
-	border: 1px solid color-mix(in srgb, var(--fg-muted) 12%, transparent);
+	background: color-mix(in srgb, var(--fg-muted) 42%, transparent);
+	border: 1px solid color-mix(in srgb, var(--fg-muted) 14%, transparent);
 	pointer-events: auto;
 	touch-action: none;
 	cursor: grab;
@@ -3272,7 +3279,7 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 }
 .xs-host .xs-sb-thumb:hover,
 .xs-host .xs-sb-thumb.is-active {
-	background: color-mix(in srgb, var(--fg-muted) 58%, transparent);
+	background: color-mix(in srgb, var(--fg-muted) 60%, transparent);
 	cursor: grabbing;
 }
 .xs-host .x-spreadsheet-bottombar {
@@ -3289,10 +3296,6 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	.xs-host .x-spreadsheet-scrollbar.horizontal {
 		height: 20px !important;
 		min-height: 20px !important;
-	}
-	.xs-host .xs-sb-btn {
-		flex-basis: 18px;
-		font-size: 9px;
 	}
 	.xs-host .xs-sb-chrome--v .xs-sb-btn {
 		height: 18px;
@@ -3710,10 +3713,10 @@ html[data-theme='dark'] .xs-host .x-spreadsheet-item.active,
 	background: var(--nav-hover-bg, rgba(255, 255, 255, 0.06)) !important;
 	color: var(--fg) !important;
 }
-/* 暗色：表格滚动条仅自绘 chrome，继续藏系统条（勿再画 webkit thumb） */
+/* 暗色：库条透明；chrome / 拇指用 muted */
 html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar,
 .xs-host.is-xs-dark .x-spreadsheet-scrollbar {
-	background: var(--bg-muted) !important;
+	background: transparent !important;
 	scrollbar-width: none !important;
 }
 html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar,
@@ -3725,6 +3728,11 @@ html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar,
 html[data-theme='dark'] .xs-host .xs-sb-chrome,
 .xs-host.is-xs-dark .xs-sb-chrome {
 	background: var(--bg-muted) !important;
+	border-color: var(--border) !important;
+}
+html[data-theme='dark'] .xs-host .xs-sb-track,
+.xs-host.is-xs-dark .xs-sb-track {
+	background: color-mix(in srgb, var(--bg) 40%, var(--bg-muted)) !important;
 }
 html[data-theme='dark'] .xs-host .xs-sb-thumb,
 .xs-host.is-xs-dark .xs-sb-thumb {
