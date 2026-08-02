@@ -3232,13 +3232,52 @@ function rebindPageWidgets() {
 }
 
 let softNavBusy = false;
-/** 软导航进行中又点了别的链接：只跟最新一次 */
-let softNavQueued: { href: string; push: boolean } | null = null;
+/** 世代号：连点时只应用最后一次；中间 fetch 结果丢弃 */
+let softNavGen = 0;
+/** 中断上一次软导航的 fetch */
+let softNavAbort: AbortController | null = null;
 
 function normalizePathname(p: string): string {
 	if (!p || p === '/') return '/';
 	// 统一无尾斜杠再比，避免 /a 与 /a/ 被当成同页误判
 	return p.replace(/\/+$/, '') || '/';
+}
+
+/** 中栏加载指示（连点切换时立刻可见，不必等 HTML 下完） */
+function setSoftNavLoading(on: boolean, label?: string) {
+	const main = document.querySelector<HTMLElement>('[data-wiki-main]');
+	const scroll = document.querySelector<HTMLElement>('[data-wiki-scroll]');
+	if (!main) return;
+	main.classList.toggle('is-soft-nav', on);
+	main.classList.toggle('is-soft-nav-loading', on);
+	let bar = document.querySelector<HTMLElement>('[data-soft-nav-progress]');
+	if (on) {
+		if (!bar) {
+			bar = document.createElement('div');
+			bar.className = 'soft-nav-progress';
+			bar.dataset.softNavProgress = '1';
+			bar.setAttribute('role', 'status');
+			bar.setAttribute('aria-live', 'polite');
+			bar.innerHTML =
+				`<span class="soft-nav-progress__bar" aria-hidden="true"></span>` +
+				`<span class="soft-nav-progress__label" data-soft-nav-label></span>`;
+			// 挂在 main 顶，盖住路径栏下沿
+			const crumb = main.querySelector('.pane-bar--center');
+			if (crumb?.parentElement === main) {
+				main.insertBefore(bar, crumb.nextSibling);
+			} else {
+				main.insertBefore(bar, main.firstChild);
+			}
+		}
+		bar.hidden = false;
+		const lab = bar.querySelector<HTMLElement>('[data-soft-nav-label]');
+		if (lab) lab.textContent = label || '正在加载…';
+		// 中栏半透明时仍可点左侧树；中栏本身禁点
+		if (scroll) scroll.setAttribute('aria-busy', 'true');
+	} else {
+		if (bar) bar.hidden = true;
+		if (scroll) scroll.removeAttribute('aria-busy');
+	}
 }
 
 async function softNavigate(href: string, opts?: { push?: boolean }) {
@@ -3252,36 +3291,54 @@ async function softNavigate(href: string, opts?: { push?: boolean }) {
 	) {
 		return;
 	}
-	// 忙碌时排队最新目标，避免 preventDefault 后直接 return 导致“点了没反应”
-	if (softNavBusy) {
-		softNavQueued = { href: url.href, push };
-		return;
-	}
 
-	// 离开当前页前记下滚动与目录展开
-	saveViewState(location.pathname);
+	// 连点：中断上一次 fetch，只跟最后一次（无中间页队列）
+	softNavAbort?.abort();
+	const ac = new AbortController();
+	softNavAbort = ac;
+	const gen = ++softNavGen;
+
+	// 离开当前页前记下滚动与目录展开（仅第一次打断时记旧页；被覆盖的中间目标不记）
+	if (!softNavBusy) {
+		saveViewState(location.pathname);
+	}
 	// 立刻打断大纲 smooth / 惯性滚动，避免 fetch 期间动画还在改 scrollTop
 	cancelMainPaneScrollAnimations();
 
 	softNavBusy = true;
-	const main = document.querySelector<HTMLElement>('[data-wiki-main]');
-	main?.classList.add('is-soft-nav');
+	// 立刻显示加载，不必等 HTML 完全就绪
+	const shortName = decodeURIComponent(
+		url.pathname.split('/').filter(Boolean).pop() || '',
+	);
+	setSoftNavLoading(
+		true,
+		shortName ? `正在打开 ${shortName}…` : '正在加载…',
+	);
 	// 防止异常路径卡死 busy
 	const busyWatch = window.setTimeout(() => {
-		if (softNavBusy) softNavBusy = false;
+		if (softNavGen === gen) {
+			softNavBusy = false;
+			setSoftNavLoading(false);
+		}
 	}, 15000);
 	try {
 		const res = await fetch(url.pathname + url.search, {
 			headers: { Accept: 'text/html' },
 			credentials: 'same-origin',
 			cache: 'no-cache',
+			signal: ac.signal,
 		});
+		// 已被更新的点击取代
+		if (gen !== softNavGen || ac.signal.aborted) return;
 		if (!res.ok) {
 			location.href = url.href;
 			return;
 		}
 		const html = await res.text();
+		if (gen !== softNavGen || ac.signal.aborted) return;
 		const doc = new DOMParser().parseFromString(html, 'text/html');
+		// 解析完再确认一次：避免慢响应覆盖最新页
+		if (gen !== softNavGen || ac.signal.aborted) return;
 
 		// 标题
 		document.title = doc.title || document.title;
@@ -3401,23 +3458,30 @@ async function softNavigate(href: string, opts?: { push?: boolean }) {
 		window.setTimeout(applyMainScroll, 200);
 		window.setTimeout(applyMainScroll, 400);
 		syncAppHeaderOffset();
-	} catch {
+	} catch (err) {
+		// 被更新点击 abort：静默结束，由新请求负责 UI
+		if (
+			(err instanceof DOMException && err.name === 'AbortError') ||
+			(err instanceof Error && err.name === 'AbortError') ||
+			gen !== softNavGen
+		) {
+			return;
+		}
 		location.href = url.href;
 	} finally {
 		window.clearTimeout(busyWatch);
-		main?.classList.remove('is-soft-nav');
-		// 去掉软导航半透明后强制中栏重绘（防 iOS 空白层残留）
-		const scrollEl = document.querySelector<HTMLElement>('[data-wiki-scroll]');
-		if (scrollEl) {
-			void scrollEl.offsetHeight;
-			forcePaneScrollTop(scrollEl, scrollEl.scrollTop);
-		}
-		softNavBusy = false;
-		pinDocumentScroll();
-		const q = softNavQueued;
-		softNavQueued = null;
-		if (q) {
-			void softNavigate(q.href, { push: q.push });
+		// 仅最新世代收尾；被取代的请求不关 loading（新请求还在）
+		if (gen === softNavGen) {
+			setSoftNavLoading(false);
+			// 去掉软导航半透明后强制中栏重绘（防 iOS 空白层残留）
+			const scrollEl = document.querySelector<HTMLElement>('[data-wiki-scroll]');
+			if (scrollEl) {
+				void scrollEl.offsetHeight;
+				forcePaneScrollTop(scrollEl, scrollEl.scrollTop);
+			}
+			softNavBusy = false;
+			if (softNavAbort === ac) softNavAbort = null;
+			pinDocumentScroll();
 		}
 	}
 }

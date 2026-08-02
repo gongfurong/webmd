@@ -1059,6 +1059,8 @@ function reflowXsToolbar(host: HTMLElement): void {
  */
 function applySheetReadonlyChrome(host: HTMLElement): void {
 	host.classList.add('is-xs-readonly');
+	// 每次挂载都压住隐藏 input（选区会 focus → 手机弹键盘）
+	suppressSpreadsheetKeyboard(host);
 	const bar = host.querySelector<HTMLElement>('.x-spreadsheet-bottombar');
 	if (!bar) return;
 	if (bar.dataset.xsReadonlyBound === '1') return;
@@ -1093,6 +1095,72 @@ function applySheetReadonlyChrome(host: HTMLElement): void {
 			) {
 				ev.preventDefault();
 				ev.stopPropagation();
+			}
+		},
+		true,
+	);
+}
+
+/**
+ * 库选区带 hide-input，每次选区变化会 .focus() → 手机弹键盘、地址栏跳动。
+ * 只读预览下禁用该焦点与编辑框焦点；缩放数字框仍可点。
+ */
+function suppressSpreadsheetKeyboard(host: HTMLElement): void {
+	const neuter = (el: HTMLInputElement | HTMLTextAreaElement) => {
+		el.setAttribute('readonly', 'readonly');
+		el.setAttribute('inputmode', 'none');
+		el.setAttribute('tabindex', '-1');
+		el.setAttribute('autocomplete', 'off');
+		// 避免 iOS 仍尝试弹键盘
+		el.style.position = 'absolute';
+		el.style.opacity = '0';
+		el.style.pointerEvents = 'none';
+		el.style.width = '1px';
+		el.style.height = '1px';
+		el.style.fontSize = '16px'; // 防止 iOS 缩放
+		try {
+			el.blur();
+		} catch {
+			/* ignore */
+		}
+	};
+
+	host
+		.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+			'.hide-input input, .hide-input textarea, .x-spreadsheet-editor textarea, .x-spreadsheet-editor input',
+		)
+		.forEach(neuter);
+
+	if (host.dataset.xsKbGuard === '1') return;
+	host.dataset.xsKbGuard = '1';
+	host.addEventListener(
+		'focusin',
+		(ev) => {
+			const t = ev.target;
+			if (!(t instanceof HTMLElement)) return;
+			// 允许自定义缩放数字框
+			if (t.closest('[data-xs-zoom-input], .xs-ops-bar__zoom-input')) return;
+			if (
+				t.matches(
+					'input, textarea, [contenteditable="true"], [contenteditable=""]',
+				) ||
+				t.closest('.hide-input, .x-spreadsheet-editor')
+			) {
+				ev.preventDefault();
+				ev.stopPropagation();
+				if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) {
+					neuter(t);
+				}
+				try {
+					(t as HTMLElement).blur();
+				} catch {
+					/* ignore */
+				}
+				// 焦点移出，避免 iOS 地址栏跟随输入态
+				const ae = document.activeElement;
+				if (ae instanceof HTMLElement && host.contains(ae)) {
+					ae.blur();
+				}
 			}
 		},
 		true,
@@ -1287,10 +1355,9 @@ function balanceToolbarWithOps(host: HTMLElement): void {
 	if (moreContent.childElementCount > 0) {
 		moreBtn.style.display = '';
 		moreBtn.style.removeProperty('display');
-		// 量「更多」内按钮总宽，写回 dropdown-content（库 moreResize 同逻辑）
+		// 量「更多」内按钮总宽，只写 more 面板自身（勿波及色板/线框等子下拉）
 		let sumW = 12;
 		for (const c of Array.from(moreContent.children) as HTMLElement[]) {
-			// 先取消隐藏量真实宽
 			const prev = c.style.display;
 			c.style.display = 'inline-block';
 			sumW += Math.max(c.offsetWidth, 28) + 4;
@@ -1301,12 +1368,24 @@ function balanceToolbarWithOps(host: HTMLElement): void {
 		if (dropdownContent?.classList.contains('x-spreadsheet-dropdown-content')) {
 			dropdownContent.style.width = `${panelW}px`;
 			dropdownContent.style.maxWidth = 'min(420px, 92vw)';
+			// 标记：仅 more 外壳，子下拉用 CSS :not 保护
+			dropdownContent.dataset.xsMorePanel = '1';
 		}
 		moreContent.style.width = '100%';
+		// 子下拉若被库写成窄 width，清掉，交给 CSS max-content
+		moreContent
+			.querySelectorAll<HTMLElement>('.x-spreadsheet-dropdown-content')
+			.forEach((el) => {
+				if (el.dataset.xsMorePanel === '1') return;
+				el.style.removeProperty('width');
+				el.style.removeProperty('max-width');
+			});
 	} else if (
 		dropdownContent?.classList.contains('x-spreadsheet-dropdown-content')
 	) {
 		dropdownContent.style.removeProperty('width');
+		dropdownContent.style.removeProperty('max-width');
+		delete dropdownContent.dataset.xsMorePanel;
 	}
 }
 
