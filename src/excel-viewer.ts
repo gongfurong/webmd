@@ -1542,10 +1542,16 @@ function balanceToolbarWithOps(host: HTMLElement): void {
 			if (prev) c.style.display = prev;
 			else c.style.removeProperty('display');
 		}
-		const panelW = Math.min(420, Math.max(160, sumW));
+		// 手机尽量宽：不低于视口约 72%，上限 560；保证字体名等二级菜单有空间
+		const vwCap = Math.min(
+			560,
+			Math.max(280, Math.floor((window.innerWidth || 360) * 0.96)),
+		);
+		const panelW = Math.min(vwCap, Math.max(200, sumW, Math.floor(vwCap * 0.72)));
 		if (dropdownContent?.classList.contains('x-spreadsheet-dropdown-content')) {
 			dropdownContent.style.width = `${panelW}px`;
-			dropdownContent.style.maxWidth = 'min(420px, 92vw)';
+			dropdownContent.style.maxWidth = 'min(560px, 96vw)';
+			dropdownContent.style.minWidth = 'min(14rem, 90vw)';
 			// 标记：仅 more 外壳，子下拉用 CSS :not 保护
 			dropdownContent.dataset.xsMorePanel = '1';
 		}
@@ -1566,6 +1572,7 @@ function balanceToolbarWithOps(host: HTMLElement): void {
 		) {
 			dropdownContent.style.removeProperty('width');
 			dropdownContent.style.removeProperty('max-width');
+			dropdownContent.style.removeProperty('min-width');
 			delete dropdownContent.dataset.xsMorePanel;
 		}
 	}

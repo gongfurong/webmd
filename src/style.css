@@ -3388,11 +3388,22 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	max-width: none !important;
 	padding: 0 !important;
 }
+/* 字体/字号等列表：尽量宽，避免「微软雅黑」等被裁切 */
 .xs-host .x-spreadsheet-dropdown-content:has(.x-spreadsheet-item),
 .xs-host .x-spreadsheet-dropdown-content:has(.x-spreadsheet-suggest) {
 	width: max-content !important;
-	min-width: 7.5rem !important;
-	max-width: min(16rem, 92vw) !important;
+	min-width: min(12rem, 90vw) !important;
+	max-width: min(96vw, 28rem) !important;
+}
+.xs-host .x-spreadsheet-dropdown-content .x-spreadsheet-item,
+.xs-host .x-spreadsheet-suggest .x-spreadsheet-item {
+	white-space: nowrap !important;
+	overflow: visible !important;
+	text-overflow: clip !important;
+	padding-left: 10px !important;
+	padding-right: 12px !important;
+	min-width: max-content !important;
+	box-sizing: border-box !important;
 }
 .xs-host .x-spreadsheet-color-palette {
 	padding: 6px !important;
@@ -3441,18 +3452,25 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 .xs-host .x-spreadsheet-toast {
 	z-index: 10060 !important;
 }
-/* 「更多」面板：横向多列排按钮；overflow 可见以免裁二级菜单 */
+/* 「更多」面板：横向多列；手机尽量用满视口宽，二级菜单可完整出字 */
 .xs-host .x-spreadsheet-toolbar-more {
 	position: static !important;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: flex-start;
 	align-content: flex-start;
-	max-width: 420px;
-	padding: 4px 6px 6px;
+	max-width: min(96vw, 560px);
+	min-width: min(16rem, 90vw);
+	padding: 6px 8px 8px;
 	box-sizing: border-box;
 	z-index: auto !important;
 	overflow: visible !important;
+}
+/* 库 more 外壳（.x-spreadsheet-dropdown-content[data-xs-more-panel]） */
+.xs-host .x-spreadsheet-dropdown-content[data-xs-more-panel='1'] {
+	max-width: min(96vw, 560px) !important;
+	min-width: min(14rem, 90vw) !important;
+	box-sizing: border-box !important;
 }
 .xs-host .x-spreadsheet-toolbar-more > .x-spreadsheet-toolbar-btn {
 	margin: 4px 1px 0;
@@ -3553,43 +3571,52 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 	top: calc(100% + 4px);
 	left: 0;
 	z-index: 10090;
-	min-width: 7.5rem;
-	max-width: min(16rem, 92vw);
-	padding: 0.28rem;
+	/* 手机尽量宽：长按钮文案完整显示 */
+	width: max-content;
+	min-width: min(11rem, 92vw);
+	max-width: min(96vw, 28rem);
+	padding: 0.35rem;
 	border: 1px solid var(--border, #d0d7de);
 	border-radius: 6px;
 	background: var(--bg-elevated, #fff);
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 	flex-direction: column;
-	gap: 0.2rem;
+	gap: 0.22rem;
+	box-sizing: border-box;
 }
 .xs-ops-bar__more-panel.is-open {
 	display: flex;
 }
 .xs-ops-bar__more-panel .xs-ops-bar__btn {
 	width: 100%;
+	min-width: 8.5rem;
 	justify-content: flex-start;
 	text-align: left;
-	height: 30px;
-	line-height: 28px;
-	padding: 0 0.5rem;
+	height: 32px;
+	line-height: 30px;
+	padding: 0 0.65rem;
+	white-space: nowrap;
+	overflow: visible;
 }
-/* 缩放：刻意更窄（去掉「缩放」二字占位，仅数字+%） */
+/* 缩放：数字 + %；勿裁切后缀（100% / 500% 需留足宽度） */
 .xs-ops-bar__zoom {
 	display: inline-flex;
 	align-items: center;
-	gap: 0;
+	gap: 0.05rem;
 	height: 26px;
-	padding: 0 0.12rem 0 0.1rem;
+	padding: 0 0.28rem 0 0.12rem;
 	border: 1px solid var(--border, #d0d7de);
 	border-radius: 2px;
 	background: var(--bg-elevated, #fff);
 	color: var(--fg-muted, #656d76);
 	user-select: none;
 	white-space: nowrap;
-	max-width: 3.55rem;
+	/* 三位数 + %，比 3.55rem 略宽，避免 % 被 border 裁掉 */
+	min-width: 3.75rem;
+	max-width: 4.4rem;
 	flex: 0 0 auto;
 	box-sizing: border-box;
+	overflow: visible;
 }
 /* 文案隐藏：用 title/aria 说明，视觉只留数字区 */
 .xs-ops-bar__zoom-cap {
@@ -3608,10 +3635,11 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
  * 用 16px + scale 视觉仍紧凑，避免双击/聚焦放大视口。
  */
 .xs-ops-bar__zoom-input {
-	width: 2.15rem;
+	/* 布局宽留给「500」；scale 只影响绘制，负 margin 勿压到 % */
+	width: 2.4rem;
 	height: 26px;
-	margin: 0 -0.28rem 0 0;
-	padding: 0 0.06rem;
+	margin: 0;
+	padding: 0 0.08rem;
 	border: 0;
 	border-radius: 1px;
 	background: transparent;
@@ -3622,12 +3650,14 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 	text-align: right;
 	line-height: 26px;
 	outline: none;
-	transform: scale(0.68);
+	transform: scale(0.7);
 	transform-origin: right center;
 	touch-action: manipulation;
 	-webkit-text-size-adjust: 100%;
 	-moz-appearance: textfield;
 	appearance: textfield;
+	flex: 1 1 auto;
+	min-width: 0;
 }
 .xs-ops-bar__zoom-input::-webkit-outer-spin-button,
 .xs-ops-bar__zoom-input::-webkit-inner-spin-button {
@@ -3635,11 +3665,14 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 	margin: 0;
 }
 .xs-ops-bar__zoom-suffix {
-	font-size: 0.65rem;
+	flex: 0 0 auto;
+	font-size: 0.68rem;
 	font-weight: 600;
 	color: var(--fg-muted, #656d76);
 	line-height: 1;
-	padding-right: 0.08rem;
+	padding: 0 0.06rem 0 0.02rem;
+	/* 禁止被 flex 挤没 / 父级裁切 */
+	overflow: visible;
 }
 html[data-theme='dark'] .xs-ops-bar,
 .xs-host.is-xs-dark .xs-ops-bar {
