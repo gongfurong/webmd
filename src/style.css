@@ -6473,11 +6473,17 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	.panel-btn--toc {
 		display: inline-flex;
 	}
-	/* 遮罩：盖住正文，不盖顶栏/抽屉 */
+	/*
+	 * 抽屉顶边 = 站顶栏 + 中栏路径栏之下（与左文件一致：不压路径栏）。
+	 * 路径栏仍可点；遮罩/抽屉只盖正文区。
+	 */
 	.drawer-backdrop {
 		display: block;
 		position: fixed;
-		top: var(--app-header-offset, calc(var(--header-h) + env(safe-area-inset-top, 0px)));
+		top: calc(
+			var(--app-header-offset, calc(var(--header-h) + env(safe-area-inset-top, 0px))) +
+				var(--pane-bar-h, 2.5rem)
+		);
 		right: 0;
 		bottom: 0;
 		left: 0;
@@ -6490,15 +6496,18 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	}
 
 	/*
-	 * 左/右抽屉（与大纲栏同一套交互）：
-	 * - position:fixed 浮在中栏之上，不占 grid、不把中间栏挤窄
-	 * - z-index:50 > 遮罩 40 > 正文
-	 * - 打开：滑入；关闭：滑出 + pointer-events:none
+	 * 左/右抽屉同一套：
+	 * - fixed 压正文，不占 grid
+	 * - 顶从路径栏下沿起，不盖路径栏
+	 * - z-index:50 > 遮罩 40；路径栏自身 z-50 仍在抽屉之上（因抽屉从路径下开始画）
 	 */
 	.wiki-nav,
 	.wiki-toc {
 		position: fixed !important;
-		top: var(--app-header-offset, calc(var(--header-h) + env(safe-area-inset-top, 0px)));
+		top: calc(
+			var(--app-header-offset, calc(var(--header-h) + env(safe-area-inset-top, 0px))) +
+				var(--pane-bar-h, 2.5rem)
+		);
 		bottom: 0;
 		width: min(86vw, 320px) !important;
 		max-width: 86vw;
@@ -6510,7 +6519,6 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		flex-direction: column;
 		min-width: 0 !important;
 		margin: 0 !important;
-		/* 勿参与文档流占位 */
 		transition: transform 0.18s ease;
 	}
 	/* —— 左：文件树 —— */
@@ -6547,8 +6555,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		-webkit-overflow-scrolling: touch;
 	}
 	/*
-	 * 左顶栏对齐右大纲顶栏：灰底 chrome。
-	 * 名序等装第二行（同灰底），避免单行裁切；仍在抽屉内，压在中栏上。
+	 * 文件抽屉顶栏：两行灰底，名序/单开/混排完整显示（不裁字、不挤没）。
 	 */
 	.wiki-nav .tree-top {
 		flex: 0 0 auto;
@@ -6560,7 +6567,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		row-gap: 0;
 		column-gap: 0.25rem;
 		padding: 0 0.5rem;
-		overflow: hidden;
+		overflow: visible;
 		background: var(--bg-muted);
 		border-bottom: 1px solid var(--border);
 		z-index: 2;
@@ -6568,7 +6575,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	.wiki-nav .tree-top .pane-title-group {
 		flex: 1 1 auto;
 		min-width: 0;
-		max-width: calc(100% - 4.5rem);
+		max-width: calc(100% - 5rem);
 		height: var(--pane-bar-h);
 		display: inline-flex;
 		align-items: center;
@@ -6579,37 +6586,47 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		height: var(--pane-bar-h);
 		display: inline-flex;
 		align-items: center;
+		gap: 0.1rem;
+	}
+	/* 抽屉模式无「收起」列，只留滚顶/底 */
+	.wiki-nav .tree-top .pane-collapse-btn {
+		display: none !important;
 	}
 	.wiki-nav .tree-top .pane-title-tools {
 		flex: 1 1 100%;
 		order: 3;
+		display: flex !important;
+		flex-wrap: wrap;
 		justify-content: flex-start;
 		align-items: center;
-		min-width: 0;
+		min-width: 100%;
 		width: 100%;
-		gap: 0.35rem;
+		gap: 0.4rem;
 		box-sizing: border-box;
-		/* 第二行：与顶栏同灰，像大纲栏一体 chrome */
 		margin: 0 -0.5rem;
-		padding: 0.35rem 0.5rem 0.4rem;
+		padding: 0.4rem 0.5rem 0.45rem;
 		border-top: 1px solid var(--border);
 		background: var(--bg-muted);
-		overflow-x: auto;
-		overflow-y: hidden;
-		-webkit-overflow-scrolling: touch;
-		scrollbar-width: none;
-	}
-	.wiki-nav .tree-top .pane-title-tools::-webkit-scrollbar {
-		display: none;
-		height: 0;
+		overflow: visible;
 	}
 	.wiki-nav .tree-top .tree-sort-btn,
 	.wiki-nav .tree-top .tree-group-btn,
 	.wiki-nav .tree-top .tree-accordion-btn {
 		flex: 0 0 auto;
-		min-height: 2rem;
-		height: 2rem;
-		padding: 0 0.5rem;
+		display: inline-flex !important;
+		visibility: visible !important;
+		min-height: 2.05rem;
+		height: 2.05rem;
+		padding: 0 0.55rem;
+		/* 保证「名序」「单开」「混排/文上/夹上」整词可见 */
+		white-space: nowrap;
+		max-width: none;
+		overflow: visible;
+	}
+	.wiki-nav .tree-top .tree-sort-btn__label,
+	.wiki-nav .tree-top .tree-accordion-btn__label {
+		display: inline !important;
+		overflow: visible;
 	}
 
 	/* —— 右：大纲（对称左栏） —— */
@@ -6750,20 +6767,18 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 	}
 }
 
-/* 横屏矮视口：抽屉顶仍贴实测顶栏下（--app-header-offset），勿写死 --header-h */
+/* 横屏矮视口：抽屉仍从路径栏下沿起，勿盖路径栏 */
 @media (max-height: 32rem) and (max-width: 56rem) {
-	.wiki-toc {
-		top: var(--app-header-offset, var(--header-h));
-		bottom: 0;
-	}
-	.wiki-nav {
-		top: var(--app-header-offset, var(--header-h));
+	.wiki-toc,
+	.wiki-nav,
+	.drawer-backdrop {
+		top: calc(
+			var(--app-header-offset, var(--header-h)) + var(--pane-bar-h, 2.5rem)
+		);
 		bottom: 0;
 	}
 	.drawer-backdrop {
-		top: var(--app-header-offset, var(--header-h));
 		right: 0;
-		bottom: 0;
 		left: 0;
 	}
 }
