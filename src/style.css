@@ -3003,14 +3003,22 @@ body.is-sheet-app-page .wiki-main:fullscreen .xs-host {
 }
 .xs-host .x-spreadsheet-toolbar-btn {
 	overflow: visible !important;
+	position: relative;
+}
+/* 打开下拉的按钮抬高层级，面板盖住相邻按钮文字 */
+.xs-host .x-spreadsheet-toolbar-btn.active {
+	z-index: 50 !important;
 }
 .xs-host .x-spreadsheet-dropdown-content {
 	position: absolute;
+	/* 高于 toolbar 内其它按钮（含左侧 ops 文字层） */
 	z-index: 10060 !important;
 	/* 库默认 width:auto 在窄按钮含块里会 shrink-to-fit 成一条细缝 */
 	box-sizing: border-box;
 	overflow: visible !important;
 	background: var(--bg-elevated, #fff);
+	/* 弹出时盖住整条工具栏视觉 */
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
 }
 /*
  * 色板 / 线框 / 字体列表：按内容撑开，勿继承「更多」面板窄宽
@@ -3116,10 +3124,14 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 	align-items: center;
 	flex-wrap: nowrap;
 	overflow: visible;
+	/* 须高于左侧 ops，否则下拉层会被「重载/全选」等文字盖住 */
+	position: relative;
+	z-index: 2;
 }
 /*
  * 自定义操作：与库工具栏同一行最左（重载/全选/列宽/行高/缩放 | 库按钮…）
  * 是 toolbar 的兄弟节点（在 toolbar-btns 前），勿塞进 btns
+ * 勿设高 z-index：会整层压在库下拉之上
  */
 .xs-ops-bar {
 	display: inline-flex;
@@ -3133,7 +3145,7 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 	border-right: 1px solid var(--border, #e0e2e4);
 	background: transparent;
 	position: relative;
-	z-index: 32;
+	z-index: 0;
 }
 .xs-ops-bar__btn {
 	appearance: none;
@@ -3173,21 +3185,30 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 	font-weight: 500;
 	line-height: 1;
 }
+/*
+ * iOS：input 计算字号 <16px 时 focus 会整页缩放。
+ * 用 16px + scale 视觉仍紧凑，避免双击/聚焦放大视口。
+ */
 .xs-ops-bar__zoom-input {
-	width: 2.6rem;
-	height: 20px;
-	margin: 0;
-	padding: 0 0.15rem;
+	width: 3.25rem;
+	height: 26px;
+	margin: 0 -0.15rem 0 0;
+	padding: 0 0.2rem;
 	border: 0;
 	border-radius: 1px;
 	background: transparent;
 	color: var(--fg, #1f2328);
-	font-size: 0.72rem;
+	font-size: 16px;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	text-align: right;
-	line-height: 20px;
+	line-height: 26px;
 	outline: none;
+	transform: scale(0.72);
+	transform-origin: right center;
+	/* 禁止浏览器对控件额外手势缩放干扰 */
+	touch-action: manipulation;
+	-webkit-text-size-adjust: 100%;
 	/* 隐藏 number 加减箭头，保持紧凑 */
 	-moz-appearance: textfield;
 	appearance: textfield;
