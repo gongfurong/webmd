@@ -2164,64 +2164,50 @@ body.is-col-resizing .wiki-gutter {
 	pointer-events: none;
 	transition: opacity 0.12s ease;
 }
-/* 顶部进度条 + 文案：一点文件就显示，不必等 HTML 下完 */
+/*
+ * 软导航进度条：无文字。
+ * DOM 插在 header 下、中栏路径栏（.pane-bar--center）上方。
+ */
 .soft-nav-progress {
-	position: relative;
 	flex: 0 0 auto;
 	z-index: 55;
-	height: 0;
-	overflow: visible;
+	height: 2px;
+	width: 100%;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
 	pointer-events: none;
+	background: color-mix(in srgb, var(--accent, #0969da) 12%, transparent);
 }
 .soft-nav-progress[hidden] {
 	display: none !important;
 }
 .soft-nav-progress__bar {
 	display: block;
-	height: 2px;
-	width: 40%;
+	height: 100%;
+	width: 35%;
 	margin: 0;
 	background: linear-gradient(
 		90deg,
 		transparent,
 		var(--accent, #0969da),
+		color-mix(in srgb, var(--accent, #0969da) 70%, #fff),
+		var(--accent, #0969da),
 		transparent
 	);
-	animation: soft-nav-indeterminate 1.1s ease-in-out infinite;
-}
-.soft-nav-progress__label {
-	position: absolute;
-	left: 50%;
-	top: 0.45rem;
-	transform: translateX(-50%);
-	padding: 0.2rem 0.65rem;
-	border-radius: 999px;
-	background: color-mix(in srgb, var(--bg-elevated, #fff) 92%, transparent);
-	border: 1px solid var(--border);
-	box-shadow: var(--shadow-sm, 0 1px 4px rgba(0, 0, 0, 0.08));
-	color: var(--fg-muted);
-	font-size: 0.72rem;
-	font-weight: 600;
-	white-space: nowrap;
-	max-width: min(90vw, 28rem);
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-html[data-theme='dark'] .soft-nav-progress__label {
-	background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+	animation: soft-nav-indeterminate 1.05s ease-in-out infinite;
 }
 @keyframes soft-nav-indeterminate {
 	0% {
-		margin-left: 0;
-		width: 30%;
+		transform: translateX(-100%);
+		width: 35%;
 	}
 	50% {
-		margin-left: 45%;
-		width: 40%;
+		width: 45%;
 	}
 	100% {
-		margin-left: 70%;
-		width: 30%;
+		transform: translateX(320%);
+		width: 35%;
 	}
 }
 
@@ -2864,48 +2850,93 @@ body.is-sheet-app-page .markdown-body > .sheet-app {
 	border-color: #cf222e;
 }
 /*
- * 中栏通用全屏 —— 仅匹配 :fullscreen，不写全局 class 驱动布局，
- * 避免退出全屏后残留样式影响 MD 滚动 / 固定·铺满版心。
+ * 中栏全屏：
+ * - 桌面：:fullscreen（原生 Fullscreen API）
+ * - 手机：body.is-center-pseudo-fs（iOS 不支持任意元素 requestFullscreen）
  */
-.wiki-main:fullscreen {
+.wiki-main:fullscreen,
+body.is-center-pseudo-fs [data-wiki-main] {
 	box-sizing: border-box;
 	width: 100%;
 	height: 100%;
 	margin: 0;
 	background: var(--bg);
-	/* wiki-main 本身已是 column flex；全屏时保持即可 */
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
 }
-.wiki-main:fullscreen > .pane-bar--center {
+/* 伪全屏：中栏 fixed 铺满视口，藏掉头栏/侧栏 */
+body.is-center-pseudo-fs {
+	overflow: hidden !important;
+	/* 防 iOS 回弹露底 */
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+body.is-center-pseudo-fs .app-header,
+body.is-center-pseudo-fs .wiki-nav,
+body.is-center-pseudo-fs .wiki-toc,
+body.is-center-pseudo-fs .wiki-gutter,
+body.is-center-pseudo-fs .wiki-edge-btn,
+body.is-center-pseudo-fs .wiki-rail-btn {
+	display: none !important;
+}
+body.is-center-pseudo-fs .app-shell {
+	height: 100% !important;
+	min-height: 0 !important;
+	grid-template-columns: minmax(0, 1fr) !important;
+	grid-template-rows: 1fr !important;
+}
+body.is-center-pseudo-fs .wiki-center {
+	grid-template-columns: minmax(0, 1fr) 0 0 !important;
+	height: 100% !important;
+	min-height: 0 !important;
+}
+body.is-center-pseudo-fs [data-wiki-main] {
+	position: fixed;
+	inset: 0;
+	z-index: 200;
+	width: 100vw;
+	height: 100dvh;
+	height: 100vh;
+	max-height: 100dvh;
+}
+.wiki-main:fullscreen > .pane-bar--center,
+body.is-center-pseudo-fs [data-wiki-main] > .pane-bar--center {
 	flex: 0 0 auto;
 }
-.wiki-main:fullscreen > .center-scroll {
-	/* 与常态一致：可滚动、占满剩余高度；勿改 markdown-body 的 max-width */
+.wiki-main:fullscreen > .center-scroll,
+body.is-center-pseudo-fs [data-wiki-main] > .center-scroll {
 	flex: 1 1 auto;
 	min-height: 0;
 	overflow: auto;
 }
-.wiki-main:fullscreen > .wiki-page-footer {
+.wiki-main:fullscreen > .wiki-page-footer,
+body.is-center-pseudo-fs [data-wiki-main] > .wiki-page-footer {
 	flex: 0 0 auto;
 }
-/* 仅表格页：全屏时内部引擎滚动，外层不滚（与 body.is-sheet-app-page 常态一致） */
-body.is-sheet-app-page .wiki-main:fullscreen > .center-scroll {
+/* 仅表格页：全屏时内部引擎滚动，外层不滚 */
+body.is-sheet-app-page .wiki-main:fullscreen > .center-scroll,
+body.is-sheet-app-page.is-center-pseudo-fs [data-wiki-main] > .center-scroll,
+body.is-center-pseudo-fs.is-sheet-app-page [data-wiki-main] > .center-scroll {
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
 	padding: 0 !important;
 }
 body.is-sheet-app-page .wiki-main:fullscreen > .center-scroll > .markdown-body,
-body.is-sheet-app-page .wiki-main:fullscreen .markdown-body > .sheet-app {
+body.is-sheet-app-page .wiki-main:fullscreen .markdown-body > .sheet-app,
+body.is-center-pseudo-fs.is-sheet-app-page [data-wiki-main] > .center-scroll > .markdown-body,
+body.is-center-pseudo-fs.is-sheet-app-page .markdown-body > .sheet-app {
 	flex: 1 1 0;
 	min-height: 0;
 	height: 100%;
 	width: 100%;
 	max-width: none !important;
 }
-body.is-sheet-app-page .wiki-main:fullscreen .xs-host {
+body.is-sheet-app-page .wiki-main:fullscreen .xs-host,
+body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	width: 100% !important;
 	max-width: none !important;
 	min-width: 0 !important;

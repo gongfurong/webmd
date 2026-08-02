@@ -9,7 +9,7 @@ import { mountSearch } from './search/ui';
 import renderMathInElement from 'katex/contrib/auto-render';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { bindExcelViewers } from './excel-viewer';
+import { bindExcelViewers, prefetchSheetEngines } from './excel-viewer';
 import { renderMermaidBlocks } from './previews/mermaid';
 import { renderPlantumlBlocks } from './previews/plantuml';
 import { renderGraphvizBlocks } from './previews/graphviz';
@@ -2286,7 +2286,7 @@ function bindFocusRead() {
 	});
 }
 
-/** 中栏全屏按钮态（不改 wiki-main class，布局只靠 :fullscreen） */
+/** 中栏全屏按钮态（:fullscreen 或伪全屏 class） */
 function syncCenterFullscreenButtons(on: boolean): void {
 	document.querySelectorAll<HTMLButtonElement>('[data-center-fullscreen]').forEach((btn) => {
 		btn.classList.toggle('is-active', on);
@@ -2296,9 +2296,115 @@ function syncCenterFullscreenButtons(on: boolean): void {
 	});
 }
 
+function isCenterFullscreenOn(): boolean {
+	const main = document.querySelector<HTMLElement>('[data-wiki-main]');
+	if (!main) return false;
+	if (document.fullscreenElement === main) return true;
+	const doc = document as Document & {
+		webkitFullscreenElement?: Element | null;
+	};
+	if (doc.webkitFullscreenElement === main) return true;
+	return document.body.classList.contains('is-center-pseudo-fs');
+}
+
+function afterCenterFullscreenLayout(): void {
+	const main = document.querySelector<HTMLElement>('[data-wiki-main]');
+	if (main) {
+		main
+			.querySelectorAll<HTMLElement>('[data-xs-host]')
+			.forEach((host) => {
+				host.style.removeProperty('width');
+				host.style.removeProperty('max-width');
+				host.style.removeProperty('height');
+				host.style.removeProperty('min-height');
+			});
+	}
+	requestAnimationFrame(() => {
+		window.dispatchEvent(new Event('resize'));
+	});
+}
+
+/** 进入伪全屏（iOS 等无元素 Fullscreen API 时） */
+function enterCenterPseudoFullscreen(): void {
+	document.body.classList.add('is-center-pseudo-fs');
+	// 抽屉/侧栏先收起，避免挡内容
+	try {
+		if (isDrawerViewport()) {
+			setNavDrawer(false);
+			setTocDrawer(false);
+		}
+		closeAllDrawers();
+	} catch {
+		/* ignore */
+	}
+	syncCenterFullscreenButtons(true);
+	afterCenterFullscreenLayout();
+}
+
+function exitCenterPseudoFullscreen(): void {
+	if (!document.body.classList.contains('is-center-pseudo-fs')) return;
+	document.body.classList.remove('is-center-pseudo-fs');
+	syncCenterFullscreenButtons(false);
+	afterCenterFullscreenLayout();
+}
+
+async function requestCenterFullscreen(main: HTMLElement): Promise<void> {
+	const el = main as HTMLElement & {
+		webkitRequestFullscreen?: () => void | Promise<void>;
+		webkitRequestFullScreen?: () => void | Promise<void>;
+	};
+	// 已在伪全屏 → 退出
+	if (document.body.classList.contains('is-center-pseudo-fs')) {
+		exitCenterPseudoFullscreen();
+		return;
+	}
+	// 已在原生全屏 → 退出
+	const fsEl =
+		document.fullscreenElement ||
+		(document as Document & { webkitFullscreenElement?: Element | null })
+			.webkitFullscreenElement;
+	if (fsEl === main) {
+		const doc = document as Document & {
+			exitFullscreen?: () => Promise<void>;
+			webkitExitFullscreen?: () => void;
+		};
+		if (doc.exitFullscreen) await doc.exitFullscreen();
+		else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+		return;
+	}
+	if (fsEl) {
+		const doc = document as Document & {
+			exitFullscreen?: () => Promise<void>;
+			webkitExitFullscreen?: () => void;
+		};
+		if (doc.exitFullscreen) await doc.exitFullscreen();
+		else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+	}
+
+	// 尝试原生 Fullscreen API（桌面 Chrome/Firefox/Safari 新版本）
+	try {
+		if (typeof main.requestFullscreen === 'function') {
+			await main.requestFullscreen();
+			return;
+		}
+		if (typeof el.webkitRequestFullscreen === 'function') {
+			await Promise.resolve(el.webkitRequestFullscreen());
+			return;
+		}
+		if (typeof el.webkitRequestFullScreen === 'function') {
+			await Promise.resolve(el.webkitRequestFullScreen());
+			return;
+		}
+	} catch {
+		/* iOS 常抛错或无权限 → 伪全屏 */
+	}
+	// 手机 Safari 等：元素全屏不可用，用 fixed 铺满视口
+	enterCenterPseudoFullscreen();
+}
+
 /**
- * 中栏（data-wiki-main）全屏：路径栏图标，通用所有内容。
- * 注意：不得改 markdown-body / content-width / 非全屏时的 center-scroll 规则。
+ * 中栏（data-wiki-main）全屏：路径栏图标。
+ * 桌面走 Fullscreen API；手机用 CSS 伪全屏（iOS 不支持任意元素 requestFullscreen）。
  */
 function bindCenterFullscreen(): void {
 	document.addEventListener('click', (ev) => {
@@ -2310,40 +2416,25 @@ function bindCenterFullscreen(): void {
 		ev.stopPropagation();
 		const main = document.querySelector<HTMLElement>('[data-wiki-main]');
 		if (!main) return;
-		void (async () => {
-			try {
-				if (document.fullscreenElement === main) {
-					await document.exitFullscreen();
-				} else if (document.fullscreenElement) {
-					await document.exitFullscreen();
-					await main.requestFullscreen();
-				} else {
-					await main.requestFullscreen();
-				}
-			} catch {
-				/* 浏览器拒绝全屏时静默 */
-			}
-		})();
-	});
-	document.addEventListener('fullscreenchange', () => {
-		const main = document.querySelector<HTMLElement>('[data-wiki-main]');
-		const on = Boolean(main && document.fullscreenElement === main);
-		syncCenterFullscreenButtons(on);
-		// 仅表格宿主清掉锁定尺寸；不碰其它内容布局
-		if (main) {
-			main
-				.querySelectorAll<HTMLElement>('[data-xs-host]')
-				.forEach((host) => {
-					host.style.removeProperty('width');
-					host.style.removeProperty('max-width');
-					host.style.removeProperty('height');
-					host.style.removeProperty('min-height');
-				});
-		}
-		// 轻触 resize：让表格 / sticky 等重算；不改 content-width dataset
-		requestAnimationFrame(() => {
-			window.dispatchEvent(new Event('resize'));
+		void requestCenterFullscreen(main).catch(() => {
+			enterCenterPseudoFullscreen();
 		});
+	});
+	const onFsChange = () => {
+		// 进入原生全屏时清掉伪全屏 class
+		if (document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement) {
+			document.body.classList.remove('is-center-pseudo-fs');
+		}
+		syncCenterFullscreenButtons(isCenterFullscreenOn());
+		afterCenterFullscreenLayout();
+	};
+	document.addEventListener('fullscreenchange', onFsChange);
+	document.addEventListener('webkitfullscreenchange', onFsChange);
+	// 伪全屏下：系统返回键 / Escape 退出
+	document.addEventListener('keydown', (ev) => {
+		if (ev.key === 'Escape' && document.body.classList.contains('is-center-pseudo-fs')) {
+			exitCenterPseudoFullscreen();
+		}
 	});
 }
 
@@ -3243,8 +3334,11 @@ function normalizePathname(p: string): string {
 	return p.replace(/\/+$/, '') || '/';
 }
 
-/** 中栏加载指示（连点切换时立刻可见，不必等 HTML 下完） */
-function setSoftNavLoading(on: boolean, label?: string) {
+/**
+ * 软导航加载条：仅进度条，无文字。
+ * 位置：header 下方、中栏路径栏上方（插在 [data-wiki-main] 内路径栏之前）。
+ */
+function setSoftNavLoading(on: boolean, _label?: string) {
 	const main = document.querySelector<HTMLElement>('[data-wiki-main]');
 	const scroll = document.querySelector<HTMLElement>('[data-wiki-scroll]');
 	if (!main) return;
@@ -3256,26 +3350,28 @@ function setSoftNavLoading(on: boolean, label?: string) {
 			bar = document.createElement('div');
 			bar.className = 'soft-nav-progress';
 			bar.dataset.softNavProgress = '1';
-			bar.setAttribute('role', 'status');
-			bar.setAttribute('aria-live', 'polite');
+			bar.setAttribute('role', 'progressbar');
+			bar.setAttribute('aria-label', '页面加载中');
+			bar.setAttribute('aria-busy', 'true');
 			bar.innerHTML =
-				`<span class="soft-nav-progress__bar" aria-hidden="true"></span>` +
-				`<span class="soft-nav-progress__label" data-soft-nav-label></span>`;
-			// 挂在 main 顶，盖住路径栏下沿
-			const crumb = main.querySelector('.pane-bar--center');
-			if (crumb?.parentElement === main) {
-				main.insertBefore(bar, crumb.nextSibling);
-			} else {
-				main.insertBefore(bar, main.firstChild);
+				`<span class="soft-nav-progress__bar" aria-hidden="true"></span>`;
+		}
+		// 始终挂在路径栏上方（header 下、路径上）
+		const crumb = main.querySelector('.pane-bar--center, [data-wiki-crumb]');
+		if (crumb && crumb.parentElement === main) {
+			if (bar.nextElementSibling !== crumb) {
+				main.insertBefore(bar, crumb);
 			}
+		} else if (bar.parentElement !== main) {
+			main.insertBefore(bar, main.firstChild);
 		}
 		bar.hidden = false;
-		const lab = bar.querySelector<HTMLElement>('[data-soft-nav-label]');
-		if (lab) lab.textContent = label || '正在加载…';
-		// 中栏半透明时仍可点左侧树；中栏本身禁点
 		if (scroll) scroll.setAttribute('aria-busy', 'true');
 	} else {
-		if (bar) bar.hidden = true;
+		if (bar) {
+			bar.hidden = true;
+			bar.removeAttribute('aria-busy');
+		}
 		if (scroll) scroll.removeAttribute('aria-busy');
 	}
 }
@@ -3412,8 +3508,14 @@ async function softNavigate(href: string, opts?: { push?: boolean }) {
 			setTocDrawer(false);
 		}
 		closeAllDrawers();
+		// 软导航离开时退出伪全屏，避免 class 粘在 body 上
+		exitCenterPseudoFullscreen();
 
 		rebindPageWidgets();
+		// 若目标是表格页，后台预热引擎（本次已绑定时可能已在加载）
+		if (document.querySelector('[data-sheet-app]')) {
+			prefetchSheetEngines();
+		}
 		// 软导航会换路径栏按钮 DOM：重申用户锁定的固定/铺满
 		reassertContentWidthMode();
 		// 大纲有无随页面变：必须重算分栏，否则 txt/pdf 会留下空大纲列
@@ -3487,6 +3589,23 @@ async function softNavigate(href: string, opts?: { push?: boolean }) {
 }
 
 function bindSoftNav() {
+	// 悬停/触摸文件树里的表格链接触发引擎预热，减轻首开等待
+	const warmSheetIfLink = (a: HTMLAnchorElement) => {
+		const href = a.getAttribute('href') || '';
+		if (/\.(xlsx|xls|ods|csv)(\/)?([?#].*)?$/i.test(href) || /\/pages\/.*\.(xlsx|xls|ods|csv)/i.test(href)) {
+			prefetchSheetEngines();
+		}
+	};
+	document.addEventListener(
+		'pointerenter',
+		(ev) => {
+			const a = (ev.target as HTMLElement | null)?.closest?.(
+				'#file-tree a[href]',
+			) as HTMLAnchorElement | null;
+			if (a) warmSheetIfLink(a);
+		},
+		true,
+	);
 	document.addEventListener(
 		'click',
 		(ev) => {
@@ -3494,6 +3613,7 @@ function bindSoftNav() {
 			if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
 			const a = (ev.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
 			if (!a || !isSoftNavLink(a)) return;
+			if (a.closest('#file-tree')) warmSheetIfLink(a);
 			// 仅拦截站内导航相关区域 + 正文内链
 			if (
 				!a.closest('#file-tree') &&

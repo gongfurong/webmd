@@ -804,10 +804,13 @@ let xsFactoryPromise: Promise<XsFactory> | null = null;
 async function loadXsFactory(): Promise<XsFactory> {
 	if (xsFactoryPromise) return xsFactoryPromise;
 	xsFactoryPromise = (async () => {
-		await import('x-data-spreadsheet/dist/xspreadsheet.css');
-		await import(
-			/* @vite-ignore */ 'x-data-spreadsheet/dist/xspreadsheet.js'
-		);
+		// CSS + 引擎并行（locale 依赖引擎已挂 window）
+		await Promise.all([
+			import('x-data-spreadsheet/dist/xspreadsheet.css'),
+			import(
+				/* @vite-ignore */ 'x-data-spreadsheet/dist/xspreadsheet.js'
+			),
+		]);
 		// 中文 locale（依赖 window.x_spreadsheet 已挂载）
 		// @ts-expect-error 无类型声明的 UMD locale 包
 		await import(/* @vite-ignore */ 'x-data-spreadsheet/dist/locale/zh-cn.js');
@@ -829,14 +832,21 @@ async function loadXsFactory(): Promise<XsFactory> {
 	return xsFactoryPromise;
 }
 
+/** 预热表格引擎（软导航进表前可调用，减少首屏等待） */
+export function prefetchSheetEngines(): void {
+	void loadXsFactory();
+	void import('xlsx');
+}
+
 async function readWorkbook(
 	XLSX: XlsxMod,
 	fileUrl: string,
 	sourceKind: string,
 ): Promise<WorkBook> {
+	// 允许磁盘缓存：同一 xlsx 反复打开不必每次 no-cache 全量下载
 	const res = await fetch(fileUrl, {
 		credentials: 'same-origin',
-		cache: 'no-cache',
+		cache: 'default',
 	});
 	if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -850,13 +860,14 @@ async function readWorkbook(
 	}
 
 	const buf = await res.arrayBuffer();
+	// 预览只需值/公式/日期；cellStyles/cellNF/sheetStubs 显著拖慢大表解析
 	return XLSX.read(buf, {
 		type: 'array',
 		cellDates: true,
-		cellNF: true,
-		cellStyles: true,
+		cellNF: false,
+		cellStyles: false,
 		cellFormula: true,
-		sheetStubs: true,
+		sheetStubs: false,
 	});
 }
 
@@ -1568,9 +1579,16 @@ function autofitRows(xs: XsInstance | null, fontPt: number): boolean {
 	return true;
 }
 
-/** 宿主是否在全屏元素内（中栏 data-wiki-main 全屏） */
+/** 宿主是否在全屏元素内（原生 :fullscreen 或手机伪全屏） */
 function isHostInFullscreen(host: HTMLElement): boolean {
-	const fs = document.fullscreenElement;
+	if (document.body.classList.contains('is-center-pseudo-fs')) {
+		const main = host.closest('[data-wiki-main]');
+		return Boolean(main);
+	}
+	const fs =
+		document.fullscreenElement ||
+		(document as Document & { webkitFullscreenElement?: Element | null })
+			.webkitFullscreenElement;
 	if (!fs || !(fs instanceof HTMLElement)) return false;
 	return fs === host || fs.contains(host);
 }
@@ -1584,7 +1602,12 @@ function measureHostSize(host: HTMLElement): { w: number; h: number } {
 	const isFs = isHostInFullscreen(host);
 
 	const measureAvailW = (): number => {
-		if (isFs && main && document.fullscreenElement === main) {
+		if (
+			isFs &&
+			main &&
+			(document.fullscreenElement === main ||
+				document.body.classList.contains('is-center-pseudo-fs'))
+		) {
 			return Math.floor(main.clientWidth || window.innerWidth || 0);
 		}
 		const candidates = [
@@ -1603,7 +1626,14 @@ function measureHostSize(host: HTMLElement): { w: number; h: number } {
 
 	let w: number;
 	let h: number;
-	if (isFs && main && document.fullscreenElement === main) {
+	const nativeFs =
+		main &&
+		(document.fullscreenElement === main ||
+			(document as Document & { webkitFullscreenElement?: Element | null })
+				.webkitFullscreenElement === main);
+	const pseudoFs =
+		document.body.classList.contains('is-center-pseudo-fs') && Boolean(main);
+	if (isFs && main && (nativeFs || pseudoFs)) {
 		const footer = main.querySelector<HTMLElement>('.wiki-page-footer');
 		const hostTop = host.getBoundingClientRect().top;
 		const footerTop = footer?.getBoundingClientRect().top;
@@ -2095,14 +2125,12 @@ export function bindExcelViewers(): void {
 		// 中栏通用全屏：由路径栏 [data-center-fullscreen] 触发；此处跟着重算表格尺寸
 		const onCenterFs = () => {
 			if (destroyed || !isHostInFullscreen(host)) {
-				// 退出全屏也要清锁定宽
-				if (!document.fullscreenElement) {
-					host.style.removeProperty('width');
-					host.style.removeProperty('max-width');
-					host.style.removeProperty('height');
-					host.style.removeProperty('min-height');
-					relayout();
-				}
+				// 退出原生/伪全屏都清锁定宽
+				host.style.removeProperty('width');
+				host.style.removeProperty('max-width');
+				host.style.removeProperty('height');
+				host.style.removeProperty('min-height');
+				relayout();
 				return;
 			}
 			host.style.removeProperty('width');
@@ -2129,18 +2157,44 @@ export function bindExcelViewers(): void {
 					status.hidden = false;
 					status.textContent = '正在加载表格引擎…';
 				}
-				const [XLSX, xsFactory] = await Promise.all([
-					import('xlsx'),
+				// 引擎与文件并行：引擎初始化的同时开始拉 xlsx
+				const xlsxP = import('xlsx');
+				const fileP = fetch(fileUrl, {
+					credentials: 'same-origin',
+					cache: 'default',
+				});
+				const [XLSX, xsFactory, fileRes] = await Promise.all([
+					xlsxP,
 					loadXsFactory(),
+					fileP,
 				]);
 				if (destroyed) return;
 				XLSXref = XLSX;
 				x_spreadsheet = xsFactory;
 
-				if (status) status.textContent = `正在读取 ${fileName}…`;
-				wb = await readWorkbook(XLSX, fileUrl, sourceKind);
+				if (status) status.textContent = `正在解析 ${fileName}…`;
+				if (!fileRes.ok) throw new Error(`HTTP ${fileRes.status}`);
+				if (sourceKind === 'csv') {
+					const text = await fileRes.text();
+					wb = XLSX.read(text.replace(/^\uFEFF/, ''), {
+						type: 'string',
+						raw: false,
+						cellDates: true,
+					});
+				} else {
+					const buf = await fileRes.arrayBuffer();
+					wb = XLSX.read(buf, {
+						type: 'array',
+						cellDates: true,
+						cellNF: false,
+						cellStyles: false,
+						cellFormula: true,
+						sheetStubs: false,
+					});
+				}
 				if (destroyed) return;
 
+				if (status) status.textContent = '正在渲染表格…';
 				const data = stox(XLSX, wb, density);
 				if (!data.length) throw new Error('工作簿为空');
 
