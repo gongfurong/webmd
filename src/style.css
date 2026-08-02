@@ -3136,9 +3136,10 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	border: none !important;
 }
 /*
- * 滚动条：库用 overflow 容器 + 1px 内容条；scrollbar.set 写纵条 height / 横条 width。
- * - 勿用 height/width:auto !important 盖掉库的 px
- * - 交叉轴给最小厚度，避免 overlay 系统下塌成看不见
+ * 表格滚动条：
+ * - 库容器仍负责 scrollTop/Left 与比例
+ * - 系统条在手机上几乎不画 → 自绘 .xs-sb-ui 拇指常驻可见
+ * - 勿 height/width:auto 盖掉库 scrollbar.set 的 px
  */
 .xs-host .x-spreadsheet-sheet {
 	position: relative;
@@ -3149,7 +3150,7 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	max-width: 100% !important;
 	box-sizing: border-box !important;
 	overflow: hidden;
-	touch-action: manipulation;
+	touch-action: none; /* 表体平移由我们 touch pan 接管，避免整页跟滚 */
 }
 .xs-host .x-spreadsheet-scrollbar {
 	opacity: 1;
@@ -3158,45 +3159,68 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	border: none;
 	border-radius: 0;
 	box-sizing: border-box !important;
-	scrollbar-width: thin;
-	scrollbar-color: color-mix(in srgb, var(--fg-muted, #80868b) 55%, var(--bg-muted, #f5f6f7))
-		var(--bg-muted, #f5f6f7);
-	-webkit-overflow-scrolling: touch;
 	pointer-events: auto;
+	position: absolute; /* 与库一致，保险 */
 }
-/* 横条：库只设 width；交叉轴给高度才能看见轨道 */
+/* 横条：库写 width；交叉轴给高度 */
 .xs-host .x-spreadsheet-scrollbar.horizontal {
-	height: 12px !important;
-	min-height: 12px !important;
+	height: 14px !important;
+	min-height: 14px !important;
 	overflow-x: scroll;
 	overflow-y: hidden;
 }
-/* 纵条：库只设 height；交叉轴给宽度 */
+/* 纵条：库写 height；交叉轴给宽度 */
 .xs-host .x-spreadsheet-scrollbar.vertical {
-	width: 12px !important;
-	min-width: 12px !important;
+	width: 14px !important;
+	min-width: 14px !important;
 	overflow-x: hidden;
 	overflow-y: scroll;
 }
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
-	width: 12px;
-	height: 12px;
-	display: block;
-	background: var(--bg-muted, #f5f6f7);
+/* 自绘拇指开启后隐藏系统条（PC/手机统一自绘，进度一致） */
+.xs-host .x-spreadsheet-scrollbar.is-xs-sb-custom {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
 }
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-track {
-	background: var(--bg-muted, #f5f6f7);
+.xs-host .x-spreadsheet-scrollbar.is-xs-sb-custom::-webkit-scrollbar {
+	display: none !important;
+	width: 0 !important;
+	height: 0 !important;
 }
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb {
-	background: color-mix(in srgb, var(--fg-muted, #80868b) 50%, var(--bg-muted, #f5f6f7));
-	border-radius: 6px;
-	border: 2px solid var(--bg-muted, #f5f6f7);
+/* 自绘层铺满库轨道 */
+.xs-host .xs-sb-ui {
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	pointer-events: none; /* 点轨道仍落到 sb；拇指单独开 */
+}
+.xs-host .xs-sb-ui__thumb {
+	position: absolute;
+	left: 2px;
+	top: 2px;
+	box-sizing: border-box;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--fg-muted, #80868b) 48%, var(--bg-muted, #f5f6f7));
+	border: 1px solid color-mix(in srgb, var(--fg-muted) 15%, transparent);
+	pointer-events: auto;
+	touch-action: none;
+	will-change: transform;
+	transition: background 0.12s ease, opacity 0.12s ease;
+}
+.xs-host .xs-sb-ui--v .xs-sb-ui__thumb {
+	right: 2px;
+	left: 2px;
+	width: auto;
 	min-height: 28px;
+}
+.xs-host .xs-sb-ui--h .xs-sb-ui__thumb {
+	bottom: 2px;
+	top: 2px;
+	height: auto;
 	min-width: 28px;
 }
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb:hover,
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb:active {
-	background: color-mix(in srgb, var(--fg-muted, #80868b) 70%, var(--bg-muted, #f5f6f7));
+.xs-host .xs-sb-ui__thumb:hover,
+.xs-host .xs-sb-ui__thumb.is-active {
+	background: color-mix(in srgb, var(--fg-muted, #80868b) 68%, var(--bg-muted, #f5f6f7));
 }
 .xs-host .x-spreadsheet-bottombar {
 	flex: 0 0 auto;
@@ -3206,19 +3230,18 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 }
 @media (pointer: coarse) {
 	.xs-host .x-spreadsheet-scrollbar.horizontal {
-		height: 14px !important;
-		min-height: 14px !important;
+		height: 16px !important;
+		min-height: 16px !important;
 	}
 	.xs-host .x-spreadsheet-scrollbar.vertical {
-		width: 14px !important;
-		min-width: 14px !important;
+		width: 16px !important;
+		min-width: 16px !important;
 	}
-	.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
-		width: 14px;
-		height: 14px;
+	.xs-host .xs-sb-ui--v .xs-sb-ui__thumb {
+		min-height: 36px;
 	}
-	.xs-host .x-spreadsheet-overlayer {
-		touch-action: none;
+	.xs-host .xs-sb-ui--h .xs-sb-ui__thumb {
+		min-width: 36px;
 	}
 }
 /* 滚动条旁灰垫：行号列下方 / 右下角交叉，与轨道同色，消除露白 */

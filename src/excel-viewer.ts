@@ -1771,6 +1771,8 @@ function fitSheetChrome(host: HTMLElement): void {
 	}
 	// 横条不盖行号列 → 左下空白；两滚动条交叉 → 右下空白。垫灰底与轨道同色。
 	if (sheet) ensureScrollbarPads(sheet, hSb, vSb);
+	// 自绘拇指 + 触屏平移（手机系统条不可见时仍能看进度）
+	bindXsScrollbarUi(host);
 }
 
 /** 左下（行号下）+ 右下（纵横条交叉）灰垫，消除露白 */
@@ -1794,13 +1796,12 @@ function ensureScrollbarPads(
 	const br = ensure('br', 'br');
 
 	const sheetR = sheet.getBoundingClientRect();
-	const hVis = hSb && !hSb.hidden && hSb.offsetParent !== null;
-	const vVis = vSb && !vSb.hidden && vSb.offsetParent !== null;
+	const hVis = hSb && !hSb.hidden && getComputedStyle(hSb).display !== 'none';
+	const vVis = vSb && !vSb.hidden && getComputedStyle(vSb).display !== 'none';
 
 	if (hVis && hSb) {
 		const hR = hSb.getBoundingClientRect();
 		const sbH = Math.max(10, Math.round(hR.height) || 12);
-		// 横条从右侧锚定，左侧到行号列有空隙
 		const leftGap = Math.max(0, Math.round(hR.left - sheetR.left));
 		const rightGap = Math.max(0, Math.round(sheetR.right - hR.right));
 		if (leftGap > 1) {
@@ -1810,7 +1811,6 @@ function ensureScrollbarPads(
 		} else {
 			bl.hidden = true;
 		}
-		// 右下：横条右端到 sheet 右缘（与纵条交叉）
 		const brW = Math.max(
 			rightGap,
 			vVis && vSb ? Math.round(vSb.getBoundingClientRect().width) || 12 : 12,
@@ -1826,6 +1826,248 @@ function ensureScrollbarPads(
 		bl.hidden = true;
 		br.hidden = true;
 	}
+}
+
+/**
+ * 自绘常驻滚动条拇指（手机系统几乎不画 overflow 原生条）。
+ * 仍用库 scrollbar 的 scrollTop/Left 驱动表体；UI 只负责显示进度 + 拖动。
+ */
+function bindXsScrollbarUi(host: HTMLElement): void {
+	const sheet = host.querySelector<HTMLElement>('.x-spreadsheet-sheet');
+	if (!sheet) return;
+
+	const attach = (sb: HTMLElement | null, vertical: boolean) => {
+		if (!sb) return;
+		// 已绑定则只刷新
+		let ui = sb.querySelector<HTMLElement>(':scope > .xs-sb-ui');
+		if (!ui) {
+			ui = document.createElement('div');
+			ui.className = `xs-sb-ui ${vertical ? 'xs-sb-ui--v' : 'xs-sb-ui--h'}`;
+			ui.innerHTML = `<div class="xs-sb-ui__thumb" data-xs-sb-thumb></div>`;
+			sb.appendChild(ui);
+			// 隐藏系统条，只留自绘拇指
+			sb.classList.add('is-xs-sb-custom');
+
+			const thumb = ui.querySelector<HTMLElement>('[data-xs-sb-thumb]');
+			if (!thumb) return;
+
+			let dragging = false;
+			let startPos = 0;
+			let startScroll = 0;
+
+			const onScroll = () => syncThumb(sb, thumb, vertical);
+			sb.addEventListener('scroll', onScroll, { passive: true });
+
+			const onPointerDown = (ev: PointerEvent) => {
+				if (ev.button !== 0 && ev.pointerType === 'mouse') return;
+				ev.preventDefault();
+				ev.stopPropagation();
+				dragging = true;
+				startPos = vertical ? ev.clientY : ev.clientX;
+				startScroll = vertical ? sb.scrollTop : sb.scrollLeft;
+				thumb.classList.add('is-active');
+				thumb.setPointerCapture(ev.pointerId);
+			};
+			const onPointerMove = (ev: PointerEvent) => {
+				if (!dragging) return;
+				ev.preventDefault();
+				const track = vertical ? sb.clientHeight : sb.clientWidth;
+				const content = vertical ? sb.scrollHeight : sb.scrollWidth;
+				const maxScroll = Math.max(0, content - track);
+				if (maxScroll <= 0) return;
+				const thumbLen = Math.max(
+					28,
+					Math.round((track * track) / content),
+				);
+				const delta = (vertical ? ev.clientY : ev.clientX) - startPos;
+				const travel = Math.max(1, track - thumbLen);
+				const next = startScroll + (delta / travel) * maxScroll;
+				if (vertical) sb.scrollTop = next;
+				else sb.scrollLeft = next;
+			};
+			const onPointerUp = (ev: PointerEvent) => {
+				if (!dragging) return;
+				dragging = false;
+				thumb.classList.remove('is-active');
+				try {
+					thumb.releasePointerCapture(ev.pointerId);
+				} catch {
+					/* ignore */
+				}
+			};
+			// 点轨道：跳转
+			const onTrackDown = (ev: PointerEvent) => {
+				if (ev.target !== ui && ev.target !== sb) return;
+				if ((ev.target as HTMLElement).closest?.('[data-xs-sb-thumb]'))
+					return;
+				const track = vertical ? sb.clientHeight : sb.clientWidth;
+				const content = vertical ? sb.scrollHeight : sb.scrollWidth;
+				const maxScroll = Math.max(0, content - track);
+				if (maxScroll <= 0) return;
+				const rect = sb.getBoundingClientRect();
+				const click = vertical
+					? ev.clientY - rect.top
+					: ev.clientX - rect.left;
+				const thumbLen = Math.max(
+					28,
+					Math.round((track * track) / content),
+				);
+				const ratio =
+					(click - thumbLen / 2) / Math.max(1, track - thumbLen);
+				const next = Math.min(maxScroll, Math.max(0, ratio * maxScroll));
+				if (vertical) sb.scrollTop = next;
+				else sb.scrollLeft = next;
+			};
+
+			thumb.addEventListener('pointerdown', onPointerDown);
+			thumb.addEventListener('pointermove', onPointerMove);
+			thumb.addEventListener('pointerup', onPointerUp);
+			thumb.addEventListener('pointercancel', onPointerUp);
+			sb.addEventListener('pointerdown', onTrackDown);
+		}
+		const thumb = sb.querySelector<HTMLElement>('[data-xs-sb-thumb]');
+		if (thumb) syncThumb(sb, thumb, vertical);
+	};
+
+	const vSb = host.querySelector<HTMLElement>(
+		'.x-spreadsheet-scrollbar.vertical',
+	);
+	const hSb = host.querySelector<HTMLElement>(
+		'.x-spreadsheet-scrollbar.horizontal',
+	);
+	attach(vSb, true);
+	attach(hSb, false);
+
+	// 表体触摸：像素级平移（比库默认按行列跳更顺）
+	bindSheetTouchPan(host, vSb, hSb);
+}
+
+function syncThumb(
+	sb: HTMLElement,
+	thumb: HTMLElement,
+	vertical: boolean,
+): void {
+	const track = vertical ? sb.clientHeight : sb.clientWidth;
+	const content = vertical ? sb.scrollHeight : sb.scrollWidth;
+	const scroll = vertical ? sb.scrollTop : sb.scrollLeft;
+	if (track <= 0 || content <= track + 1) {
+		thumb.style.opacity = '0.35';
+		if (vertical) {
+			thumb.style.height = '40%';
+			thumb.style.transform = 'translateY(0)';
+		} else {
+			thumb.style.width = '40%';
+			thumb.style.transform = 'translateX(0)';
+		}
+		return;
+	}
+	thumb.style.opacity = '1';
+	const thumbLen = Math.max(28, Math.round((track * track) / content));
+	const maxScroll = content - track;
+	const maxTravel = track - thumbLen;
+	const pos = (scroll / maxScroll) * maxTravel;
+	if (vertical) {
+		thumb.style.height = `${thumbLen}px`;
+		thumb.style.width = '';
+		thumb.style.transform = `translateY(${pos}px)`;
+	} else {
+		thumb.style.width = `${thumbLen}px`;
+		thumb.style.height = '';
+		thumb.style.transform = `translateX(${pos}px)`;
+	}
+}
+
+/** 表体 touch 像素平移 + 轻量惯性，驱动库 scrollbar 从而带动自绘拇指 */
+function bindSheetTouchPan(
+	host: HTMLElement,
+	vSb: HTMLElement | null,
+	hSb: HTMLElement | null,
+): void {
+	const over =
+		host.querySelector<HTMLElement>('.x-spreadsheet-overlayer') ||
+		host.querySelector<HTMLElement>('.x-spreadsheet-sheet');
+	if (!over || over.dataset.xsTouchPan === '1') return;
+	over.dataset.xsTouchPan = '1';
+
+	let lastX = 0;
+	let lastY = 0;
+	let lastT = 0;
+	let velX = 0;
+	let velY = 0;
+	let panning = false;
+	let raf = 0;
+
+	const stopMomentum = () => {
+		if (raf) cancelAnimationFrame(raf);
+		raf = 0;
+	};
+
+	const applyDelta = (dx: number, dy: number) => {
+		// 手指右滑 → 内容右移 → scrollLeft 减小
+		if (hSb) hSb.scrollLeft -= dx;
+		if (vSb) vSb.scrollTop -= dy;
+	};
+
+	const momentum = () => {
+		velX *= 0.92;
+		velY *= 0.92;
+		if (Math.abs(velX) < 0.3 && Math.abs(velY) < 0.3) {
+			raf = 0;
+			return;
+		}
+		applyDelta(velX, velY);
+		raf = requestAnimationFrame(momentum);
+	};
+
+	// capture：先于库 bindTouch，避免库按「整行跳」再算一次导致双倍位移/卡顿
+	over.addEventListener(
+		'touchstart',
+		(ev) => {
+			if (ev.touches.length !== 1) return;
+			stopMomentum();
+			const t = ev.touches[0]!;
+			lastX = t.clientX;
+			lastY = t.clientY;
+			lastT = performance.now();
+			velX = 0;
+			velY = 0;
+			panning = true;
+		},
+		{ passive: true, capture: true },
+	);
+
+	over.addEventListener(
+		'touchmove',
+		(ev) => {
+			if (!panning || ev.touches.length !== 1) return;
+			const t = ev.touches[0]!;
+			const now = performance.now();
+			const dx = t.clientX - lastX;
+			const dy = t.clientY - lastY;
+			const dt = Math.max(8, now - lastT);
+			if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+			applyDelta(dx, dy);
+			velX = (dx / dt) * 16;
+			velY = (dy / dt) * 16;
+			lastX = t.clientX;
+			lastY = t.clientY;
+			lastT = now;
+			ev.preventDefault();
+			ev.stopPropagation();
+		},
+		{ passive: false, capture: true },
+	);
+
+	const end = () => {
+		if (!panning) return;
+		panning = false;
+		if (Math.abs(velX) > 0.8 || Math.abs(velY) > 0.8) {
+			stopMomentum();
+			raf = requestAnimationFrame(momentum);
+		}
+	};
+	over.addEventListener('touchend', end, { passive: true, capture: true });
+	over.addEventListener('touchcancel', end, { passive: true, capture: true });
 }
 
 /** 侧栏开合后需完整 sheetReset；仅 reRender 不会更新 sheet/overlayer 宽度 */
@@ -2132,6 +2374,14 @@ export function bindExcelViewers(): void {
 			});
 			layoutHost(host);
 			fitSheetChrome(host);
+			// 双 rAF：等库 scrollbar.set 写完尺寸再绑自绘条
+			requestAnimationFrame(() => {
+				if (destroyed) return;
+				fitSheetChrome(host);
+				requestAnimationFrame(() => {
+					if (!destroyed) bindXsScrollbarUi(host);
+				});
+			});
 			hideXsPrintButton(host);
 			applySheetReadonlyChrome(host);
 			reflowXsToolbar(host);
