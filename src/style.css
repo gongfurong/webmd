@@ -3200,15 +3200,23 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	background: var(--bg-muted, #f6f8fa);
 	border: 1px solid var(--border, #d0d7de);
 	pointer-events: none;
+	/* 端点钮必须在盒子内，勿被自身裁切 */
+	overflow: hidden;
+	/* 勿统一 min-width:48——纵条只有 ~18px 宽，会被撑破/错位 */
 }
 .xs-host .xs-sb-chrome[hidden] {
 	display: none !important;
 }
 .xs-host .xs-sb-chrome--v {
 	flex-direction: column;
+	min-width: 16px;
+	min-height: 56px;
 }
 .xs-host .xs-sb-chrome--h {
 	flex-direction: row;
+	/* 横条至少放下 ◀ 轨道 ▶ */
+	min-width: 56px;
+	min-height: 16px;
 }
 .xs-host .xs-sb-btn {
 	flex: 0 0 16px;
@@ -3518,18 +3526,20 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 .xs-ops-bar__zoom {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.15rem;
+	gap: 0.1rem;
 	height: 26px;
-	padding: 0 0.3rem 0 0.35rem;
+	/* 比原先略窄 */
+	padding: 0 0.2rem 0 0.28rem;
 	border: 1px solid var(--border, #d0d7de);
 	border-radius: 2px;
 	background: var(--bg-elevated, #fff);
 	color: var(--fg-muted, #656d76);
 	user-select: none;
 	white-space: nowrap;
+	max-width: 5.6rem;
 }
 .xs-ops-bar__zoom-cap {
-	font-size: 0.72rem;
+	font-size: 0.7rem;
 	font-weight: 500;
 	line-height: 1;
 }
@@ -3538,10 +3548,11 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
  * 用 16px + scale 视觉仍紧凑，避免双击/聚焦放大视口。
  */
 .xs-ops-bar__zoom-input {
-	width: 3.25rem;
+	/* 略收窄数字区 */
+	width: 2.65rem;
 	height: 26px;
-	margin: 0 -0.15rem 0 0;
-	padding: 0 0.2rem;
+	margin: 0 -0.2rem 0 0;
+	padding: 0 0.12rem;
 	border: 0;
 	border-radius: 1px;
 	background: transparent;

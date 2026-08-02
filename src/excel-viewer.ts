@@ -1234,6 +1234,8 @@ export type XsToolbarOpsHandlers = {
 	onSelectAll: () => void;
 	onFitCol: () => void;
 	onFitRow: () => void;
+	/** 横/纵滚动归零到左上角 */
+	onResetScroll: () => void;
 	/** 数字缩放 50–200 */
 	onZoom: (pct: number, immediate: boolean) => void;
 	/** 当前缩放 %，用于注入后同步输入框 */
@@ -1243,7 +1245,7 @@ export type XsToolbarOpsHandlers = {
 /**
  * 自定义操作与库按钮同一行：挂在 toolbar 最左、toolbar-btns **外面**（兄弟节点）。
  * 勿塞进 toolbar-btns（会被 moreResize 清空）；挂好后 balance 把溢出库按钮收进「更多」。
- * 顺序：重载 → 全选 → 自动列宽 → 自动行高 → 缩放 → | 库菜单…
+ * 顺序：重载 → 全选 → 自动列宽 → 自动行高 → 回原点 → 缩放 → | 库菜单…
  */
 function injectToolbarOpsBar(
 	host: HTMLElement,
@@ -1278,11 +1280,23 @@ function injectToolbarOpsBar(
 			`<button type="button" class="xs-ops-bar__btn" data-xs-select-all title="全选 / 取消全选">全选</button>` +
 			`<button type="button" class="xs-ops-bar__btn" data-xs-fit-col title="按当前选区内容自动调整列宽">自动列宽</button>` +
 			`<button type="button" class="xs-ops-bar__btn" data-xs-fit-row title="按当前选区内容自动调整行高">自动行高</button>` +
+			`<button type="button" class="xs-ops-bar__btn" data-xs-reset-scroll title="重置滚动到左上角（横纵归零，不改缩放/数据）">回原点</button>` +
 			`<label class="xs-ops-bar__zoom" data-xs-zoom title="整体缩放 50%–200%（填数字）">` +
 			`<span class="xs-ops-bar__zoom-cap">缩放</span>` +
 			`<input type="number" class="xs-ops-bar__zoom-input" data-xs-zoom-input min="50" max="200" step="1" value="${zoomVal}" aria-label="缩放百分比" />` +
 			`<span class="xs-ops-bar__zoom-suffix">%</span>` +
 			`</label>`;
+	} else if (!bar.querySelector('[data-xs-reset-scroll]')) {
+		// 热更新：旧 ops 条补上「回原点」
+		const zoom = bar.querySelector('[data-xs-zoom]');
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'xs-ops-bar__btn';
+		btn.dataset.xsResetScroll = '1';
+		btn.title = '重置滚动到左上角（横纵归零，不改缩放/数据）';
+		btn.textContent = '回原点';
+		if (zoom) bar.insertBefore(btn, zoom);
+		else bar.appendChild(btn);
 	}
 	// 同一行最左：toolbar 的第一个子节点，btns 在后
 	if (btns) {
@@ -1299,12 +1313,16 @@ function injectToolbarOpsBar(
 	);
 	const colBtn = bar.querySelector<HTMLButtonElement>('[data-xs-fit-col]');
 	const rowBtn = bar.querySelector<HTMLButtonElement>('[data-xs-fit-row]');
+	const resetScrollBtn = bar.querySelector<HTMLButtonElement>(
+		'[data-xs-reset-scroll]',
+	);
 	const zoomInput = bar.querySelector<HTMLInputElement>('[data-xs-zoom-input]');
 
 	if (reloadBtn) reloadBtn.onclick = () => handlers.onReload();
 	if (selectAllBtn) selectAllBtn.onclick = () => handlers.onSelectAll();
 	if (colBtn) colBtn.onclick = () => handlers.onFitCol();
 	if (rowBtn) rowBtn.onclick = () => handlers.onFitRow();
+	if (resetScrollBtn) resetScrollBtn.onclick = () => handlers.onResetScroll();
 
 	if (zoomInput) {
 		if (Number(zoomInput.value) !== clampSheetZoom(handlers.zoomPct)) {
@@ -1731,6 +1749,20 @@ function canvasViewSize(host: HTMLElement): { w: number; h: number } {
 	};
 }
 
+/** 横/纵滚动归零（左上角）；触发 scroll 事件以刷新自绘拇指 */
+function resetSheetScrollToOrigin(host: HTMLElement): void {
+	const vSb = host.querySelector<HTMLElement>(
+		'.x-spreadsheet-scrollbar.vertical',
+	);
+	const hSb = host.querySelector<HTMLElement>(
+		'.x-spreadsheet-scrollbar.horizontal',
+	);
+	if (vSb) vSb.scrollTop = 0;
+	if (hSb) hSb.scrollLeft = 0;
+	// 同步 chrome 拇指位置
+	bindXsScrollChrome(host);
+}
+
 /**
  * 贴满宿主；补滚动条旁的灰底垫片（行号列下方 / 右下角交叉），
  * 避免露出白色。不改库 scrollbar 的 width/height（滚动比例基准）。
@@ -1769,10 +1801,79 @@ function fitSheetChrome(host: HTMLElement): void {
 		if (el.style.height === 'auto') el.style.removeProperty('height');
 		if (el.style.width === 'auto') el.style.removeProperty('width');
 	}
+	// 横条 right 锚定 + width 过大时左端会伸出格子外，裁掉「最左」钮 → 钳在 sheet 内
+	if (sheet) fixLibraryScrollbarBox(sheet, hSb, vSb);
 	// 横条不盖行号列 → 左下空白；两滚动条交叉 → 右下空白。垫灰底与轨道同色。
 	if (sheet) ensureScrollbarPads(sheet, hSb, vSb);
 	// 常驻拇指 + 端点按钮；表体滑动时库改 scrollTop → 拇指跟着动
 	bindXsScrollChrome(host);
+}
+
+/**
+ * 钳制库滚动条盒子：横条落在 [行号列右缘, 纵条左缘]，纵条落在 [表头下, 横条上]。
+ * 避免 right+过大 width 导致左端出界、端点按钮被 sheet overflow 裁掉。
+ */
+function fixLibraryScrollbarBox(
+	sheet: HTMLElement,
+	hSb: HTMLElement | null,
+	vSb: HTMLElement | null,
+): void {
+	const sw = sheet.clientWidth;
+	const sh = sheet.clientHeight;
+	if (sw < 40 || sh < 40) return;
+
+	const vVisible =
+		vSb && !vSb.hidden && getComputedStyle(vSb).display !== 'none';
+	const hVisible =
+		hSb && !hSb.hidden && getComputedStyle(hSb).display !== 'none';
+
+	// 纵条宽 / 横条高（与 CSS 一致，触屏略宽）
+	const coarse =
+		typeof window !== 'undefined' &&
+		window.matchMedia('(pointer: coarse)').matches;
+	const vW = coarse ? 20 : 18;
+	const hH = coarse ? 20 : 18;
+
+	// 行号列宽：库默认 60，可从 canvas 左侧空白估
+	let indexW = 60;
+	const canvas = sheet.querySelector('canvas');
+	if (canvas) {
+		// 表体 overlayer/canvas 通常从 0 起画，行号在画布内；用库横条理想左缘
+		// 优先读 data 不可用，用常见 indexWidth 或横条当前 left（若合理）
+		const sR = sheet.getBoundingClientRect();
+		if (hSb) {
+			const hl = hSb.getBoundingClientRect().left - sR.left;
+			if (hl >= 24 && hl <= 120) indexW = Math.round(hl);
+		}
+	}
+
+	if (vVisible && vSb) {
+		// 纵条：只钉宽与右/下边；height 保留库 scrollbar.set 的 px（勿 height:auto，易塌成 0）
+		vSb.style.setProperty('right', '0', 'important');
+		vSb.style.setProperty('bottom', hVisible ? `${hH}px` : '0', 'important');
+		vSb.style.setProperty('width', `${vW}px`, 'important');
+		vSb.style.removeProperty('left');
+		vSb.style.removeProperty('top');
+		// 若库 height 丢失，按 sheet 补一刀
+		const libH = parseFloat(vSb.style.height || '0');
+		if (!Number.isFinite(libH) || libH < 40) {
+			const fallbackH = Math.max(80, sh - (hVisible ? hH : 0) - 4);
+			vSb.style.setProperty('height', `${fallbackH}px`, 'important');
+		}
+	}
+
+	if (hVisible && hSb) {
+		const rightGap = vVisible ? vW : 0;
+		// 左缘：行号列右侧；不得 < 0
+		const left = Math.max(0, Math.min(indexW, sw - rightGap - 48));
+		hSb.style.setProperty('left', `${left}px`, 'important');
+		hSb.style.setProperty('right', `${rightGap}px`, 'important');
+		hSb.style.setProperty('bottom', '0', 'important');
+		hSb.style.setProperty('height', `${hH}px`, 'important');
+		// 用 left+right 定宽，清掉库 right 锚定的超大 width（否则左端冲出格子）
+		hSb.style.setProperty('width', 'auto', 'important');
+		hSb.style.removeProperty('top');
+	}
 }
 
 /** 左下（行号下）+ 右下（纵横条交叉）灰垫，消除露白 */
@@ -1990,7 +2091,7 @@ function bindXsScrollChrome(host: HTMLElement): void {
 	);
 }
 
-/** 把 chrome 精确盖在库 scrollbar 矩形上（相对 sheet） */
+/** 把 chrome 精确盖在库 scrollbar 矩形上（相对 sheet），并钳在 sheet 内以免裁掉端点钮 */
 function layoutXsSbChrome(
 	sheet: HTMLElement,
 	sb: HTMLElement,
@@ -2004,10 +2105,35 @@ function layoutXsSbChrome(
 		return;
 	}
 	chrome.hidden = false;
-	const left = Math.round(bR.left - sR.left);
-	const top = Math.round(bR.top - sR.top);
-	const w = Math.round(bR.width);
-	const h = Math.round(bR.height);
+	let left = Math.round(bR.left - sR.left);
+	let top = Math.round(bR.top - sR.top);
+	let w = Math.round(bR.width);
+	let h = Math.round(bR.height);
+	const sw = sheet.clientWidth;
+	const sh = sheet.clientHeight;
+	// 钳制：不得伸出 sheet（否则 overflow:hidden 裁掉最左/最上按钮）
+	if (left < 0) {
+		w += left;
+		left = 0;
+	}
+	if (top < 0) {
+		h += top;
+		top = 0;
+	}
+	if (left + w > sw) w = Math.max(8, sw - left);
+	if (top + h > sh) h = Math.max(8, sh - top);
+	// 纵条很窄（约 18px）、横条很矮（约 18px），勿用统一 32 阈值误藏
+	const minMain = vertical ? 40 : 48; // 纵：高度；横：宽度
+	const minCross = 12;
+	if (vertical) {
+		if (h < minMain || w < minCross) {
+			chrome.hidden = true;
+			return;
+		}
+	} else if (w < minMain || h < minCross) {
+		chrome.hidden = true;
+		return;
+	}
 	chrome.style.left = `${left}px`;
 	chrome.style.top = `${top}px`;
 	chrome.style.width = `${w}px`;
@@ -2237,6 +2363,9 @@ export function bindExcelViewers(): void {
 				markDirty();
 				captureLogicalFromXs();
 				relayout();
+			},
+			onResetScroll: () => {
+				resetSheetScrollToOrigin(host);
 			},
 			onZoom: (z, immediate) => {
 				applyZoom(z, immediate);
