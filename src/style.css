@@ -3151,7 +3151,8 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	overflow: hidden;
 	touch-action: manipulation;
 }
-.xs-host .x-spreadsheet-scrollbar {
+.xs-host .x-spreadsheet-scrollbar,
+.xs-host .x-spreadsheet-scrollbar.is-xs-sb-chrome {
 	opacity: 1;
 	z-index: 25;
 	background: var(--bg-muted, #f6f8fa) !important;
@@ -3159,14 +3160,17 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	border-radius: 0;
 	box-sizing: border-box !important;
 	pointer-events: auto;
-	/* 藏系统条，只露 chrome */
-	scrollbar-width: none;
-	-ms-overflow-style: none;
+	/* 只露自绘 chrome，彻底藏系统条（含 Windows overlay） */
+	scrollbar-width: none !important;
+	-ms-overflow-style: none !important;
 }
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar,
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb,
+.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-track {
 	display: none !important;
 	width: 0 !important;
 	height: 0 !important;
+	background: transparent !important;
 }
 /* 纵条：库写 height；加宽以容纳端点钮 */
 .xs-host .x-spreadsheet-scrollbar.vertical {
@@ -3706,26 +3710,25 @@ html[data-theme='dark'] .xs-host .x-spreadsheet-item.active,
 	background: var(--nav-hover-bg, rgba(255, 255, 255, 0.06)) !important;
 	color: var(--fg) !important;
 }
+/* 暗色：表格滚动条仅自绘 chrome，继续藏系统条（勿再画 webkit thumb） */
 html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar,
 .xs-host.is-xs-dark .x-spreadsheet-scrollbar {
 	background: var(--bg-muted) !important;
-	border-color: var(--border) !important;
-	scrollbar-color: color-mix(in srgb, var(--fg-muted) 55%, var(--bg-muted)) var(--bg-muted);
+	scrollbar-width: none !important;
 }
 html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar,
-html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-track,
-.xs-host.is-xs-dark .x-spreadsheet-scrollbar::-webkit-scrollbar,
-.xs-host.is-xs-dark .x-spreadsheet-scrollbar::-webkit-scrollbar-track {
+.xs-host.is-xs-dark .x-spreadsheet-scrollbar::-webkit-scrollbar {
+	display: none !important;
+	width: 0 !important;
+	height: 0 !important;
+}
+html[data-theme='dark'] .xs-host .xs-sb-chrome,
+.xs-host.is-xs-dark .xs-sb-chrome {
 	background: var(--bg-muted) !important;
 }
-html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb,
-.xs-host.is-xs-dark .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb {
+html[data-theme='dark'] .xs-host .xs-sb-thumb,
+.xs-host.is-xs-dark .xs-sb-thumb {
 	background: color-mix(in srgb, var(--fg-muted) 50%, var(--bg-muted)) !important;
-	border-color: var(--bg-muted) !important;
-}
-html[data-theme='dark'] .xs-host .x-spreadsheet-scrollbar .x-spreadsheet-scrollbar-track,
-.xs-host.is-xs-dark .x-spreadsheet-scrollbar .x-spreadsheet-scrollbar-track {
-	background: var(--bg-muted);
 }
 html[data-theme='dark'] .xs-host .x-spreadsheet-selector .x-spreadsheet-selector-area,
 .xs-host.is-xs-dark .x-spreadsheet-selector .x-spreadsheet-selector-area {
@@ -6365,14 +6368,14 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
  * 全站统一细滚动条（站外导航/正文/大纲 + 搜索弹层三栏）
  * 凡可纵向滚动区域均挂此选择器，避免内外两套粗细/颜色
  */
+/* 注意：表格 .x-spreadsheet-scrollbar 不进此列表——它用自绘 chrome，再套 thin 会叠出双条 */
 .thin-scrollbar,
 .tree-body,
 .center-scroll,
 .doc-toc,
 .inline-toc__nav,
 .webmd-ms-search .ms-panel-body,
-.webmd-ms-search .ms-results,
-.xs-host .x-spreadsheet-scrollbar {
+.webmd-ms-search .ms-results {
 	scrollbar-width: thin;
 	scrollbar-color: color-mix(in srgb, var(--fg-muted) 45%, transparent) transparent;
 }
@@ -6382,11 +6385,9 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 .doc-toc::-webkit-scrollbar,
 .inline-toc__nav::-webkit-scrollbar,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar,
-.webmd-ms-search .ms-results::-webkit-scrollbar,
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
+.webmd-ms-search .ms-results::-webkit-scrollbar {
 	width: 8px;
 	height: 8px;
-	/* 表格容器交叉轴已 10px，拇指用 8px 与全站一致 */
 }
 .thin-scrollbar::-webkit-scrollbar-track,
 .tree-body::-webkit-scrollbar-track,
@@ -6394,8 +6395,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 .doc-toc::-webkit-scrollbar-track,
 .inline-toc__nav::-webkit-scrollbar-track,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar-track,
-.webmd-ms-search .ms-results::-webkit-scrollbar-track,
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-track {
+.webmd-ms-search .ms-results::-webkit-scrollbar-track {
 	background: transparent;
 }
 .thin-scrollbar::-webkit-scrollbar-thumb,
@@ -6404,8 +6404,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 .doc-toc::-webkit-scrollbar-thumb,
 .inline-toc__nav::-webkit-scrollbar-thumb,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar-thumb,
-.webmd-ms-search .ms-results::-webkit-scrollbar-thumb,
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb {
+.webmd-ms-search .ms-results::-webkit-scrollbar-thumb {
 	background: color-mix(in srgb, var(--fg-muted) 35%, transparent);
 	border-radius: 999px;
 	border: 2px solid transparent;
@@ -6417,8 +6416,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 .doc-toc::-webkit-scrollbar-thumb:hover,
 .inline-toc__nav::-webkit-scrollbar-thumb:hover,
 .webmd-ms-search .ms-panel-body::-webkit-scrollbar-thumb:hover,
-.webmd-ms-search .ms-results::-webkit-scrollbar-thumb:hover,
-.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb:hover {
+.webmd-ms-search .ms-results::-webkit-scrollbar-thumb:hover {
 	background: color-mix(in srgb, var(--fg-muted) 55%, transparent);
 	border: 2px solid transparent;
 	background-clip: padding-box;
