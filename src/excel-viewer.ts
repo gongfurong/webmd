@@ -78,12 +78,6 @@ type XsInstance = {
 	sheet?: XsSheetInternal;
 };
 
-/**
- * 滚动条槽宽（与 style.css 里 sheet padding / scrollbar 尺寸一致）。
- * 库默认把条叠在画布上；我们把 view 减掉槽宽，再用 padding 把条放到右/下独立区域。
- */
-const XS_SCROLLBAR_GUTTER = 12;
-
 type XsFactory = (
 	el: HTMLElement | string,
 	opts?: Record<string, unknown>,
@@ -1728,21 +1722,20 @@ function measureHostSize(host: HTMLElement): { w: number; h: number } {
 	return { w, h };
 }
 
-/** 表格引擎 view 用：格子区域 = 外框 − 右/下滚动条槽 */
+/** 表格引擎 view：与宿主外框一致（滚动条由库叠在表上，勿再扣 gutter 改几何） */
 function canvasViewSize(host: HTMLElement): { w: number; h: number } {
 	const { w, h } = measureHostSize(host);
 	return {
-		w: Math.max(320, w - XS_SCROLLBAR_GUTTER),
-		h: Math.max(240, h - XS_SCROLLBAR_GUTTER),
+		w: Math.max(320, w),
+		h: Math.max(240, h),
 	};
 }
 
 /**
- * 库 sheetReset 会写死 sheet/scrollbar 的 px 宽高，右下角常留一截空灰。
- * 在 reload 后强制：表格区 100% 贴满 host，纵条贴最右、横条贴最底（角块衔接）。
+ * 贴满宿主；补滚动条旁的灰底垫片（行号列下方 / 右下角交叉），
+ * 避免露出白色。不改库 scrollbar 的 width/height（滚动比例基准）。
  */
 function fitSheetChrome(host: HTMLElement): void {
-	const g = XS_SCROLLBAR_GUTTER;
 	const root = host.querySelector<HTMLElement>('.x-spreadsheet');
 	const sheet = host.querySelector<HTMLElement>('.x-spreadsheet-sheet');
 	const vSb = host.querySelector<HTMLElement>(
@@ -1758,45 +1751,80 @@ function fitSheetChrome(host: HTMLElement): void {
 		root.style.setProperty('box-sizing', 'border-box', 'important');
 	}
 	if (sheet) {
-		// 100% 含右/下 gutter（border-box），与 canvasViewSize 扣槽一致
 		sheet.style.setProperty('width', '100%', 'important');
 		sheet.style.setProperty('max-width', '100%', 'important');
 		sheet.style.setProperty('box-sizing', 'border-box', 'important');
 		sheet.style.setProperty('flex', '1 1 auto', 'important');
 		sheet.style.setProperty('min-height', '0', 'important');
+		sheet.style.removeProperty('padding-right');
+		sheet.style.removeProperty('padding-bottom');
 		sheet.style.removeProperty('height');
 	}
-	// 纵条：从顶贴到横条上沿，贴最右
-	if (vSb) {
-		vSb.style.setProperty('top', '0', 'important');
-		vSb.style.setProperty('right', '0', 'important');
-		vSb.style.setProperty('bottom', `${g}px`, 'important');
-		vSb.style.setProperty('left', 'auto', 'important');
-		vSb.style.setProperty('width', `${g}px`, 'important');
-		vSb.style.setProperty('height', 'auto', 'important');
-		vSb.style.setProperty('max-height', 'none', 'important');
+	for (const el of [vSb, hSb]) {
+		if (!el) continue;
+		el.style.removeProperty('top');
+		el.style.removeProperty('left');
+		el.style.removeProperty('max-height');
+		el.style.removeProperty('max-width');
+		if (el.style.height === 'auto') el.style.removeProperty('height');
+		if (el.style.width === 'auto') el.style.removeProperty('width');
 	}
-	// 横条：从左贴到纵条左沿，贴最底
-	if (hSb) {
-		hSb.style.setProperty('left', '0', 'important');
-		hSb.style.setProperty('right', `${g}px`, 'important');
-		hSb.style.setProperty('bottom', '0', 'important');
-		hSb.style.setProperty('top', 'auto', 'important');
-		hSb.style.setProperty('height', `${g}px`, 'important');
-		hSb.style.setProperty('width', 'auto', 'important');
-		hSb.style.setProperty('max-width', 'none', 'important');
-	}
-	// 右下角衔接块（两槽交叉，避免灰空）
-	let corner = host.querySelector<HTMLElement>('[data-xs-sb-corner]');
-	if (!corner && sheet) {
-		corner = document.createElement('div');
-		corner.dataset.xsSbCorner = '1';
-		corner.className = 'xs-scrollbar-corner';
-		sheet.appendChild(corner);
-	}
-	if (corner) {
-		corner.style.setProperty('width', `${g}px`, 'important');
-		corner.style.setProperty('height', `${g}px`, 'important');
+	// 横条不盖行号列 → 左下空白；两滚动条交叉 → 右下空白。垫灰底与轨道同色。
+	if (sheet) ensureScrollbarPads(sheet, hSb, vSb);
+}
+
+/** 左下（行号下）+ 右下（纵横条交叉）灰垫，消除露白 */
+function ensureScrollbarPads(
+	sheet: HTMLElement,
+	hSb: HTMLElement | null,
+	vSb: HTMLElement | null,
+): void {
+	const ensure = (key: string, cls: string): HTMLElement => {
+		let el = sheet.querySelector<HTMLElement>(`[data-xs-sb-pad="${key}"]`);
+		if (!el) {
+			el = document.createElement('div');
+			el.dataset.xsSbPad = key;
+			el.className = `xs-sb-pad xs-sb-pad--${cls}`;
+			el.setAttribute('aria-hidden', 'true');
+			sheet.appendChild(el);
+		}
+		return el;
+	};
+	const bl = ensure('bl', 'bl');
+	const br = ensure('br', 'br');
+
+	const sheetR = sheet.getBoundingClientRect();
+	const hVis = hSb && !hSb.hidden && hSb.offsetParent !== null;
+	const vVis = vSb && !vSb.hidden && vSb.offsetParent !== null;
+
+	if (hVis && hSb) {
+		const hR = hSb.getBoundingClientRect();
+		const sbH = Math.max(10, Math.round(hR.height) || 12);
+		// 横条从右侧锚定，左侧到行号列有空隙
+		const leftGap = Math.max(0, Math.round(hR.left - sheetR.left));
+		const rightGap = Math.max(0, Math.round(sheetR.right - hR.right));
+		if (leftGap > 1) {
+			bl.hidden = false;
+			bl.style.width = `${leftGap}px`;
+			bl.style.height = `${sbH}px`;
+		} else {
+			bl.hidden = true;
+		}
+		// 右下：横条右端到 sheet 右缘（与纵条交叉）
+		const brW = Math.max(
+			rightGap,
+			vVis && vSb ? Math.round(vSb.getBoundingClientRect().width) || 12 : 12,
+		);
+		if (brW > 1) {
+			br.hidden = false;
+			br.style.width = `${brW}px`;
+			br.style.height = `${sbH}px`;
+		} else {
+			br.hidden = true;
+		}
+	} else {
+		bl.hidden = true;
+		br.hidden = true;
 	}
 }
 
@@ -2070,14 +2098,13 @@ export function bindExcelViewers(): void {
 				style: sheetDefaultStyle(fontPt),
 				view: {
 					// 仅测量，勿在回调里写 host 样式（会触发 RO → 闪烁）
-					// 宽高已扣右/下滚动条槽，条走 padding 区不与格子重叠
 					height: () => Math.max(240, canvasViewSize(host).h),
 					// 至少 640，避免 moreResize 把按钮全塞进「更多」
 					width: () =>
 						Math.max(
 							640,
 							canvasViewSize(host).w,
-							Math.max(0, (host.clientWidth || 0) - XS_SCROLLBAR_GUTTER),
+							host.clientWidth || 0,
 						),
 				},
 				row: {

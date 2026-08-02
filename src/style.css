@@ -3135,9 +3135,9 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	border: none !important;
 }
 /*
- * 格子与滚动条分区（不重叠、贴最右/最底）：
- * - view 宽高减掉 gutter；sheet border-box 100% + 内边距作槽
- * - 纵条贴最右、横条贴最底；角块填交叉处（见 .xs-scrollbar-corner）
+ * 滚动条：库用 overflow 容器 + 1px 内容条；scrollbar.set 写纵条 height / 横条 width。
+ * - 勿用 height/width:auto !important 盖掉库的 px
+ * - 交叉轴给最小厚度，避免 overlay 系统下塌成看不见
  */
 .xs-host .x-spreadsheet-sheet {
 	position: relative;
@@ -3147,11 +3147,8 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	width: 100% !important;
 	max-width: 100% !important;
 	box-sizing: border-box !important;
-	padding-right: 12px !important;
-	padding-bottom: 12px !important;
-	/* 槽底色 = 滚动条轨道 */
-	background: var(--bg-muted, #f5f6f7);
 	overflow: hidden;
+	touch-action: manipulation;
 }
 .xs-host .x-spreadsheet-scrollbar {
 	opacity: 1;
@@ -3161,46 +3158,24 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	border-radius: 0;
 	box-sizing: border-box !important;
 	scrollbar-width: thin;
-	scrollbar-color: color-mix(in srgb, var(--fg-muted, #80868b) 50%, var(--bg-muted, #f5f6f7))
+	scrollbar-color: color-mix(in srgb, var(--fg-muted, #80868b) 55%, var(--bg-muted, #f5f6f7))
 		var(--bg-muted, #f5f6f7);
 	-webkit-overflow-scrolling: touch;
+	pointer-events: auto;
 }
-/* 横条：贴最底，右端到纵条左沿 */
+/* 横条：库只设 width；交叉轴给高度才能看见轨道 */
 .xs-host .x-spreadsheet-scrollbar.horizontal {
 	height: 12px !important;
-	left: 0 !important;
-	right: 12px !important;
-	bottom: 0 !important;
-	top: auto !important;
-	width: auto !important;
+	min-height: 12px !important;
 	overflow-x: scroll;
 	overflow-y: hidden;
 }
-/* 纵条：贴最右，底端到横条上沿 */
+/* 纵条：库只设 height；交叉轴给宽度 */
 .xs-host .x-spreadsheet-scrollbar.vertical {
 	width: 12px !important;
-	top: 0 !important;
-	right: 0 !important;
-	bottom: 12px !important;
-	left: auto !important;
-	height: auto !important;
+	min-width: 12px !important;
 	overflow-x: hidden;
 	overflow-y: scroll;
-}
-/* 右下角衔接（库两滚动条交叉处） */
-.xs-host .xs-scrollbar-corner,
-.xs-host [data-xs-sb-corner] {
-	position: absolute;
-	right: 0;
-	bottom: 0;
-	width: 12px;
-	height: 12px;
-	z-index: 26;
-	pointer-events: none;
-	background: var(--bg-muted, #f5f6f7);
-	box-sizing: border-box;
-	border-left: 1px solid var(--border, #e0e2e4);
-	border-top: 1px solid var(--border, #e0e2e4);
 }
 .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
 	width: 12px;
@@ -3212,15 +3187,15 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	background: var(--bg-muted, #f5f6f7);
 }
 .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb {
-	background: color-mix(in srgb, var(--fg-muted, #80868b) 48%, var(--bg-muted, #f5f6f7));
+	background: color-mix(in srgb, var(--fg-muted, #80868b) 50%, var(--bg-muted, #f5f6f7));
 	border-radius: 6px;
 	border: 2px solid var(--bg-muted, #f5f6f7);
-	min-height: 24px;
-	min-width: 24px;
+	min-height: 28px;
+	min-width: 28px;
 }
 .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb:hover,
 .xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar-thumb:active {
-	background: color-mix(in srgb, var(--fg-muted, #80868b) 68%, var(--bg-muted, #f5f6f7));
+	background: color-mix(in srgb, var(--fg-muted, #80868b) 70%, var(--bg-muted, #f5f6f7));
 }
 .xs-host .x-spreadsheet-bottombar {
 	flex: 0 0 auto;
@@ -3229,27 +3204,44 @@ body.is-center-pseudo-fs.is-sheet-app-page .xs-host {
 	box-sizing: border-box !important;
 }
 @media (pointer: coarse) {
-	.xs-host .x-spreadsheet-sheet {
-		padding-right: 14px !important;
-		padding-bottom: 14px !important;
-	}
 	.xs-host .x-spreadsheet-scrollbar.horizontal {
 		height: 14px !important;
-		right: 14px !important;
+		min-height: 14px !important;
 	}
 	.xs-host .x-spreadsheet-scrollbar.vertical {
 		width: 14px !important;
-		bottom: 14px !important;
-	}
-	.xs-host .xs-scrollbar-corner,
-	.xs-host [data-xs-sb-corner] {
-		width: 14px;
-		height: 14px;
+		min-width: 14px !important;
 	}
 	.xs-host .x-spreadsheet-scrollbar::-webkit-scrollbar {
 		width: 14px;
 		height: 14px;
 	}
+	.xs-host .x-spreadsheet-overlayer {
+		touch-action: none;
+	}
+}
+/* 滚动条旁灰垫：行号列下方 / 右下角交叉，与轨道同色，消除露白 */
+.xs-host .xs-sb-pad {
+	position: absolute;
+	z-index: 24;
+	pointer-events: none;
+	background: var(--bg-muted, #f5f6f7);
+	box-sizing: border-box;
+}
+.xs-host .xs-sb-pad--bl {
+	left: 0;
+	bottom: 0;
+}
+.xs-host .xs-sb-pad--br {
+	right: 0;
+	bottom: 0;
+}
+.xs-host .xs-sb-pad[hidden] {
+	display: none !important;
+}
+.xs-host .xs-scrollbar-corner,
+.xs-host [data-xs-sb-corner] {
+	display: none !important;
 }
 .xs-host .x-spreadsheet-toolbar-btn:has(.x-spreadsheet-icon-img.print),
 .xs-host .x-spreadsheet-toolbar-btn[data-xs-hidden-print],
@@ -6497,28 +6489,39 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		display: none !important;
 	}
 
-	/* —— 左：文件树上层抽屉（fixed，不参与占位；关闭时完全移出） —— */
-	.wiki-nav {
+	/*
+	 * 左/右抽屉（与大纲栏同一套交互）：
+	 * - position:fixed 浮在中栏之上，不占 grid、不把中间栏挤窄
+	 * - z-index:50 > 遮罩 40 > 正文
+	 * - 打开：滑入；关闭：滑出 + pointer-events:none
+	 */
+	.wiki-nav,
+	.wiki-toc {
 		position: fixed !important;
 		top: var(--app-header-offset, calc(var(--header-h) + env(safe-area-inset-top, 0px)));
-		left: 0;
 		bottom: 0;
-		/* 视觉宽度；因 fixed 不撑开 grid */
 		width: min(86vw, 320px) !important;
 		max-width: 86vw;
 		z-index: 50;
-		transform: translateX(-100%);
-		transition: transform 0.18s ease;
-		box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
 		visibility: visible !important;
-		pointer-events: auto !important;
-		border-right: 1px solid var(--border);
-		/* 内容白底；顶栏仍是 pane-bar 灰 */
 		background: var(--bg);
 		overflow: hidden;
-		/* 防止某些引擎仍按内容 min-size 占隐式列 */
+		display: flex !important;
+		flex-direction: column;
 		min-width: 0 !important;
 		margin: 0 !important;
+		/* 勿参与文档流占位 */
+		transition: transform 0.18s ease;
+	}
+	/* —— 左：文件树 —— */
+	.wiki-nav {
+		left: 0;
+		right: auto;
+		transform: translateX(-100%);
+		border-right: 1px solid var(--border);
+		border-left: none;
+		box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+		pointer-events: auto !important;
 	}
 	body.nav-drawer-open .wiki-nav {
 		transform: translateX(0);
@@ -6528,44 +6531,104 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		pointer-events: none !important;
 		box-shadow: none;
 	}
-	.wiki-nav .file-tree,
-	.wiki-nav .tree-body {
+	.wiki-nav .file-tree {
+		flex: 1 1 auto;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
 		pointer-events: auto;
 		-webkit-overflow-scrolling: touch;
 	}
+	.wiki-nav .tree-body {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow: auto;
+		pointer-events: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+	/*
+	 * 左顶栏对齐右大纲顶栏：灰底 chrome。
+	 * 名序等装第二行（同灰底），避免单行裁切；仍在抽屉内，压在中栏上。
+	 */
+	.wiki-nav .tree-top {
+		flex: 0 0 auto;
+		height: auto !important;
+		min-height: var(--pane-bar-h);
+		max-height: none !important;
+		flex-wrap: wrap;
+		align-items: center;
+		row-gap: 0;
+		column-gap: 0.25rem;
+		padding: 0 0.5rem;
+		overflow: hidden;
+		background: var(--bg-muted);
+		border-bottom: 1px solid var(--border);
+		z-index: 2;
+	}
+	.wiki-nav .tree-top .pane-title-group {
+		flex: 1 1 auto;
+		min-width: 0;
+		max-width: calc(100% - 4.5rem);
+		height: var(--pane-bar-h);
+		display: inline-flex;
+		align-items: center;
+	}
+	.wiki-nav .tree-top .pane-title-end {
+		flex: 0 0 auto;
+		margin-inline-start: 0;
+		height: var(--pane-bar-h);
+		display: inline-flex;
+		align-items: center;
+	}
+	.wiki-nav .tree-top .pane-title-tools {
+		flex: 1 1 100%;
+		order: 3;
+		justify-content: flex-start;
+		align-items: center;
+		min-width: 0;
+		width: 100%;
+		gap: 0.35rem;
+		box-sizing: border-box;
+		/* 第二行：与顶栏同灰，像大纲栏一体 chrome */
+		margin: 0 -0.5rem;
+		padding: 0.35rem 0.5rem 0.4rem;
+		border-top: 1px solid var(--border);
+		background: var(--bg-muted);
+		overflow-x: auto;
+		overflow-y: hidden;
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: none;
+	}
+	.wiki-nav .tree-top .pane-title-tools::-webkit-scrollbar {
+		display: none;
+		height: 0;
+	}
+	.wiki-nav .tree-top .tree-sort-btn,
+	.wiki-nav .tree-top .tree-group-btn,
+	.wiki-nav .tree-top .tree-accordion-btn {
+		flex: 0 0 auto;
+		min-height: 2rem;
+		height: 2rem;
+		padding: 0 0.5rem;
+	}
 
-	/* —— 右：大纲上层抽屉 —— */
+	/* —— 右：大纲（对称左栏） —— */
 	.wiki-toc {
-		display: flex !important;
-		flex-direction: column;
-		position: fixed !important;
-		top: var(--app-header-offset, calc(var(--header-h) + env(safe-area-inset-top, 0px)));
-		right: 0;
-		bottom: 0;
 		left: auto;
-		width: min(86vw, 320px) !important;
-		max-width: 86vw;
-		z-index: 50;
+		right: 0;
 		transform: translateX(100%);
-		transition: transform 0.18s ease;
-		box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
-		visibility: visible !important;
-		pointer-events: auto !important;
 		border-left: 1px solid var(--border);
 		border-right: none;
-		/* 与左栏抽屉一致：内容白底 */
-		background: var(--bg);
-		overflow: hidden;
+		box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+		pointer-events: auto !important;
 	}
 	body.toc-drawer-open .wiki-toc {
 		transform: translateX(0);
+		pointer-events: auto !important;
 	}
 	body:not(.toc-drawer-open) .wiki-toc {
 		pointer-events: none !important;
 		box-shadow: none;
-	}
-	body.toc-drawer-open .wiki-toc {
-		pointer-events: auto !important;
 	}
 	.wiki-toc .doc-toc {
 		flex: 1 1 auto;
@@ -6582,6 +6645,7 @@ html[data-content-width='fixed'] .markdown-body .webmd-embed.is-media-line {
 		display: none !important;
 	}
 	.wiki-toc .pane-bar--toc {
+		flex: 0 0 auto;
 		flex-shrink: 0;
 	}
 }
