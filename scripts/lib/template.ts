@@ -262,8 +262,10 @@ function formatBytesForCrumb(n: number): string {
 	return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-const ICON_HOME = `<svg class="wiki-breadcrumb__home-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
-/** 复制路径：链接图标（比双页复制更贴「路径/URL」） */
+/** 路径栏「根目录」：定位左侧树顶部（非站级主页） */
+const ICON_ROOT = `<svg class="wiki-breadcrumb__root-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/></svg>`;
+/** 文件信息：完整 URL / 大小 / 格式 */
+const ICON_INFO = `<svg class="wiki-breadcrumb__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`;
 const ICON_DOWNLOAD = `<svg class="wiki-breadcrumb__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>`;
 /** 中栏全屏 / 退出全屏（通用，非某类内容专属） */
 const ICON_PANE_FULLSCREEN = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--fs-enter" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>`;
@@ -372,57 +374,82 @@ export function renderBreadcrumb(
 
 	const crumbs: string[] = [];
 	crumbs.push(
-		`<a class="wiki-breadcrumb__home" href="/" title="主页" aria-label="主页">${ICON_HOME}</a>`,
+		`<button type="button" class="wiki-breadcrumb__root" data-tree-scroll-root title="根目录：滚动左侧文件树到顶部" aria-label="根目录：滚动左侧文件树到顶部">${ICON_ROOT}</button>`,
 	);
-	if (dirJoined) {
+	// 目录段可点：在左侧文件树展开并滚到该文件夹（不跳转、不生成目录页）
+	if (dirParts.length) {
 		crumbs.push(`<span class="wiki-breadcrumb__sep" aria-hidden="true">/</span>`);
+		const dirSegs: string[] = [];
+		dirSegs.push(
+			`<span class="wiki-breadcrumb__dirs-ellipsis" data-dirs-lead-ellipsis hidden aria-hidden="true">…</span>`,
+		);
+		dirParts.forEach((seg, i) => {
+			const dirPath = dirParts.slice(0, i + 1).join('/');
+			if (i > 0) {
+				dirSegs.push(
+					`<span class="wiki-breadcrumb__sep wiki-breadcrumb__sep--in-dirs" aria-hidden="true">/</span>`,
+				);
+			}
+			dirSegs.push(
+				`<button type="button" class="wiki-breadcrumb__seg" data-crumb-dir data-tree-focus="${esc(dirPath)}" data-tree-focus-kind="dir" title="在文件树中定位：${esc(dirPath)}">${esc(seg)}</button>`,
+			);
+		});
 		crumbs.push(
-			`<span class="wiki-breadcrumb__dirs" data-middle-ellipsis data-ellipsis-full="${esc(dirJoined)}" title="${esc(dirJoined)}">${esc(dirJoined)}</span>`,
+			`<span class="wiki-breadcrumb__dirs" data-ellipsis-full="${esc(dirJoined)}" title="${esc(dirJoined)}">${dirSegs.join('')}</span>`,
 		);
 	}
 	crumbs.push(`<span class="wiki-breadcrumb__sep" aria-hidden="true">/</span>`);
 	crumbs.push(
-		`<span class="wiki-breadcrumb__current" aria-current="page" data-middle-ellipsis data-ellipsis-full="${esc(fileName)}" title="${esc(file.path)}">${esc(fileName)}</span>`,
+		`<button type="button" class="wiki-breadcrumb__current" aria-current="page" data-middle-ellipsis data-ellipsis-full="${esc(fileName)}" data-tree-focus="${esc(file.path)}" data-tree-focus-kind="file" title="在文件树中定位：${esc(file.path)}">${esc(fileName)}</button>`,
 	);
-	const metaParts: string[] = [];
-	if (opts?.bytes != null && Number.isFinite(opts.bytes)) {
-		const sz = formatBytesForCrumb(opts.bytes);
-		if (sz) metaParts.push(sz);
-	}
-	const kind = KIND_LABEL[file.kind] || file.kind;
-	if (kind) metaParts.push(kind);
-	const meta =
-		metaParts.length > 0
-			? `<span class="wiki-breadcrumb__meta" aria-label="文件信息">${metaParts
-					.map((p) => `<span class="wiki-breadcrumb__chip">${esc(p)}</span>`)
-					.join('')}</span>`
+	// 大小 / 格式：路径栏不展示，收进 info 弹层
+	const sizeLabel =
+		opts?.bytes != null && Number.isFinite(opts.bytes)
+			? formatBytesForCrumb(opts.bytes)
 			: '';
+	const kindLabel = KIND_LABEL[file.kind] || file.kind || '';
 	const pathAttr = esc(file.path);
 	const downloadHref = esc(file.url);
 	const downloadName = esc(file.name);
-	const metaLine = metaParts.length ? metaParts.join(' · ') : '';
+	const infoBlocks: string[] = [];
+	if (sizeLabel) {
+		infoBlocks.push(
+			`<div class="wiki-breadcrumb__popover-block">` +
+				`<span class="wiki-breadcrumb__popover-label">大小</span>` +
+				`<div class="wiki-breadcrumb__popover-value">${esc(sizeLabel)}</div>` +
+				`</div>`,
+		);
+	}
+	if (kindLabel) {
+		infoBlocks.push(
+			`<div class="wiki-breadcrumb__popover-block">` +
+				`<span class="wiki-breadcrumb__popover-label">格式</span>` +
+				`<div class="wiki-breadcrumb__popover-value">${esc(kindLabel)}</div>` +
+				`</div>`,
+		);
+	}
 	const actions = `<div class="wiki-breadcrumb__actions">
-		<button type="button" class="wiki-breadcrumb__icon-btn wiki-breadcrumb__url-btn" data-path-reveal-btn title="查看完整 URL" aria-label="查看完整 URL" aria-haspopup="dialog"><span class="wiki-breadcrumb__url-btn-label">URL</span></button>
+		<button type="button" class="wiki-breadcrumb__icon-btn wiki-breadcrumb__info-btn" data-path-reveal-btn title="文件信息" aria-label="文件信息" aria-haspopup="dialog" aria-expanded="false">${ICON_INFO}</button>
 		${renderContentWidthBtn()}
 		${renderCenterFullscreenBtn()}
 		<a class="wiki-breadcrumb__icon-btn" href="${downloadHref}" download="${downloadName}" title="下载文件" aria-label="下载文件">${ICON_DOWNLOAD}</a>
 		${renderScrollEdgeBtns('main')}
 	</div>`;
-	/* 点击路径/URL 按钮弹出完整 URL；宽度随 URL 自适应；可分别复制可读/转义 */
-	const popover = `<div class="wiki-breadcrumb__popover" data-path-popover hidden role="dialog" aria-label="完整 URL">
+	/* 点击路径 / info：完整 URL + 大小 + 格式；可分别复制可读/转义/相对路径 */
+	const popover = `<div class="wiki-breadcrumb__popover" data-path-popover hidden role="dialog" aria-label="文件信息">
 		<div class="wiki-breadcrumb__popover-head">
-			<span class="wiki-breadcrumb__popover-title">完整 URL</span>
+			<span class="wiki-breadcrumb__popover-title">文件信息</span>
 			<button type="button" class="wiki-breadcrumb__popover-close" data-path-popover-close title="关闭" aria-label="关闭">×</button>
 		</div>
+		${infoBlocks.length ? `<div class="wiki-breadcrumb__popover-facts">${infoBlocks.join('')}</div>` : ''}
 		<div class="wiki-breadcrumb__popover-block">
-			<span class="wiki-breadcrumb__popover-label">可读（非转义）</span>
+			<span class="wiki-breadcrumb__popover-label">可读 URL（非转义）</span>
 			<code class="wiki-breadcrumb__popover-path" data-path-popover-text data-path-popover-plain></code>
 		</div>
 		<div class="wiki-breadcrumb__popover-block">
-			<span class="wiki-breadcrumb__popover-label">转义（percent-encode）</span>
+			<span class="wiki-breadcrumb__popover-label">转义 URL（percent-encode）</span>
 			<code class="wiki-breadcrumb__popover-path wiki-breadcrumb__popover-path--encoded" data-path-popover-encoded></code>
 		</div>
-		${metaLine ? `<div class="wiki-breadcrumb__popover-meta">${esc(metaLine)}</div>` : ''}
 		<div class="wiki-breadcrumb__popover-actions">
 			<button type="button" class="wiki-breadcrumb__popover-btn" data-copy-url-plain data-copy-path="${pathAttr}" title="复制中文原样的完整 URL">复制可读 URL</button>
 			<button type="button" class="wiki-breadcrumb__popover-btn wiki-breadcrumb__popover-btn--secondary" data-copy-url-encoded data-copy-path="${pathAttr}" title="复制 %E4%B8%AD 形式的完整 URL">复制转义 URL</button>
@@ -430,8 +457,7 @@ export function renderBreadcrumb(
 		</div>
 	</div>`;
 	return `<nav class="wiki-breadcrumb" aria-label="文件路径" data-full-path="${pathAttr}">
-		<div class="wiki-breadcrumb__trail" data-path-reveal role="button" tabindex="0" title="点击查看完整 URL" aria-expanded="false" aria-haspopup="dialog">${crumbs.join('')}</div>
-		${meta}
+		<div class="wiki-breadcrumb__trail" title="点目录/文件名可在左侧文件树中定位">${crumbs.join('')}</div>
 		${actions}
 		${popover}
 	</nav>`;
@@ -610,7 +636,7 @@ export function renderHomePage(m: {
 	const desc = m.siteDescription || '';
 	const crumb = `<nav class="wiki-breadcrumb" aria-label="主页">
 		<div class="wiki-breadcrumb__trail">
-			<span class="wiki-breadcrumb__home is-current" title="主页" aria-current="page">${ICON_HOME}</span>
+			<button type="button" class="wiki-breadcrumb__root" data-tree-scroll-root title="根目录：滚动左侧文件树到顶部" aria-label="根目录：滚动左侧文件树到顶部">${ICON_ROOT}</button>
 			<span class="wiki-breadcrumb__sep" aria-hidden="true">/</span>
 			<span class="wiki-breadcrumb__current" aria-current="page">主页</span>
 		</div>
@@ -627,7 +653,7 @@ export function renderHomePage(m: {
   <div class="home-hero__cards">
     <section class="home-card">
       <h2>内容</h2>
-      <p>所有可预览文件放在 <code>content/</code>。点顶栏主页图标或站名进入首页；左侧「文件」下为文件树（含 <code>index.md</code>）。</p>
+      <p>所有可预览文件放在 <code>content/</code>。进入站点或点顶栏主页图标/站名可回首页；路径栏磁盘图标表示内容根目录，点它会滚到左侧文件树顶部。</p>
     </section>
     <section class="home-card">
       <h2>预览</h2>
@@ -676,8 +702,8 @@ export function render404Page(m: {
 		treeHtml: m.treeHtml,
 		tocHtml: '<div class="toc-empty">—</div>',
 		inlineTocHtml: '',
-		breadcrumbHtml: `<nav class="wiki-breadcrumb" aria-label="文件路径"><div class="wiki-breadcrumb__trail"><a class="wiki-breadcrumb__home" href="/" title="主页" aria-label="主页">${ICON_HOME}</a><span class="wiki-breadcrumb__sep" aria-hidden="true">/</span><span class="wiki-breadcrumb__current" aria-current="page">404</span></div><div class="wiki-breadcrumb__actions">${renderContentWidthBtn()}${renderCenterFullscreenBtn()}</div></nav>`,
-		bodyHtml: `<h1>页面未找到</h1><p>链接可能已失效，或文件尚未放入 <code>content/</code>。</p><p><a href="/">返回主页</a></p>`,
+		breadcrumbHtml: `<nav class="wiki-breadcrumb" aria-label="文件路径"><div class="wiki-breadcrumb__trail"><button type="button" class="wiki-breadcrumb__root" data-tree-scroll-root title="根目录：滚动左侧文件树到顶部" aria-label="根目录：滚动左侧文件树到顶部">${ICON_ROOT}</button><span class="wiki-breadcrumb__sep" aria-hidden="true">/</span><span class="wiki-breadcrumb__current" aria-current="page">404</span></div><div class="wiki-breadcrumb__actions">${renderContentWidthBtn()}${renderCenterFullscreenBtn()}</div></nav>`,
+		bodyHtml: `<h1>页面未找到</h1><p>链接可能已失效，或文件尚未放入 <code>content/</code>。</p><p><a href="/">返回主页</a>（也可点顶栏站名/主页图标）</p>`,
 		pagerHtml: '',
 		assetJs: m.assetJs,
 		assetCss: m.assetCss,

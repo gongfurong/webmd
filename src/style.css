@@ -2010,7 +2010,8 @@ body.is-col-resizing .wiki-gutter {
 	background: var(--bg-muted);
 	overflow: visible;
 	position: relative;
-	z-index: 6;
+	/* 须高于 x-spreadsheet 选区/overlayer（10～100+），否则弹层会被表格蓝框盖住 */
+	z-index: 50;
 }
 .pane-bar--center > .wiki-breadcrumb {
 	flex: 1 1 auto;
@@ -2182,6 +2183,9 @@ body.is-col-resizing .wiki-gutter {
 	padding: 0.75rem 1rem 1.75rem;
 	width: 100%;
 	box-sizing: border-box;
+	/* 明确低于路径栏层叠上下文，避免 sheet 选区/overlayer 盖住路径弹层 */
+	position: relative;
+	z-index: 1;
 }
 
 .center-scroll > .inline-toc {
@@ -2748,19 +2752,32 @@ body.is-sheet-app-page .center-scroll > .markdown-body {
 	flex-direction: column;
 	padding: 0 !important;
 	max-width: none !important;
-	width: 100%;
+	width: 100% !important;
+	margin-inline: 0 !important;
 	box-sizing: border-box;
 	overflow: hidden;
+	align-self: stretch !important;
+}
+/* 铺满：表格页强制吃满中栏（覆盖固定版心 max-width 残留） */
+html[data-content-width='fill'] body.is-sheet-app-page .center-scroll > .markdown-body,
+html[data-content-width='fill'] body.is-sheet-app-page .markdown-body > .sheet-app,
+html[data-content-width='fill'] body.is-sheet-app-page .sheet-app .xs-host {
+	width: 100% !important;
+	max-width: none !important;
+	margin-inline: 0 !important;
 }
 body.is-sheet-app-page .markdown-body > .sheet-app {
 	flex: 1 1 0;
 	min-height: 0;
 	height: 100%;
+	width: 100% !important;
+	max-width: none !important;
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
 	margin: 0 !important;
 	border-radius: 0 !important;
+	box-sizing: border-box;
 }
 
 .sheet-app.webmd-code.sheet-block {
@@ -2777,185 +2794,14 @@ body.is-sheet-app-page .markdown-body > .sheet-app {
 	flex-wrap: wrap;
 	gap: 0.35rem 0.5rem;
 }
-.sheet-app .webmd-code__actions {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.5rem;
-	margin-left: auto;
-	flex-wrap: wrap;
-}
-.sheet-app .webmd-code__hint {
-	font-size: 0.72rem;
-	font-weight: 500;
-	color: var(--fg-muted);
-	margin-left: 0.35rem;
-}
-/* 类型旁提醒：与标题隔开，提醒色 */
-.sheet-app .webmd-code__note {
-	flex: 0 1 auto;
-	margin-left: 0.75rem;
-	padding-left: 0.75rem;
-	border-left: 1px solid var(--border, #d0d7de);
-	font-size: 0.8rem;
-	font-weight: 550;
-	line-height: 1.3;
-	letter-spacing: 0.01em;
-	white-space: nowrap;
-}
-.sheet-app .webmd-code__note--warn {
-	/* 提醒色：纯黄、少灰感 */
-	color: #d4a017;
-}
-html[data-theme='dark'] .sheet-app .webmd-code__note {
-	border-left-color: var(--border);
-}
-html[data-theme='dark'] .sheet-app .webmd-code__note--warn {
-	color: #ffd666;
-}
-/* 密度三档 */
-.xs-density {
-	display: inline-flex;
-	align-items: stretch;
-	border: 1px solid var(--border-muted, #d0d7de);
-	border-radius: 0.375rem;
-	overflow: hidden;
-	background: var(--bg-muted, #f6f8fa);
-}
-.xs-density__btn {
-	appearance: none;
-	margin: 0;
-	padding: 0.2rem 0.45rem;
-	border: 0;
-	border-right: 1px solid var(--border-muted, #d0d7de);
-	background: transparent;
-	color: var(--fg-muted, #656d76);
-	font-size: 0.72rem;
-	font-weight: 500;
-	line-height: 1.4;
-	cursor: pointer;
-	white-space: nowrap;
-}
-.xs-density__btn:last-child {
-	border-right: 0;
-}
-.xs-density__btn:hover {
-	color: var(--fg, #1f2328);
-	background: rgba(0, 0, 0, 0.04);
-}
-.xs-density__btn.is-active {
-	color: var(--fg, #1f2328);
-	background: var(--bg-elevated, #fff);
-	font-weight: 600;
-	box-shadow: inset 0 0 0 1px var(--border-muted, #d0d7de);
-}
-html[data-theme='dark'] .xs-density {
-	border-color: #30363d;
-	background: #21262d;
-}
-html[data-theme='dark'] .xs-density__btn {
-	border-right-color: #30363d;
-	color: #8b949e;
-}
-html[data-theme='dark'] .xs-density__btn:hover {
-	color: #e6edf3;
-	background: rgba(255, 255, 255, 0.06);
-}
-html[data-theme='dark'] .xs-density__btn.is-active {
-	color: #e6edf3;
-	background: #0d1117;
-	box-shadow: inset 0 0 0 1px #30363d;
-}
-/* 缩放滑块 50%–200%（几何缩放，不改 CSS zoom） */
-.xs-zoom {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.35rem;
-	padding: 0.1rem 0.45rem;
-	border: 1px solid var(--border-muted, #d0d7de);
-	border-radius: 0.375rem;
-	background: var(--bg-muted, #f6f8fa);
-	user-select: none;
-}
-.xs-zoom__cap {
-	font-size: 0.72rem;
-	font-weight: 500;
-	color: var(--fg-muted, #656d76);
-	white-space: nowrap;
-}
-.xs-zoom__label {
-	font-size: 0.72rem;
-	font-weight: 600;
-	color: var(--fg, #1f2328);
-	min-width: 2.4rem;
-	text-align: right;
-	font-variant-numeric: tabular-nums;
-}
-.xs-zoom__range {
-	width: 7.5rem;
-	height: 1.1rem;
-	margin: 0;
-	accent-color: var(--accent, #0969da);
-	cursor: pointer;
-}
-html[data-theme='dark'] .xs-zoom {
-	border-color: #30363d;
-	background: #21262d;
-}
-html[data-theme='dark'] .xs-zoom__cap {
-	color: #8b949e;
-}
-html[data-theme='dark'] .xs-zoom__label {
-	color: #e6edf3;
-}
-.xs-actions {
-	display: inline-flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 0.25rem;
-}
-.xs-action-btn {
-	appearance: none;
-	margin: 0;
-	padding: 0.2rem 0.5rem;
-	border: 1px solid var(--border-muted, #d0d7de);
-	border-radius: 0.35rem;
-	background: var(--bg-elevated, #fff);
-	color: var(--fg-muted, #656d76);
-	font-size: 0.72rem;
-	font-weight: 500;
-	line-height: 1.4;
-	cursor: pointer;
-	white-space: nowrap;
-}
-.xs-action-btn:hover {
-	color: var(--fg, #1f2328);
-	border-color: var(--border, #afb8c1);
-}
-.xs-action-btn.is-copied,
+/* 复制按钮成功/失败态（类型栏：类型 + 复制，与代码块一致） */
 .webmd-code__copy.is-copied {
 	color: #1a7f37;
 	border-color: #1a7f37;
 }
-.xs-action-btn.is-failed,
 .webmd-code__copy.is-failed {
 	color: #cf222e;
 	border-color: #cf222e;
-}
-html[data-theme='dark'] .xs-action-btn {
-	background: #21262d;
-	border-color: #30363d;
-	color: #8b949e;
-}
-html[data-theme='dark'] .xs-action-btn:hover {
-	color: #e6edf3;
-	border-color: #484f58;
-}
-.sheet-app .webmd-code__hint.is-dirty {
-	color: #9a6700;
-	font-weight: 600;
-}
-html[data-theme='dark'] .sheet-app .webmd-code__hint.is-dirty {
-	color: #d4a72c;
 }
 /*
  * 中栏通用全屏 —— 仅匹配 :fullscreen，不写全局 class 驱动布局，
@@ -3017,12 +2863,33 @@ body.is-sheet-app-page .wiki-main:fullscreen .xs-host {
 /* x-spreadsheet：少覆盖库样式 */
 .xs-host {
 	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+/* 内容只读：隐藏底栏「添加工作表」；改名/删除由 JS 捕获拦截 */
+.xs-host.is-xs-readonly .x-spreadsheet-bottombar .x-spreadsheet-icon-img.add,
+.xs-host.is-xs-readonly .x-spreadsheet-bottombar .x-spreadsheet-icon.add {
+	display: none !important;
+	pointer-events: none !important;
+}
+/* 只读时隐藏库内嵌编辑框，避免误触弹键盘 */
+.xs-host.is-xs-readonly .x-spreadsheet-editor {
+	display: none !important;
+	pointer-events: none !important;
 }
 .xs-host .x-spreadsheet {
 	height: 100%;
+	min-height: 0;
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	/* 允许工具栏下拉溢出到表体区域显示 */
+	overflow: visible;
 }
 /*
  * 工具栏：全宽排出常用按钮（不用 max-content，否则 moreResize 量窄会全进 …）。
+ * z-index 高于 sheet，避免字体/颜色/「更多」下拉被表体盖住。
  */
 .xs-host .x-spreadsheet-toolbar {
 	width: 100% !important;
@@ -3030,6 +2897,16 @@ body.is-sheet-app-page .wiki-main:fullscreen .xs-host {
 	box-sizing: border-box;
 	background: var(--bg-muted, #f6f8fa);
 	border-bottom: 1px solid var(--border, #e0e2e4);
+	position: relative;
+	z-index: 30;
+	flex: 0 0 auto;
+	overflow: visible;
+}
+.xs-host .x-spreadsheet-sheet {
+	position: relative;
+	z-index: 1;
+	flex: 1 1 auto;
+	min-height: 0;
 }
 .xs-host .x-spreadsheet-toolbar-btn:has(.x-spreadsheet-icon-img.print),
 .xs-host .x-spreadsheet-toolbar-btn[data-xs-hidden-print],
@@ -3039,12 +2916,45 @@ body.is-sheet-app-page .wiki-main:fullscreen .xs-host {
 .xs-host .x-spreadsheet-print {
 	display: none !important;
 }
-.xs-host .x-spreadsheet-contextmenu,
-.xs-host .x-spreadsheet-dropdown,
+/* 下拉/调色板/右键：必须高于表体 overlayer */
+.xs-host .x-spreadsheet-dropdown {
+	z-index: 10050 !important;
+}
+.xs-host .x-spreadsheet-dropdown-content,
 .xs-host .x-spreadsheet-color-palette,
+.xs-host .x-spreadsheet-suggest,
+.xs-host .x-spreadsheet-contextmenu,
 .xs-host .x-spreadsheet-modal,
 .xs-host .x-spreadsheet-toast {
-	z-index: 40;
+	z-index: 10050 !important;
+}
+/* 仅 dropdown-content 绝对定位；toolbar-more 是内容容器，勿 absolute（会弄乱图标精灵） */
+.xs-host .x-spreadsheet-dropdown-content {
+	position: absolute;
+}
+/* 「更多」面板：横向多列排按钮，与库 moreResize 一致 */
+.xs-host .x-spreadsheet-toolbar-more {
+	position: static !important;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	align-content: flex-start;
+	max-width: 420px;
+	padding: 4px 6px 6px;
+	box-sizing: border-box;
+	z-index: auto !important;
+}
+.xs-host .x-spreadsheet-toolbar-more > .x-spreadsheet-toolbar-btn {
+	margin: 4px 1px 0;
+}
+/*
+ * 选区/覆盖层：低于路径栏(50)与工具栏下拉(10050)。
+ */
+.xs-host .x-spreadsheet-overlayer {
+	z-index: 4 !important;
+}
+.xs-host .x-spreadsheet-selector {
+	z-index: 5 !important;
 }
 
 /* sheet-app 类型栏也跟站点 token */
@@ -3054,7 +2964,7 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 	color: var(--fg);
 }
 
-/* 上栏：自动列宽/行高贴工具栏最左（库默认 padding 30px，压成贴边） */
+/* 库工具栏：全宽给 moreResize，勿再塞自定义条 */
 .xs-host .x-spreadsheet-toolbar {
 	display: flex !important;
 	align-items: center;
@@ -3069,20 +2979,27 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 	display: inline-flex;
 	align-items: center;
 	flex-wrap: nowrap;
+	overflow: visible;
 }
-.xs-fit-bar {
+/*
+ * 自定义操作：与库工具栏同一行最左（重载/全选/列宽/行高/缩放 | 库按钮…）
+ * 是 toolbar 的兄弟节点（在 toolbar-btns 前），勿塞进 btns
+ */
+.xs-ops-bar {
 	display: inline-flex;
 	align-items: center;
 	flex: 0 0 auto;
-	order: -1;
+	flex-wrap: nowrap;
 	gap: 0.2rem;
-	margin: 6px 4px 0 0;
-	padding: 0 6px 0 0;
+	box-sizing: border-box;
+	margin: 6px 6px 0 0;
+	padding: 0 8px 0 0;
 	border-right: 1px solid var(--border, #e0e2e4);
 	background: transparent;
-	z-index: 2;
+	position: relative;
+	z-index: 32;
 }
-.xs-fit-bar__btn {
+.xs-ops-bar__btn {
 	appearance: none;
 	margin: 0;
 	padding: 0 0.4rem;
@@ -3097,26 +3014,85 @@ body.is-sheet-app-page .sheet-app.webmd-code .webmd-code__bar {
 	cursor: pointer;
 	white-space: nowrap;
 }
-.xs-fit-bar__btn:hover {
+.xs-ops-bar__btn:hover {
 	color: var(--fg, #1f2328);
 	border-color: var(--border-strong, #afb8c1);
 	background: color-mix(in srgb, var(--fg) 4%, var(--bg-elevated, #fff));
 }
-html[data-theme='dark'] .xs-fit-bar,
-.xs-host.is-xs-dark .xs-fit-bar {
-	border-right-color: var(--border);
+.xs-ops-bar__zoom {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.15rem;
+	height: 26px;
+	padding: 0 0.3rem 0 0.35rem;
+	border: 1px solid var(--border, #d0d7de);
+	border-radius: 2px;
+	background: var(--bg-elevated, #fff);
+	color: var(--fg-muted, #656d76);
+	user-select: none;
+	white-space: nowrap;
 }
-html[data-theme='dark'] .xs-fit-bar__btn,
-.xs-host.is-xs-dark .xs-fit-bar__btn {
+.xs-ops-bar__zoom-cap {
+	font-size: 0.72rem;
+	font-weight: 500;
+	line-height: 1;
+}
+.xs-ops-bar__zoom-input {
+	width: 2.6rem;
+	height: 20px;
+	margin: 0;
+	padding: 0 0.15rem;
+	border: 0;
+	border-radius: 1px;
+	background: transparent;
+	color: var(--fg, #1f2328);
+	font-size: 0.72rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	line-height: 20px;
+	outline: none;
+	/* 隐藏 number 加减箭头，保持紧凑 */
+	-moz-appearance: textfield;
+	appearance: textfield;
+}
+.xs-ops-bar__zoom-input::-webkit-outer-spin-button,
+.xs-ops-bar__zoom-input::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+.xs-ops-bar__zoom-suffix {
+	font-size: 0.7rem;
+	font-weight: 600;
+	color: var(--fg-muted, #656d76);
+	line-height: 1;
+}
+html[data-theme='dark'] .xs-ops-bar,
+.xs-host.is-xs-dark .xs-ops-bar {
+	border-right-color: var(--border);
+	background: transparent;
+}
+html[data-theme='dark'] .xs-ops-bar__btn,
+.xs-host.is-xs-dark .xs-ops-bar__btn {
 	background: var(--bg-elevated);
 	border-color: var(--border);
 	color: var(--fg-muted);
 }
-html[data-theme='dark'] .xs-fit-bar__btn:hover,
-.xs-host.is-xs-dark .xs-fit-bar__btn:hover {
+html[data-theme='dark'] .xs-ops-bar__btn:hover,
+.xs-host.is-xs-dark .xs-ops-bar__btn:hover {
 	color: var(--fg);
 	background: var(--nav-hover-bg, rgba(255, 255, 255, 0.06));
 	border-color: var(--border-strong);
+}
+html[data-theme='dark'] .xs-ops-bar__zoom,
+.xs-host.is-xs-dark .xs-ops-bar__zoom {
+	background: var(--bg-elevated);
+	border-color: var(--border);
+	color: var(--fg-muted);
+}
+html[data-theme='dark'] .xs-ops-bar__zoom-input,
+.xs-host.is-xs-dark .xs-ops-bar__zoom-input {
+	color: var(--fg);
 }
 
 /*
@@ -4861,51 +4837,33 @@ body.is-col-resizing video {
 	/* 吃剩余空间，但内部子项不 stretch 撑出「中间大空档」 */
 	flex: 1 1 auto;
 	overflow: hidden;
-	/* 可点查看完整路径 */
-	cursor: pointer;
+	/* 路径本身不可点开信息；目录/文件名各自可点定位左侧树 */
+	cursor: default;
 	border-radius: 0.35rem;
 	padding: 0.15rem 0.25rem;
 	margin: 0 -0.25rem;
 	outline: none;
 	-webkit-tap-highlight-color: transparent;
-	transition: background 0.12s ease;
 }
-.wiki-breadcrumb__trail:hover {
-	background: color-mix(in srgb, var(--fg) 5%, transparent);
-}
-.wiki-breadcrumb__trail:focus-visible {
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
-}
-.wiki-breadcrumb__trail[aria-expanded='true'] {
-	background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-/* 路径栏「URL」文字按钮 */
-.wiki-breadcrumb__url-btn {
-	min-width: 2.1rem;
-	padding: 0 0.35rem;
-}
-.wiki-breadcrumb__url-btn-label {
-	font-size: 0.65rem;
-	font-weight: 750;
-	letter-spacing: 0.04em;
-	line-height: 1;
-	color: inherit;
-}
-.wiki-breadcrumb__url-btn:hover {
+/* 路径栏「信息」图标按钮（原 URL 文字） */
+.wiki-breadcrumb__info-btn:hover {
 	color: var(--accent);
 }
-/* 完整 URL 弹层（fixed 定位由 JS 写入；宽度随 URL 测量自适应） */
+/* 文件信息弹层：水平居中、贴路径栏下方（JS fixed）；须高于表格选区蓝框 */
 .wiki-breadcrumb__popover {
-	z-index: 120;
+	z-index: 10060;
 	box-sizing: border-box;
 	min-width: 16rem;
-	/* max-width 由 JS 按视口设；默认不硬截断过短 */
-	padding: 0.65rem 0.75rem 0.7rem;
+	/* max-width / 位置由 JS 按视口居中写入 */
+	padding: 0.85rem 1rem 0.9rem;
 	border: 1px solid var(--border);
-	border-radius: 0.55rem;
+	border-radius: 0.65rem;
 	background: var(--bg-elevated, var(--bg));
 	color: var(--fg);
-	box-shadow: var(--shadow), 0 8px 28px rgba(0, 0, 0, 0.12);
+	box-shadow:
+		var(--shadow),
+		0 12px 40px rgba(0, 0, 0, 0.16),
+		0 0 0 1px color-mix(in srgb, var(--fg) 4%, transparent);
 	font-family: var(--font-sans);
 	font-size: 0.8125rem;
 	line-height: 1.4;
@@ -4990,6 +4948,30 @@ body.is-col-resizing video {
 	font-size: 0.75rem;
 	color: var(--fg-muted);
 }
+/* 大小 / 格式：横向两列放在 URL 上方 */
+.wiki-breadcrumb__popover-facts {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+	gap: 0.45rem 0.75rem;
+	margin-bottom: 0.55rem;
+	padding-bottom: 0.55rem;
+	border-bottom: 1px solid var(--border);
+}
+.wiki-breadcrumb__popover-facts .wiki-breadcrumb__popover-block {
+	margin-top: 0;
+}
+.wiki-breadcrumb__popover-value {
+	margin: 0;
+	padding: 0.35rem 0.5rem;
+	border-radius: 0.4rem;
+	background: var(--bg-muted);
+	border: 1px solid var(--border);
+	color: var(--fg);
+	font-size: 0.8125rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.35;
+}
 .wiki-breadcrumb__popover-meta {
 	margin-top: 0.45rem;
 	font-size: 0.75rem;
@@ -5038,31 +5020,41 @@ body.is-col-resizing video {
 	border-color: transparent;
 	color: #fff;
 }
-.wiki-breadcrumb__home {
+/* 路径栏根目录（磁盘图标）：滚左侧树到顶，非站级主页 */
+.wiki-breadcrumb__root {
+	appearance: none;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	width: 1.7rem;
 	height: 1.7rem;
 	margin: 0;
+	padding: 0;
+	border: none;
 	border-radius: 0.35rem;
+	background: transparent;
 	color: var(--fg-muted);
-	text-decoration: none;
+	cursor: pointer;
 	flex-shrink: 0;
 	transition: color 0.12s, background 0.12s;
 }
-.wiki-breadcrumb__home:hover {
+.wiki-breadcrumb__root:hover {
 	color: var(--accent);
 	background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-.wiki-breadcrumb__home.is-current {
-	color: var(--fg);
-	pointer-events: none;
+.wiki-breadcrumb__root:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+	outline-offset: 1px;
 }
-.wiki-breadcrumb__home-icon {
+.wiki-breadcrumb__root-icon {
 	display: block;
 	width: 0.95rem;
 	height: 0.95rem;
+}
+/* 左侧「文件」标题：根定位闪一下 */
+.tree-home.is-tree-flash {
+	animation: tree-focus-flash 1.2s ease;
+	border-radius: 0.35rem;
 }
 
 /* ========== 站级主页 ========== */
@@ -5173,10 +5165,14 @@ body.is-col-resizing video {
 	flex: 0 0 auto;
 }
 /*
- * 文件夹路径：只按内容占宽（勿 flex-grow，否则 宽屏中间空一大截），
- * 窄时优先被压；省略形态由 JS 写成 …/尾段（勿压成空串导致 //）。
+ * 文件夹路径：可点目录段（定位左侧树）；只按内容占宽；
+ * 窄时从左藏段，前缀 …（勿 flex-grow）。
  */
 .wiki-breadcrumb__dirs {
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: nowrap;
+	gap: 0;
 	color: var(--fg-muted);
 	flex: 0 1 auto;
 	min-width: 1.25em; /* 至少能放下 … */
@@ -5184,23 +5180,83 @@ body.is-col-resizing video {
 	overflow: hidden;
 	white-space: nowrap;
 }
-/* 兼容旧多段结构（若有缓存页） */
-.wiki-breadcrumb__seg {
+.wiki-breadcrumb__dirs-ellipsis {
+	flex: 0 0 auto;
 	color: var(--fg-muted);
+	opacity: 0.7;
+	user-select: none;
+	padding-right: 0.05rem;
+}
+/* 可点目录段：定位左侧树 */
+.wiki-breadcrumb__seg {
+	appearance: none;
+	margin: 0;
+	padding: 0.05rem 0.15rem;
+	border: none;
+	border-radius: 0.25rem;
+	background: transparent;
+	color: var(--fg-muted);
+	font: inherit;
+	font-weight: 500;
+	line-height: 1.25;
+	cursor: pointer;
 	flex: 0 1 auto;
 	min-width: 0;
 	overflow: hidden;
 	white-space: nowrap;
+	max-width: 12rem;
 }
-/* 文件名：尽量保留；仍不够时再中间省略 */
+.wiki-breadcrumb__seg:hover {
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.wiki-breadcrumb__seg:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+	outline-offset: 1px;
+}
+/* 文件名：尽量保留；也可点定位左侧树 */
 .wiki-breadcrumb__current {
+	appearance: none;
+	margin: 0;
+	padding: 0.05rem 0.15rem;
+	border: none;
+	border-radius: 0.25rem;
+	background: transparent;
 	color: var(--fg);
+	font: inherit;
 	font-weight: 650;
+	line-height: 1.25;
+	cursor: pointer;
 	flex: 0 1 auto;
 	min-width: 4ch;
 	max-width: 100%;
 	overflow: hidden;
 	white-space: nowrap;
+	text-align: left;
+}
+.wiki-breadcrumb__current:hover {
+	color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.wiki-breadcrumb__current:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+	outline-offset: 1px;
+}
+/* 路径定位：左侧树短暂高亮 */
+.tree-dir.is-tree-flash > .tree-dir__summary,
+.tree-file.is-tree-flash {
+	animation: tree-focus-flash 1.2s ease;
+}
+.tree-dir.is-tree-focus > .tree-dir__summary {
+	box-shadow: inset 3px 0 0 var(--accent);
+}
+@keyframes tree-focus-flash {
+	0% {
+		background: color-mix(in srgb, var(--accent) 28%, transparent);
+	}
+	100% {
+		background: transparent;
+	}
 }
 .wiki-breadcrumb__meta {
 	display: inline-flex;

@@ -49,21 +49,19 @@ export function spreadsheetSourceLabel(
 }
 
 /**
- * 类型栏标题：源类型本身即表格，不写「→ 转换」。
+ * 类型栏标题：源类型本身即表格（与代码块栏一致：类型 + 复制）。
  */
 export function sheetTypeTitle(sourceLabel: string): string {
 	const src = (sourceLabel || 'FILE').trim() || 'FILE';
 	return src;
 }
 
-/** 类型栏提醒（与标题分开，提醒色） */
-export const SHEET_TYPE_NOTE = '注意：可编辑•不写回';
-
 const SHEET_ICON_COPY = `<svg class="webmd-code__icon webmd-code__icon--copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
 const SHEET_ICON_CHECK = `<svg class="webmd-code__icon webmd-code__icon--check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`;
 
 /**
  * 统一表格壳：CSV / Excel 均走客户端 SheetJS + x-data-spreadsheet。
+ * 类型栏与代码块一致：dots + 类型名 + 复制（无旁注）。
  * SSG 只输出宿主；数据在浏览器 fetch 原文件后渲染。
  */
 export function renderSheetApp(opts: {
@@ -88,26 +86,8 @@ export function renderSheetApp(opts: {
 		`<div class="webmd-code__meta">` +
 		`<span class="webmd-code__dots" aria-hidden="true"><span></span><span></span><span></span></span>` +
 		`<span class="webmd-code__title" data-sheet-type-title>${escHtml(typeTitle)}</span>` +
-		`<span class="webmd-code__note webmd-code__note--warn" data-xs-type-note>${escHtml(SHEET_TYPE_NOTE)}</span>` +
-		`<span class="webmd-code__hint" data-xs-hint hidden></span>` +
 		`</div>` +
-		`<div class="webmd-code__actions">` +
-		`<div class="xs-density" data-xs-density role="group" aria-label="表格显示密度">` +
-		`<button type="button" class="xs-density__btn" data-density="compact" aria-pressed="false" title="紧凑">紧凑</button>` +
-		`<button type="button" class="xs-density__btn" data-density="standard" aria-pressed="true" title="标准">标准</button>` +
-		`<button type="button" class="xs-density__btn" data-density="comfortable" aria-pressed="false" title="宽松">宽松</button>` +
-		`</div>` +
-		`<label class="xs-zoom" data-xs-zoom title="整体缩放 50%–200%">` +
-		`<span class="xs-zoom__cap">缩放</span>` +
-		`<input type="range" class="xs-zoom__range" data-xs-zoom-range min="50" max="200" step="1" value="100" aria-label="整体缩放百分比" />` +
-		`<span class="xs-zoom__label" data-xs-zoom-label>100%</span>` +
-		`</label>` +
-		`<div class="xs-actions" role="group" aria-label="表格操作">` +
-		`<button type="button" class="xs-action-btn" data-xs-select-all title="全选 / 取消全选">全选</button>` +
-		`<button type="button" class="xs-action-btn" data-xs-reload title="仅重新加载并渲染中栏表格（不刷新页面、不退出全屏）">重载</button>` +
 		`<button type="button" class="webmd-code__copy" data-xs-copy title="复制当前工作表为 CSV" aria-label="复制当前工作表为 CSV">${SHEET_ICON_COPY}${SHEET_ICON_CHECK}</button>` +
-		`</div>` +
-		`</div>` +
 		`</div>` +
 		`<div class="xs-status" data-xs-status>正在加载表格引擎…</div>` +
 		`<div class="xs-error" data-xs-err hidden></div>` +

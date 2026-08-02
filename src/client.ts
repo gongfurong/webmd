@@ -283,6 +283,7 @@ function applyLayout(s: LayoutState) {
 	saveState(s);
 	syncFocusReadButtons();
 	// 中栏宽度变了 → 路径/分页中间省略重算；再量一次版心
+	// 表格由中栏 ResizeObserver 响应，勿在此无脑 dispatch resize（会闪烁）
 	requestAnimationFrame(() => {
 		updateContentReadableMax(s);
 		refreshAllMiddleEllipsis();
@@ -1176,6 +1177,12 @@ function applyContentWidth(mode: ContentWidthMode) {
 	storeContentWidth(mode);
 	updateContentReadableMax();
 	syncContentWidthButtons(mode);
+	// 铺满/固定切换：防抖一次 resize，供表格量宽（非每帧）
+	requestAnimationFrame(() => {
+		window.setTimeout(() => {
+			window.dispatchEvent(new Event('resize'));
+		}, 50);
+	});
 }
 
 /** 记录中栏当前阅读锚点，布局变宽/变窄后仍对齐同一位置 */
@@ -1482,37 +1489,6 @@ function middleEllipsizeText(text: string, maxUnits: number): string {
 	return chars.slice(0, left).join('') + '…' + chars.slice(chars.length - right).join('');
 }
 
-/**
- * 文件夹路径省略：优先保留靠近文件的尾段，写成 …/foo/bar
- * （不要中间乱切成空串，否则 trail 里两个 / 会变成 //）
- */
-function pathLeftEllipsizeText(full: string, maxUnits: number): string {
-	const normalized = full.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-	if (!normalized) return '…';
-	const chars = Array.from(normalized);
-	if (chars.length <= maxUnits) return normalized;
-	if (maxUnits <= 1) return '…';
-
-	const segs = normalized.split('/').filter(Boolean);
-	if (segs.length === 0) return '…';
-
-	// 尽量多保留尾部目录段：…/a/b
-	let best = '…';
-	for (let k = 1; k <= segs.length; k++) {
-		const candidate = '…/' + segs.slice(segs.length - k).join('/');
-		if (Array.from(candidate).length <= maxUnits) best = candidate;
-		else break;
-	}
-	// 连最后一段都放不下：…/ + 对该段中间省略
-	if (best === '…') {
-		const last = segs[segs.length - 1] || '';
-		if (maxUnits <= 2) return '…';
-		const inner = middleEllipsizeText(last, maxUnits - 2);
-		return inner ? '…/' + inner : '…';
-	}
-	return best;
-}
-
 function codePointLen(s: string): number {
 	return Array.from(s).length;
 }
@@ -1552,12 +1528,53 @@ function refreshMiddleEllipsis(el: HTMLElement) {
 	el.textContent = best || '…';
 }
 
-/** 显示/隐藏目录段及其前的分隔符（避免 //） */
+/** 显示/隐藏目录组及其前的分隔符（避免 //） */
 function setBreadcrumbDirsVisible(dirs: HTMLElement, on: boolean) {
 	dirs.hidden = !on;
 	const prev = dirs.previousElementSibling;
 	if (prev instanceof HTMLElement && prev.classList.contains('wiki-breadcrumb__sep')) {
 		prev.hidden = !on;
+	}
+}
+
+/** 恢复目录组内各段可见（不销毁可点按钮） */
+function resetBreadcrumbDirSegs(dirs: HTMLElement) {
+	const lead = dirs.querySelector<HTMLElement>('[data-dirs-lead-ellipsis]');
+	if (lead) lead.hidden = true;
+	dirs.querySelectorAll<HTMLElement>('[data-crumb-dir]').forEach((el) => {
+		el.hidden = false;
+	});
+	dirs.querySelectorAll<HTMLElement>('.wiki-breadcrumb__sep--in-dirs').forEach((el) => {
+		el.hidden = false;
+	});
+}
+
+/**
+ * 窄宽时从左藏目录段，保留靠近文件的尾段；前缀显示 …
+ */
+function collapseBreadcrumbDirSegs(dirs: HTMLElement, trail: HTMLElement) {
+	const segs = [
+		...dirs.querySelectorAll<HTMLElement>('[data-crumb-dir]'),
+	];
+	if (segs.length === 0) return;
+	const lead = dirs.querySelector<HTMLElement>('[data-dirs-lead-ellipsis]');
+	const fits = () => breadcrumbTrailFits(trail);
+	if (fits()) return;
+
+	// 先尽量只显示尾段：从左逐个隐藏
+	for (let i = 0; i < segs.length; i++) {
+		if (fits()) break;
+		// 至少保留最后一段目录（若还有）
+		if (i >= segs.length - 1 && segs.length > 1) break;
+		segs[i]!.hidden = true;
+		const sep = segs[i]!.nextElementSibling;
+		if (
+			sep instanceof HTMLElement &&
+			sep.classList.contains('wiki-breadcrumb__sep--in-dirs')
+		) {
+			sep.hidden = true;
+		}
+		if (lead) lead.hidden = false;
 	}
 }
 
@@ -1573,6 +1590,23 @@ function breadcrumbTrailFits(trail: HTMLElement): boolean {
 	for (const child of Array.from(trail.children) as HTMLElement[]) {
 		if (child.hidden) continue;
 		const st = getComputedStyle(child);
+		// 目录组：量内部可见子项之和（勿用被裁切的 scrollWidth）
+		if (child.classList.contains('wiki-breadcrumb__dirs')) {
+			let inner = 0;
+			for (const sub of Array.from(child.children) as HTMLElement[]) {
+				if (sub.hidden) continue;
+				const sst = getComputedStyle(sub);
+				inner +=
+					sub.scrollWidth +
+					(parseFloat(sst.marginLeft) || 0) +
+					(parseFloat(sst.marginRight) || 0);
+			}
+			need +=
+				inner +
+				(parseFloat(st.marginLeft) || 0) +
+				(parseFloat(st.marginRight) || 0);
+			continue;
+		}
 		need +=
 			child.scrollWidth +
 			(parseFloat(st.marginLeft) || 0) +
@@ -1583,16 +1617,18 @@ function breadcrumbTrailFits(trail: HTMLElement): boolean {
 
 /**
  * 路径栏整条 trail（文件名优先）：
- * 1) 宽够 → 全文
- * 2) 不够 → 文件夹立刻收成「…」（不占目录名）
+ * 1) 宽够 → 全部目录段
+ * 2) 不够 → 从左藏目录段，前缀 …
  * 3) 仍不够 → 文件名中间省略
- * 4) 文件名完整且仍有空余 → 才把文件夹从 … 扩回 …/尾段 或全文
- * 5) 极端窄 → 隐藏文件夹，只留 🏠 / 文件名
+ * 4) 极端窄 → 隐藏整个目录组，只留 🏠 / 文件名
  */
 function refreshBreadcrumbTrail(trail: HTMLElement) {
 	const dirs = trail.querySelector<HTMLElement>('.wiki-breadcrumb__dirs');
 	const file = trail.querySelector<HTMLElement>('.wiki-breadcrumb__current');
-	const fullDirs = (dirs?.getAttribute('data-ellipsis-full') ?? '').replace(/\\/g, '/');
+	const fullDirs = (dirs?.getAttribute('data-ellipsis-full') ?? '').replace(
+		/\\/g,
+		'/',
+	);
 	const fullFile = (
 		file?.getAttribute('data-ellipsis-full') ??
 		file?.getAttribute('title') ??
@@ -1600,10 +1636,9 @@ function refreshBreadcrumbTrail(trail: HTMLElement) {
 		''
 	).trim();
 
-	if (dirs && fullDirs) {
-		dirs.setAttribute('data-ellipsis-full', fullDirs);
+	if (dirs) {
 		setBreadcrumbDirsVisible(dirs, true);
-		dirs.textContent = fullDirs;
+		resetBreadcrumbDirSegs(dirs);
 	}
 	if (file) {
 		const ff = file.getAttribute('data-ellipsis-full') || fullFile;
@@ -1617,12 +1652,9 @@ function refreshBreadcrumbTrail(trail: HTMLElement) {
 	const fits = () => breadcrumbTrailFits(trail);
 	if (fits()) return;
 
-	// —— 宽度不够：优先保文件名，文件夹先让路到「…」——
+	// —— 宽度不够：从左收目录段 ——
 	if (dirs && fullDirs) {
-		dirs.textContent = '…';
-	}
-	if (file) {
-		file.textContent = file.getAttribute('data-ellipsis-full') || fullFile;
+		collapseBreadcrumbDirSegs(dirs, trail);
 	}
 
 	// 文件名仍放不下 → 中间省略
@@ -1646,7 +1678,7 @@ function refreshBreadcrumbTrail(trail: HTMLElement) {
 		file.textContent = best || '…';
 	}
 
-	// 仍溢出：藏掉文件夹（含前面的 /），只留文件名
+	// 仍溢出：藏掉整个目录组
 	if (!fits() && dirs && fullDirs) {
 		setBreadcrumbDirsVisible(dirs, false);
 		if (file) {
@@ -1671,39 +1703,6 @@ function refreshBreadcrumbTrail(trail: HTMLElement) {
 				file.textContent = best || '…';
 			}
 		}
-		return;
-	}
-
-	// 仅当文件名已完整、dirs 为「…」且当前放得下：用剩余空间恢复目录
-	const fileNow = file?.textContent ?? '';
-	const fileFull = file?.getAttribute('data-ellipsis-full') || fullFile;
-	if (
-		dirs &&
-		fullDirs &&
-		!dirs.hidden &&
-		dirs.textContent === '…' &&
-		fileNow === fileFull &&
-		fits()
-	) {
-		dirs.textContent = fullDirs;
-		if (fits()) return;
-
-		const n = codePointLen(fullDirs);
-		let lo = 1;
-		let hi = n + 2;
-		let best = '…';
-		while (lo <= hi) {
-			const mid = (lo + hi) >> 1;
-			const candidate = pathLeftEllipsizeText(fullDirs, mid);
-			dirs.textContent = candidate;
-			if (fits()) {
-				best = candidate;
-				lo = mid + 1;
-			} else {
-				hi = mid - 1;
-			}
-		}
-		dirs.textContent = best || '…';
 	}
 }
 
@@ -1895,19 +1894,134 @@ function closeAllPathPopovers() {
 		pop.style.removeProperty('top');
 		pop.style.removeProperty('width');
 		pop.style.removeProperty('max-width');
-	});
-	document.querySelectorAll<HTMLElement>('[data-path-reveal]').forEach((t) => {
-		t.setAttribute('aria-expanded', 'false');
+		pop.style.removeProperty('max-height');
+		pop.style.removeProperty('overflow-y');
+		pop.style.removeProperty('transform');
 	});
 	document.querySelectorAll<HTMLElement>('[data-path-reveal-btn]').forEach((t) => {
 		t.setAttribute('aria-expanded', 'false');
 	});
 }
 
-function positionPathPopover(anchor: HTMLElement, pop: HTMLElement) {
-	const r = anchor.getBoundingClientRect();
-	const margin = 8;
-	const maxW = window.innerWidth - margin * 2;
+/** 确保左侧文件树可见（收起时展开；抽屉视口打开导航抽屉） */
+function ensureFileTreeVisible() {
+	if (isDrawerViewport()) {
+		setNavDrawer(true);
+		return;
+	}
+	const s = loadState();
+	if (s.navCollapsed) {
+		s.navCollapsed = false;
+		saveState(s);
+		applyLayout(s);
+	}
+}
+
+/**
+ * 路径栏「根目录」：左侧文件树滚到顶部（不进主页）。
+ */
+function scrollFileTreeToRoot() {
+	ensureFileTreeVisible();
+	closeAllPathPopovers();
+	const tree = document.getElementById('file-tree');
+	const pane =
+		tree?.querySelector<HTMLElement>('.tree-body') ||
+		document.querySelector<HTMLElement>('.tree-body');
+	if (!pane) return;
+	// 清掉路径定位高亮
+	tree?.querySelectorAll('.tree-dir.is-tree-focus').forEach((el) => {
+		el.classList.remove('is-tree-focus');
+	});
+	try {
+		pane.style.scrollBehavior = 'auto';
+	} catch {
+		/* ignore */
+	}
+	forcePaneScrollTop(pane, 0);
+	// 顶栏「文件」标题短暂高亮，示意已在根
+	const home = tree?.querySelector<HTMLElement>('.tree-home');
+	if (home) {
+		home.classList.remove('is-tree-flash');
+		void home.offsetWidth;
+		home.classList.add('is-tree-flash');
+		window.setTimeout(() => home.classList.remove('is-tree-flash'), 1400);
+	}
+}
+
+/**
+ * 路径栏点目录/文件名 → 左侧树展开祖先并滚到对应节点（不跳转）。
+ */
+function revealInFileTree(path: string, kind: 'dir' | 'file' = 'dir') {
+	const rel = (path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+	if (!rel) return;
+
+	ensureFileTreeVisible();
+	closeAllPathPopovers();
+
+	const tree = document.getElementById('file-tree');
+	if (!tree) return;
+	const pane =
+		tree.querySelector<HTMLElement>('.tree-body') ||
+		document.querySelector<HTMLElement>('.tree-body');
+
+	const sel =
+		kind === 'file'
+			? `.tree-file[data-path="${CSS.escape(rel)}"]`
+			: `.tree-dir[data-path="${CSS.escape(rel)}"]`;
+	const target = tree.querySelector<HTMLElement>(sel);
+	if (!target) return;
+
+	// 展开祖先目录
+	let p: HTMLElement | null = target.parentElement;
+	while (p && p !== tree) {
+		if (
+			p instanceof HTMLDetailsElement &&
+			p.classList.contains('tree-dir')
+		) {
+			p.open = true;
+		}
+		p = p.parentElement;
+	}
+	if (target instanceof HTMLDetailsElement) {
+		target.open = true;
+	}
+	// 路径高亮（目录）
+	if (kind === 'dir') {
+		tree.querySelectorAll('.tree-dir.is-tree-focus').forEach((el) => {
+			el.classList.remove('is-tree-focus');
+		});
+		target.classList.add('is-tree-focus');
+	}
+	enforceTreeAccordion();
+
+	const scrollTarget =
+		kind === 'dir'
+			? target.querySelector<HTMLElement>(':scope > .tree-dir__summary') ||
+				target
+			: target;
+
+	target.classList.remove('is-tree-flash');
+	// 强制重启动画
+	void target.offsetWidth;
+	target.classList.add('is-tree-flash');
+	window.setTimeout(() => {
+		target.classList.remove('is-tree-flash');
+	}, 1400);
+
+	// 布局展开后量一次再滚
+	requestAnimationFrame(() => {
+		scrollElWithinPane(scrollTarget, pane, { behavior: 'auto', offset: 10 });
+		requestAnimationFrame(() => {
+			scrollElWithinPane(scrollTarget, pane, { behavior: 'auto', offset: 10 });
+		});
+	});
+}
+
+/** 文件信息弹层：水平居中；竖直贴在路径栏下方（不上下居中、不贴 info 图标） */
+function positionPathPopover(pop: HTMLElement) {
+	const margin = 16;
+	const maxW = Math.min(560, window.innerWidth - margin * 2);
+	const maxH = window.innerHeight - margin * 2;
 
 	// 按两条 URL 的最长文本宽度自适应（尽量一行显示）
 	const plainEl = pop.querySelector<HTMLElement>('[data-path-popover-plain]');
@@ -1918,48 +2032,48 @@ function positionPathPopover(anchor: HTMLElement, pop: HTMLElement) {
 		: '500 0.8125rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 	const plain = plainEl?.textContent || '';
 	const enc = encEl?.textContent || '';
-	const textW = Math.max(measureTextWidthPx(plain, font), measureTextWidthPx(enc, font));
-	// 左右 padding（弹层 + code 框）约 0.75*2 + 0.6*2 rem ≈ 2.7rem + 边框
+	const textW = Math.max(
+		measureTextWidthPx(plain, font),
+		measureTextWidthPx(enc, font),
+	);
 	const chromeX = 48;
-	const actionsMin = 320; // 三个按钮大约
+	const actionsMin = 320;
 	const minW = 16 * 16;
 	const ideal = Math.ceil(textW + chromeX);
 	const width = Math.min(maxW, Math.max(minW, ideal, actionsMin));
 
-	// 能单行放下则 nowrap，否则允许折行
 	const canSingleLine = ideal <= maxW;
 	[plainEl, encEl].forEach((el) => {
 		if (!el) return;
 		el.classList.toggle('is-wrap', !canSingleLine);
 	});
 
-	let left = r.left;
-	if (left + width > window.innerWidth - margin) {
-		left = Math.max(margin, window.innerWidth - margin - width);
-	}
-	if (left < margin) left = margin;
-	let top = r.bottom + 4;
+	// 竖直：贴路径栏 / 顶栏下方
+	const crumb =
+		pop.closest('.wiki-breadcrumb') ||
+		document.querySelector('.pane-bar--center') ||
+		document.querySelector('.app-header');
+	const crumbBottom =
+		crumb instanceof HTMLElement
+			? crumb.getBoundingClientRect().bottom
+			: 48;
+	const top = Math.max(margin, Math.round(crumbBottom + 8));
 
 	pop.hidden = false;
 	pop.style.position = 'fixed';
-	pop.style.left = `${Math.round(left)}px`;
-	pop.style.top = `${Math.round(top)}px`;
 	pop.style.width = `${Math.round(width)}px`;
 	pop.style.maxWidth = `${maxW}px`;
-
-	const pr = pop.getBoundingClientRect();
-	if (pr.bottom > window.innerHeight - margin && r.top > pr.height + margin) {
-		top = r.top - pr.height - 4;
-		pop.style.top = `${Math.round(top)}px`;
-	}
+	pop.style.maxHeight = `${Math.max(120, maxH - (top - margin))}px`;
+	pop.style.overflowY = 'auto';
+	pop.style.transform = 'none';
+	const left = Math.max(margin, (window.innerWidth - width) / 2);
+	pop.style.left = `${Math.round(left)}px`;
+	pop.style.top = `${top}px`;
 }
 
 function openPathPopover(anchor: HTMLElement) {
 	const nav = anchor.closest('.wiki-breadcrumb');
 	const pop = nav?.querySelector<HTMLElement>('[data-path-popover]');
-	const trail =
-		nav?.querySelector<HTMLElement>('[data-path-reveal]') ||
-		(anchor.matches('[data-path-reveal]') ? anchor : null);
 	if (!pop) return;
 	// 关闭其它
 	document.querySelectorAll<HTMLElement>('[data-path-popover]').forEach((p) => {
@@ -1967,8 +2081,8 @@ function openPathPopover(anchor: HTMLElement) {
 			p.hidden = true;
 		}
 	});
-	document.querySelectorAll<HTMLElement>('[data-path-reveal]').forEach((t) => {
-		if (t !== trail) t.setAttribute('aria-expanded', 'false');
+	document.querySelectorAll<HTMLElement>('[data-path-reveal-btn]').forEach((t) => {
+		if (t !== anchor) t.setAttribute('aria-expanded', 'false');
 	});
 	const rel = (nav?.getAttribute('data-full-path') || '').replace(/\\/g, '/');
 	const plain = fullUrlFromRel(rel);
@@ -1983,11 +2097,11 @@ function openPathPopover(anchor: HTMLElement) {
 		encEl.textContent = encoded;
 		encEl.setAttribute('title', encoded);
 	}
-	// 锚点：优先路径条，否则用 URL 按钮
-	positionPathPopover(trail || anchor, pop);
-	trail?.setAttribute('aria-expanded', 'true');
-	const urlBtn = nav?.querySelector<HTMLElement>('[data-path-reveal-btn]');
-	urlBtn?.setAttribute('aria-expanded', 'true');
+	const infoBtn =
+		(anchor.matches('[data-path-reveal-btn]') ? anchor : null) ||
+		nav?.querySelector<HTMLElement>('[data-path-reveal-btn]');
+	positionPathPopover(pop);
+	infoBtn?.setAttribute('aria-expanded', 'true');
 }
 
 function togglePathPopover(anchor: HTMLElement) {
@@ -2061,25 +2175,34 @@ function bindPathReveal() {
 		// 点在弹层内（选中文字 / 按钮）不关闭
 		if (t.closest('[data-path-popover]')) return;
 
-		// 主页图标仍导航，不弹出
-		if (t.closest('.wiki-breadcrumb__home')) {
-			closeAllPathPopovers();
-			return;
-		}
-
-		// 路径栏旁的 URL 按钮
-		const urlBtn = t.closest('[data-path-reveal-btn]') as HTMLElement | null;
-		if (urlBtn) {
+		// 路径栏根目录图标 → 左侧树滚到顶部（不进主页）
+		const treeRoot = t.closest('[data-tree-scroll-root]') as HTMLElement | null;
+		if (treeRoot) {
 			ev.preventDefault();
 			ev.stopPropagation();
-			togglePathPopover(urlBtn);
+			scrollFileTreeToRoot();
 			return;
 		}
 
-		const trail = t.closest('[data-path-reveal]') as HTMLElement | null;
-		if (trail) {
+		// 路径栏目录/文件名 → 左侧树定位（不打开信息弹层、不跳转）
+		const treeFocus = t.closest('[data-tree-focus]') as HTMLElement | null;
+		if (treeFocus) {
 			ev.preventDefault();
-			togglePathPopover(trail);
+			ev.stopPropagation();
+			const path = treeFocus.getAttribute('data-tree-focus') || '';
+			const kindAttr = treeFocus.getAttribute('data-tree-focus-kind');
+			const kind: 'dir' | 'file' =
+				kindAttr === 'file' ? 'file' : 'dir';
+			revealInFileTree(path, kind);
+			return;
+		}
+
+		// 仅 info 按钮打开文件信息弹层（路径 trail 不再弹出）
+		const infoBtn = t.closest('[data-path-reveal-btn]') as HTMLElement | null;
+		if (infoBtn) {
+			ev.preventDefault();
+			ev.stopPropagation();
+			togglePathPopover(infoBtn);
 			return;
 		}
 
@@ -2094,9 +2217,10 @@ function bindPathReveal() {
 			closeAllPathPopovers();
 			return;
 		}
+		// 仅 info 按钮支持键盘打开
 		const t = ev.target;
 		if (!(t instanceof HTMLElement)) return;
-		if (!t.matches('[data-path-reveal]')) return;
+		if (!t.matches('[data-path-reveal-btn]')) return;
 		if (ev.key === 'Enter' || ev.key === ' ') {
 			ev.preventDefault();
 			togglePathPopover(t);

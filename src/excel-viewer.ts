@@ -1,9 +1,9 @@
 /**
- * 表格预览：SheetJS + x-data-spreadsheet 全面能力
+ * 表格预览：SheetJS + x-data-spreadsheet
  *
- * - 浏览器内：工具栏 / 右键 / 底栏 / 编辑 / 格式 / 冻结 / 筛选 / 打印…
- * - 源文件：只读加载，永不写回；下载走站点统一顶栏
- * - 可「从源重新加载」丢弃会话改动；复制 CSV 到剪贴板
+ * - 单元格文本 / 工作表增删改名：只读（mode:read + 底栏锁）
+ * - 显示向操作可用：列宽行高、缩放、选区、自动列宽/行高等
+ * - 源文件永不写回；下载走站点统一顶栏；可重载丢弃会话显示调整
  *
  * @see https://docs.sheetjs.com/docs/demos/grid/xspreadsheet/
  */
@@ -179,10 +179,15 @@ function scaleXsSheets(data: XsSheet[], factor: number): XsSheet[] {
 
 function syncZoomUi(root: HTMLElement, z: number): void {
 	const pct = clampSheetZoom(z);
+	// 类型栏旧滑块（兼容）+ 工具栏数字输入
 	const range = root.querySelector<HTMLInputElement>('[data-xs-zoom-range]');
 	const label = root.querySelector<HTMLElement>('[data-xs-zoom-label]');
+	const num = root.querySelectorAll<HTMLInputElement>('[data-xs-zoom-input]');
 	if (range && Number(range.value) !== pct) range.value = String(pct);
 	if (label) label.textContent = `${pct}%`;
+	num.forEach((el) => {
+		if (Number(el.value) !== pct) el.value = String(pct);
+	});
 	root.dataset.xsZoom = String(pct);
 }
 
@@ -1037,49 +1042,272 @@ function hideXsPrintButton(host: HTMLElement): void {
 function reflowXsToolbar(host: HTMLElement): void {
 	const tb = host.querySelector<HTMLElement>('.x-spreadsheet-toolbar');
 	if (!tb) return;
-	const full = Math.max(
-		320,
-		Math.floor(host.clientWidth || host.getBoundingClientRect().width || 0),
-	);
-	// 全宽测量
-	tb.style.setProperty('width', `${full}px`, 'important');
+	// 用 100% 贴宿主，勿写死像素（侧栏开合后易留右侧空白）
+	tb.style.setProperty('width', '100%', 'important');
 	tb.style.setProperty('max-width', '100%', 'important');
 	tb.style.setProperty('box-sizing', 'border-box', 'important');
 	hideXsPrintButton(host);
+	// moreResize 之后再按左侧自定义条宽度收库按钮
+	if (tb.querySelector(':scope > [data-xs-ops-bar]')) {
+		balanceToolbarWithOps(host);
+	}
 }
 
 /**
- * x-data-spreadsheet 无「自动列宽/行高」API。
- * 挂在上方工具栏**左侧**，紧挨撤销/字体等按钮组。
+ * 文本只读（mode:read）之外：锁住底栏「加 sheet / 改名 / 删表」。
+ * 仍可点击切换已有工作表。
  */
-function injectToolbarFitBar(
+function applySheetReadonlyChrome(host: HTMLElement): void {
+	host.classList.add('is-xs-readonly');
+	const bar = host.querySelector<HTMLElement>('.x-spreadsheet-bottombar');
+	if (!bar) return;
+	if (bar.dataset.xsReadonlyBound === '1') return;
+	bar.dataset.xsReadonlyBound = '1';
+	// 捕获阶段拦住改名、删除菜单；加号用 CSS 隐藏
+	bar.addEventListener(
+		'dblclick',
+		(ev) => {
+			ev.preventDefault();
+			ev.stopPropagation();
+		},
+		true,
+	);
+	bar.addEventListener(
+		'contextmenu',
+		(ev) => {
+			ev.preventDefault();
+			ev.stopPropagation();
+		},
+		true,
+	);
+	// 若有残留「添加」按钮点击
+	bar.addEventListener(
+		'click',
+		(ev) => {
+			const t = ev.target;
+			if (!(t instanceof Element)) return;
+			if (
+				t.closest('.x-spreadsheet-icon-img.add') ||
+				t.closest('.x-spreadsheet-icon.add') ||
+				t.closest('[class*="icon-img"][class*="add"]')
+			) {
+				ev.preventDefault();
+				ev.stopPropagation();
+			}
+		},
+		true,
+	);
+}
+
+export type XsToolbarOpsHandlers = {
+	onReload: () => void;
+	onSelectAll: () => void;
+	onFitCol: () => void;
+	onFitRow: () => void;
+	/** 数字缩放 50–200 */
+	onZoom: (pct: number, immediate: boolean) => void;
+	/** 当前缩放 %，用于注入后同步输入框 */
+	zoomPct: number;
+};
+
+/**
+ * 自定义操作与库按钮同一行：挂在 toolbar 最左、toolbar-btns **外面**（兄弟节点）。
+ * 勿塞进 toolbar-btns（会被 moreResize 清空）；挂好后 balance 把溢出库按钮收进「更多」。
+ * 顺序：重载 → 全选 → 自动列宽 → 自动行高 → 缩放 → | 库菜单…
+ */
+function injectToolbarOpsBar(
 	host: HTMLElement,
-	handlers: { onFitCol: () => void; onFitRow: () => void },
+	handlers: XsToolbarOpsHandlers,
 ): void {
 	const toolbar = host.querySelector<HTMLElement>('.x-spreadsheet-toolbar');
 	if (!toolbar) return;
 	const btns = toolbar.querySelector<HTMLElement>('.x-spreadsheet-toolbar-btns');
-	// 优先塞进 btns 最前，与撤销/字体同一条左对齐菜单流
-	const mountParent = btns || toolbar;
-	let bar = toolbar.querySelector<HTMLElement>('[data-xs-fit-bar]');
+
+	// 清掉误放位置：btns 内、x-spreadsheet 顶层独立行
+	btns
+		?.querySelectorAll('[data-xs-ops-bar], [data-xs-fit-bar]')
+		.forEach((el) => el.remove());
+	host
+		.querySelectorAll(
+			'.x-spreadsheet > [data-xs-ops-bar], :scope > [data-xs-ops-bar]',
+		)
+		.forEach((el) => {
+			if (el.parentElement !== toolbar) el.remove();
+		});
+
+	let bar = toolbar.querySelector<HTMLElement>(':scope > [data-xs-ops-bar]');
+	const zoomVal = String(clampSheetZoom(handlers.zoomPct));
 	if (!bar) {
 		bar = document.createElement('div');
-		bar.className = 'xs-fit-bar';
-		bar.dataset.xsFitBar = '1';
+		bar.className = 'xs-ops-bar';
+		bar.dataset.xsOpsBar = '1';
 		bar.setAttribute('role', 'group');
-		bar.setAttribute('aria-label', '行列自适应');
+		bar.setAttribute('aria-label', '表格操作');
 		bar.innerHTML =
-			`<button type="button" class="xs-fit-bar__btn" data-xs-fit-col title="按当前选区内容自动调整列宽">自动列宽</button>` +
-			`<button type="button" class="xs-fit-bar__btn" data-xs-fit-row title="按当前选区内容自动调整行高">自动行高</button>`;
-		mountParent.insertBefore(bar, mountParent.firstChild);
-	} else if (bar.parentElement !== mountParent || mountParent.firstChild !== bar) {
-		// moreResize 会重写 btns 子节点，可能把我们的 bar 挤掉——每次挂回最左
-		mountParent.insertBefore(bar, mountParent.firstChild);
+			`<button type="button" class="xs-ops-bar__btn" data-xs-reload title="仅重新加载并渲染中栏表格（不刷新页面、不退出全屏）">重载</button>` +
+			`<button type="button" class="xs-ops-bar__btn" data-xs-select-all title="全选 / 取消全选">全选</button>` +
+			`<button type="button" class="xs-ops-bar__btn" data-xs-fit-col title="按当前选区内容自动调整列宽">自动列宽</button>` +
+			`<button type="button" class="xs-ops-bar__btn" data-xs-fit-row title="按当前选区内容自动调整行高">自动行高</button>` +
+			`<label class="xs-ops-bar__zoom" data-xs-zoom title="整体缩放 50%–200%（填数字）">` +
+			`<span class="xs-ops-bar__zoom-cap">缩放</span>` +
+			`<input type="number" class="xs-ops-bar__zoom-input" data-xs-zoom-input min="50" max="200" step="1" value="${zoomVal}" aria-label="缩放百分比" />` +
+			`<span class="xs-ops-bar__zoom-suffix">%</span>` +
+			`</label>`;
 	}
+	// 同一行最左：toolbar 的第一个子节点，btns 在后
+	if (btns) {
+		if (bar.parentElement !== toolbar || bar.nextElementSibling !== btns) {
+			toolbar.insertBefore(bar, btns);
+		}
+	} else if (bar.parentElement !== toolbar) {
+		toolbar.insertBefore(bar, toolbar.firstChild);
+	}
+
+	const reloadBtn = bar.querySelector<HTMLButtonElement>('[data-xs-reload]');
+	const selectAllBtn = bar.querySelector<HTMLButtonElement>(
+		'[data-xs-select-all]',
+	);
 	const colBtn = bar.querySelector<HTMLButtonElement>('[data-xs-fit-col]');
 	const rowBtn = bar.querySelector<HTMLButtonElement>('[data-xs-fit-row]');
+	const zoomInput = bar.querySelector<HTMLInputElement>('[data-xs-zoom-input]');
+
+	if (reloadBtn) reloadBtn.onclick = () => handlers.onReload();
+	if (selectAllBtn) selectAllBtn.onclick = () => handlers.onSelectAll();
 	if (colBtn) colBtn.onclick = () => handlers.onFitCol();
 	if (rowBtn) rowBtn.onclick = () => handlers.onFitRow();
+
+	if (zoomInput) {
+		if (Number(zoomInput.value) !== clampSheetZoom(handlers.zoomPct)) {
+			zoomInput.value = zoomVal;
+		}
+		zoomInput.onchange = () => {
+			const raw = zoomInput.value.trim();
+			const z = raw === '' ? handlers.zoomPct : Number(raw);
+			const next = Number.isFinite(z) ? z : handlers.zoomPct;
+			zoomInput.value = String(clampSheetZoom(next));
+			handlers.onZoom(next, true);
+		};
+		zoomInput.onkeydown = (ev) => {
+			if (ev.key === 'Enter') {
+				ev.preventDefault();
+				zoomInput.blur();
+			}
+		};
+		zoomInput.onblur = () => {
+			const raw = zoomInput.value.trim();
+			const z = raw === '' ? handlers.zoomPct : Number(raw);
+			const next = clampSheetZoom(
+				Number.isFinite(z) ? z : handlers.zoomPct,
+			);
+			if (next !== handlers.zoomPct || String(next) !== zoomInput.value) {
+				zoomInput.value = String(next);
+				handlers.onZoom(next, true);
+			}
+		};
+	}
+
+	// 自定义条占宽后，把装不下的库按钮收进「更多」
+	balanceToolbarWithOps(host);
+	// 库 moreResize 绑在 window.resize：之后再 balance 一次
+	if (host.dataset.xsToolbarBalanceBound !== '1') {
+		host.dataset.xsToolbarBalanceBound = '1';
+		window.addEventListener('resize', () => {
+			if (destroyedHost(host)) return;
+			requestAnimationFrame(() => {
+				if (destroyedHost(host)) return;
+				// 若 ops 被 moreResize 误伤，由 inject 路径重挂；此处只平衡
+				if (host.querySelector('[data-xs-ops-bar]')) {
+					balanceToolbarWithOps(host);
+				}
+			});
+		});
+	}
+}
+
+function destroyedHost(host: HTMLElement): boolean {
+	return !host.isConnected;
+}
+
+/**
+ * moreResize 按「整条 toolbar 宽」排库按钮，不认左侧自定义条。
+ * 自定义条挂上后：把 btns 里装不下的按钮挪进 .x-spreadsheet-toolbar-more，
+ * 并同步下拉 content 宽度（与库 moreResize 的 sumWidth2 一致）。
+ */
+function balanceToolbarWithOps(host: HTMLElement): void {
+	const toolbar = host.querySelector<HTMLElement>('.x-spreadsheet-toolbar');
+	const ops = toolbar?.querySelector<HTMLElement>(':scope > [data-xs-ops-bar]');
+	const btns = toolbar?.querySelector<HTMLElement>('.x-spreadsheet-toolbar-btns');
+	if (!toolbar || !btns) return;
+
+	const moreContent = toolbar.querySelector<HTMLElement>(
+		'.x-spreadsheet-toolbar-more',
+	);
+	const moreBtn = moreContent
+		? moreContent.closest<HTMLElement>('.x-spreadsheet-toolbar-btn')
+		: null;
+	const dropdownContent = moreContent?.parentElement as HTMLElement | null;
+
+	const opsW = ops?.offsetWidth ?? 0;
+	if (opsW > 0) {
+		btns.style.maxWidth = `calc(100% - ${opsW + 8}px)`;
+	} else {
+		btns.style.removeProperty('max-width');
+	}
+
+	if (!moreContent || !moreBtn) return;
+
+	const sumVisible = (): number => {
+		let s = 0;
+		for (const c of Array.from(btns.children) as HTMLElement[]) {
+			if (c === moreBtn && moreContent.childElementCount === 0) continue;
+			if (c === moreBtn && c.style.display === 'none') continue;
+			s += c.offsetWidth + 2;
+		}
+		return s;
+	};
+
+	// 与库一致：overflow 按原序 append 进 more（勿 insertBefore 颠倒）
+	let guard = 40;
+	while (guard-- > 0) {
+		const avail = btns.clientWidth;
+		if (avail < 8) break;
+		if (moreContent.childElementCount > 0) {
+			moreBtn.style.display = '';
+		}
+		if (sumVisible() <= avail + 1) break;
+		const kids = (Array.from(btns.children) as HTMLElement[]).filter(
+			(c) => c !== moreBtn,
+		);
+		if (kids.length === 0) break;
+		const last = kids[kids.length - 1]!;
+		moreContent.appendChild(last);
+		moreBtn.style.display = '';
+	}
+
+	if (moreContent.childElementCount > 0) {
+		moreBtn.style.display = '';
+		moreBtn.style.removeProperty('display');
+		// 量「更多」内按钮总宽，写回 dropdown-content（库 moreResize 同逻辑）
+		let sumW = 12;
+		for (const c of Array.from(moreContent.children) as HTMLElement[]) {
+			// 先取消隐藏量真实宽
+			const prev = c.style.display;
+			c.style.display = 'inline-block';
+			sumW += Math.max(c.offsetWidth, 28) + 4;
+			if (prev) c.style.display = prev;
+			else c.style.removeProperty('display');
+		}
+		const panelW = Math.min(420, Math.max(160, sumW));
+		if (dropdownContent?.classList.contains('x-spreadsheet-dropdown-content')) {
+			dropdownContent.style.width = `${panelW}px`;
+			dropdownContent.style.maxWidth = 'min(420px, 92vw)';
+		}
+		moreContent.style.width = '100%';
+	} else if (
+		dropdownContent?.classList.contains('x-spreadsheet-dropdown-content')
+	) {
+		dropdownContent.style.removeProperty('width');
+	}
 }
 
 function syncXsThemeClass(root: HTMLElement, host?: HTMLElement | null): void {
@@ -1268,15 +1496,34 @@ function isHostInFullscreen(host: HTMLElement): boolean {
 	return fs === host || fs.contains(host);
 }
 
-/** 宿主吃满中栏；中栏全屏时按 wiki-main 视口量宽高 */
-function layoutHost(host: HTMLElement): { w: number; h: number } {
+/** 只测量中栏可用宽高，**不写** host 样式（供 view.width / 防循环） */
+function measureHostSize(host: HTMLElement): { w: number; h: number } {
 	const sheetRoot = host.closest<HTMLElement>('[data-sheet-app]');
 	const main = host.closest<HTMLElement>('[data-wiki-main]');
+	const scroll = host.closest<HTMLElement>('[data-wiki-scroll], .center-scroll');
+	const mdBody = host.closest<HTMLElement>('.markdown-body');
 	const isFs = isHostInFullscreen(host);
+
+	const measureAvailW = (): number => {
+		if (isFs && main && document.fullscreenElement === main) {
+			return Math.floor(main.clientWidth || window.innerWidth || 0);
+		}
+		const candidates = [
+			mdBody?.clientWidth,
+			scroll?.clientWidth,
+			sheetRoot?.clientWidth,
+			host.parentElement?.clientWidth,
+			host.clientWidth,
+		];
+		for (const c of candidates) {
+			const n = Math.floor(c || 0);
+			if (n >= 200) return n;
+		}
+		return Math.floor(host.getBoundingClientRect().width || 320);
+	};
 
 	let w: number;
 	let h: number;
-
 	if (isFs && main && document.fullscreenElement === main) {
 		const footer = main.querySelector<HTMLElement>('.wiki-page-footer');
 		const hostTop = host.getBoundingClientRect().top;
@@ -1285,7 +1532,7 @@ function layoutHost(host: HTMLElement): { w: number; h: number } {
 			footerTop != null && footerTop > hostTop + 80
 				? footerTop - 4
 				: main.getBoundingClientRect().bottom - 4;
-		w = Math.max(320, Math.floor(main.clientWidth || window.innerWidth || 0));
+		w = Math.max(320, measureAvailW());
 		h = Math.max(280, Math.floor(bottom - hostTop));
 	} else {
 		const footer = document.querySelector<HTMLElement>('.wiki-page-footer');
@@ -1298,58 +1545,54 @@ function layoutHost(host: HTMLElement): { w: number; h: number } {
 		}
 		const rect = host.getBoundingClientRect();
 		h = Math.max(280, Math.floor(bottom - rect.top));
-		const parent = host.parentElement;
-		const parentW = parent
-			? Math.floor(
-					parent.clientWidth || parent.getBoundingClientRect().width,
-				)
-			: 0;
-		const rootW = sheetRoot
-			? Math.floor(
-					sheetRoot.clientWidth ||
-						sheetRoot.getBoundingClientRect().width,
-				)
-			: 0;
-		w = Math.max(320, parentW || rootW || Math.floor(rect.width) || 0);
-	}
-
-	const prevH = host.style.height;
-	const prevW = host.style.width;
-	const hCss = `${h}px`;
-	const wCss = `${w}px`;
-	if (prevH !== hCss) {
-		host.style.setProperty('height', hCss, 'important');
-		host.style.setProperty('min-height', hCss, 'important');
-	}
-	if (prevW !== wCss) {
-		host.style.setProperty('width', wCss, 'important');
-		host.style.setProperty('max-width', wCss, 'important');
+		w = Math.max(320, measureAvailW());
 	}
 	return { w, h };
 }
 
-function syncDensityButtons(root: HTMLElement, id: SheetDensityId): void {
-	root.querySelectorAll<HTMLElement>('[data-density]').forEach((btn) => {
-		const on = btn.dataset.density === id;
-		btn.classList.toggle('is-active', on);
-		btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-	});
-	root.dataset.density = id;
+/**
+ * 测量并必要时写入宿主尺寸。
+ * 返回 { w, h, changed }；changed=false 时调用方勿 reRender（防工具栏闪烁死循环）。
+ */
+function layoutHost(host: HTMLElement): { w: number; h: number; changed: boolean } {
+	const isFs = isHostInFullscreen(host);
+	const fillMode =
+		document.documentElement.dataset.contentWidth !== 'fixed';
+	const { w: rawW, h } = measureHostSize(host);
+	let w = rawW;
+	let changed = false;
+
+	const hCss = `${h}px`;
+	if (host.style.height !== hCss || host.style.minHeight !== hCss) {
+		host.style.setProperty('height', hCss, 'important');
+		host.style.setProperty('min-height', hCss, 'important');
+		changed = true;
+	}
+
+	if (fillMode && !isFs) {
+		const needW =
+			host.style.width !== '100%' || host.style.maxWidth === `${w}px`;
+		if (needW) {
+			host.style.setProperty('width', '100%', 'important');
+			host.style.setProperty('max-width', 'none', 'important');
+			changed = true;
+		}
+		void host.offsetWidth;
+		w = Math.max(320, Math.floor(host.clientWidth || w));
+	} else {
+		const wCss = `${w}px`;
+		if (host.style.width !== wCss || host.style.maxWidth !== wCss) {
+			host.style.setProperty('width', wCss, 'important');
+			host.style.setProperty('max-width', wCss, 'important');
+			changed = true;
+		}
+	}
+	return { w, h, changed };
 }
 
+/** 会话脏标记（类型栏已统一为类型+复制，无旁注文案） */
 function setSessionHint(root: HTMLElement, dirty: boolean): void {
-	const hint = root.querySelector<HTMLElement>('[data-xs-hint]');
-	if (!hint) return;
-	// 类型说明在标题：`XLSX → 表格（可编辑但不会写回源文件）`；hint 仅标会话脏状态
-	if (dirty) {
-		hint.hidden = false;
-		hint.textContent = '浏览器内已修改';
-		hint.classList.add('is-dirty');
-	} else {
-		hint.hidden = true;
-		hint.textContent = '';
-		hint.classList.remove('is-dirty');
-	}
+	root.classList.toggle('is-session-dirty', dirty);
 }
 
 /**
@@ -1372,8 +1615,6 @@ export function bindExcelViewers(): void {
 		const status = root.querySelector<HTMLElement>('[data-xs-status]');
 		const errEl = root.querySelector<HTMLElement>('[data-xs-err]');
 		const copyBtn = root.querySelector<HTMLButtonElement>('[data-xs-copy]');
-		const reloadBtn = root.querySelector<HTMLButtonElement>('[data-xs-reload]');
-		const selectAllBtn = root.querySelector<HTMLButtonElement>('[data-xs-select-all]');
 		const fileUrl = root.dataset.fileUrl || '';
 		const fileName = root.dataset.fileName || 'workbook';
 		const sourceKind = (root.dataset.sourceKind || 'xlsx').toLowerCase();
@@ -1393,14 +1634,15 @@ export function bindExcelViewers(): void {
 		let x_spreadsheet: XsFactory | null = null;
 		let destroyed = false;
 		let sessionDirty = false;
-		let densityId = readStoredDensity();
-		let density = SHEET_DENSITIES[densityId];
+		// 密度 UI 已下线；固定标准档（仍可读本地旧值，避免改数据口径）
+		const densityId = readStoredDensity();
+		const density = SHEET_DENSITIES[densityId];
 		/** 显示缩放 %；逻辑数据始终按 100% 几何存放 */
 		let zoomPct = readStoredZoom();
 		/** 密度 stox 后的 100% 逻辑表；编辑后回写此结构 */
 		let logicalData: XsSheet[] | null = null;
 		let lastThemeDark = isSiteDark();
-		syncDensityButtons(root, densityId);
+		root.dataset.density = densityId;
 		syncZoomUi(root, zoomPct);
 		syncXsThemeClass(root, host);
 		ensureCanvasThemePatch();
@@ -1418,16 +1660,42 @@ export function bindExcelViewers(): void {
 			if (sessionDirty) return;
 			sessionDirty = true;
 			setSessionHint(root, true);
-			root.classList.add('is-session-dirty');
 		};
 
 		const clearDirty = () => {
 			sessionDirty = false;
 			setSessionHint(root, false);
-			root.classList.remove('is-session-dirty');
 		};
 
-		const fitHandlers = {
+		/** 工具栏自定义操作（重载/全选/自适应/缩放）；zoomPct 随闭包更新 */
+		const getOpsHandlers = (): XsToolbarOpsHandlers => ({
+			onReload: () => {
+				if (!XLSXref || !x_spreadsheet) return;
+				void (async () => {
+					const ok = await confirmDiscardIfDirty('重新加载');
+					if (!ok || destroyed || !XLSXref || !x_spreadsheet) return;
+					try {
+						if (status) {
+							status.hidden = false;
+							status.textContent = '正在重新加载表格…';
+						}
+						wb = await readWorkbook(XLSXref, fileUrl, sourceKind);
+						const data = stox(XLSXref, wb, density);
+						if (!data.length) throw new Error('工作簿为空');
+						if (status) status.hidden = true;
+						clearDirty();
+						mountGrid(data);
+						if (!destroyed) relayout();
+					} catch (e) {
+						showError(e instanceof Error ? e.message : String(e));
+					}
+				})();
+			},
+			onSelectAll: () => {
+				if (!toggleSelectAllGrid(xs)) {
+					window.alert('表格尚未就绪');
+				}
+			},
 			onFitCol: () => {
 				if (
 					!autofitColumns(
@@ -1452,12 +1720,21 @@ export function bindExcelViewers(): void {
 				captureLogicalFromXs();
 				relayout();
 			},
-		};
+			onZoom: (z, immediate) => {
+				applyZoom(z, immediate);
+			},
+			get zoomPct() {
+				return zoomPct;
+			},
+		});
 
-		/** 防止 resize ↔ relayout ↔ ResizeObserver 递归把页面卡死 */
+		const injectOps = () => injectToolbarOpsBar(host, getOpsHandlers());
+
+		/** 防止 resize ↔ relayout ↔ ResizeObserver 递归闪烁 */
 		let relayoutScheduled = false;
 		let relayouting = false;
-		const relayout = () => {
+		let lastLayoutKey = '';
+		const relayout = (force = false) => {
 			if (!host || !xs || destroyed || relayouting) return;
 			if (relayoutScheduled) return;
 			relayoutScheduled = true;
@@ -1466,14 +1743,22 @@ export function bindExcelViewers(): void {
 				if (!host || !xs || destroyed) return;
 				relayouting = true;
 				try {
-					layoutHost(host);
+					const { w, h, changed } = layoutHost(host);
+					const key = `${w}x${h}`;
+					// 尺寸未变：不 reRender（否则工具栏 moreResize 反复重写 DOM → 闪烁）
+					if (!force && !changed && key === lastLayoutKey) {
+						if (!host.querySelector('[data-xs-ops-bar]')) {
+							injectOps();
+						}
+						return;
+					}
+					lastLayoutKey = key;
 					// 只 reRender，不要 window.dispatchEvent('resize')
-					// （原先会同步再次触发本 relayout → 死循环卡死）
 					xs.reRender?.();
 					hideXsPrintButton(host);
 					reflowXsToolbar(host);
-					// moreResize 会清空 toolbar-btns，把自动列宽/行高挂回最左
-					injectToolbarFitBar(host, fitHandlers);
+					// moreResize 会清空 toolbar-btns，把操作栏挂回最左
+					injectOps();
 				} finally {
 					relayouting = false;
 				}
@@ -1510,18 +1795,24 @@ export function bindExcelViewers(): void {
 			// 先保证宿主有宽，toolbar moreResize 的 widthFn 才能排出常用按钮
 			layoutHost(host);
 			xs = x_spreadsheet(host, {
-				// 全面能力：浏览器内可编辑；永不写源
-				mode: 'edit',
+				// read：不可改单元格文本 / 粘贴 / 插删行列（仍可拖列宽行高、滚动、选区）
+				// 底栏保留切表，但禁止加/删/改名（见 applySheetReadonlyChrome）
+				mode: 'read',
 				showToolbar: true,
 				showGrid: true,
-				showContextmenu: true,
+				showContextmenu: false,
 				showBottomBar: true,
 				style: sheetDefaultStyle(fontPt),
 				view: {
-					height: () => Math.max(240, layoutHost(host).h),
+					// 仅测量，勿在回调里写 host 样式（会触发 RO → 闪烁）
+					height: () => Math.max(240, measureHostSize(host).h),
 					// 至少 640，避免 moreResize 把按钮全塞进「更多」
 					width: () =>
-						Math.max(640, layoutHost(host).w, host.clientWidth || 0),
+						Math.max(
+							640,
+							measureHostSize(host).w,
+							host.clientWidth || 0,
+						),
 				},
 				row: {
 					len: Math.min(
@@ -1541,27 +1832,31 @@ export function bindExcelViewers(): void {
 				},
 			});
 			xs.loadData(display);
+			// 只读文本下：列宽/行高仍可能触发 change；仅几何变更可标脏（会话内）
 			xs.change?.(() => {
 				markDirty();
 				captureLogicalFromXs();
 			});
 			layoutHost(host);
 			hideXsPrintButton(host);
+			applySheetReadonlyChrome(host);
 			reflowXsToolbar(host);
-			// 上栏最左：自动列宽/行高（框架无内置）
-			injectToolbarFitBar(host, fitHandlers);
+			// 上栏最左：重载/全选/列宽/行高/缩放
+			injectOps();
 			relayout();
 			// 库 constructor 里 setTimeout(0) moreResize；之后再挂回最左
 			window.setTimeout(() => {
 				if (destroyed || !host) return;
+				applySheetReadonlyChrome(host);
 				reflowXsToolbar(host);
-				injectToolbarFitBar(host, fitHandlers);
+				injectOps();
 				window.dispatchEvent(new Event('resize'));
 				window.setTimeout(() => {
 					if (destroyed) return;
 					hideXsPrintButton(host);
+					applySheetReadonlyChrome(host);
 					reflowXsToolbar(host);
-					injectToolbarFitBar(host, fitHandlers);
+					injectOps();
 				}, 30);
 			}, 20);
 		};
@@ -1605,18 +1900,6 @@ export function bindExcelViewers(): void {
 			}
 		};
 
-		const zoomRange = root.querySelector<HTMLInputElement>(
-			'[data-xs-zoom-range]',
-		);
-		zoomRange?.addEventListener('input', () => {
-			const z = Number(zoomRange.value);
-			syncZoomUi(root, z);
-			applyZoom(z, false);
-		});
-		zoomRange?.addEventListener('change', () => {
-			applyZoom(Number(zoomRange.value), true);
-		});
-
 		/** 左上角交叉格点击 → 全选（捕获阶段抢在库 mousedown 之前） */
 		const onCornerSelectAll = (evt: MouseEvent) => {
 			if (!xs || destroyed || evt.button !== 0) return;
@@ -1653,12 +1936,6 @@ export function bindExcelViewers(): void {
 			toggleSelectAllGrid(xs);
 		};
 		window.addEventListener('keydown', onSelectAllKey, true);
-
-		selectAllBtn?.addEventListener('click', () => {
-			if (!toggleSelectAllGrid(xs)) {
-				window.alert('表格尚未就绪');
-			}
-		});
 
 		/**
 		 * 有未保存修改时的确认：用页内条，不用 window.confirm
@@ -1710,37 +1987,6 @@ export function bindExcelViewers(): void {
 			});
 		};
 
-		const applyDensity = (id: SheetDensityId) => {
-			if (destroyed || !wb || !XLSXref) return;
-			if (id === densityId) return;
-			void (async () => {
-				const ok = await confirmDiscardIfDirty(
-					'切换显示密度会按源文件重新生成表格',
-				);
-				if (!ok || destroyed || !wb || !XLSXref) return;
-				densityId = id;
-				density = SHEET_DENSITIES[id];
-				writeStoredDensity(id);
-				syncDensityButtons(root, id);
-				const data = stox(XLSXref, wb, density);
-				if (!data.length) return;
-				clearDirty();
-				// 只重建表格引擎 DOM，不动页面路由 / 全屏
-				mountGrid(data);
-				relayout();
-			})();
-		};
-
-		root.querySelectorAll<HTMLButtonElement>('[data-density]').forEach(
-			(btn) => {
-				btn.addEventListener('click', () => {
-					const id = btn.dataset.density;
-					if (!id || !isSheetDensityId(id)) return;
-					applyDensity(id);
-				});
-			},
-		);
-
 		// —— 复制当前会话活动表为 CSV（优先 getData，保证含浏览器内改动）——
 		copyBtn?.addEventListener('click', async () => {
 			if (!XLSXref || !xs) return;
@@ -1765,30 +2011,6 @@ export function bindExcelViewers(): void {
 			} catch {
 				flashBtn(copyBtn, false);
 			}
-		});
-
-		// —— 重载：只重新 fetch 源文件并重绘中栏表格，不刷新页面、不退出全屏 ——
-		reloadBtn?.addEventListener('click', () => {
-			if (!XLSXref || !x_spreadsheet) return;
-			void (async () => {
-				const ok = await confirmDiscardIfDirty('重新加载');
-				if (!ok || destroyed || !XLSXref || !x_spreadsheet) return;
-				try {
-					if (status) {
-						status.hidden = false;
-						status.textContent = '正在重新加载表格…';
-					}
-					wb = await readWorkbook(XLSXref, fileUrl, sourceKind);
-					const data = stox(XLSXref, wb, density);
-					if (!data.length) throw new Error('工作簿为空');
-					if (status) status.hidden = true;
-					clearDirty();
-					mountGrid(data);
-					if (!destroyed) relayout();
-				} catch (e) {
-					showError(e instanceof Error ? e.message : String(e));
-				}
-			})();
 		});
 
 		// 中栏通用全屏：由路径栏 [data-center-fullscreen] 触发；此处跟着重算表格尺寸
@@ -1853,22 +2075,40 @@ export function bindExcelViewers(): void {
 			}
 		})();
 
-		window.addEventListener('resize', relayout);
+		// 窗口级：防抖，避免侧栏动画期间连续 reRender
+		let winResizeT: number | null = null;
+		const onWinResize = () => {
+			if (winResizeT) window.clearTimeout(winResizeT);
+			winResizeT = window.setTimeout(() => {
+				winResizeT = null;
+				relayout();
+			}, 80);
+		};
+		window.addEventListener('resize', onWinResize);
+		// 仅观察中栏（侧栏开合），勿观察 host 自身（layoutHost 改 host 会循环）
+		let lastRoW = 0;
 		const ro =
 			typeof ResizeObserver !== 'undefined'
-				? new ResizeObserver(() => relayout())
+				? new ResizeObserver((entries) => {
+						const entry = entries[0];
+						const nw = Math.round(entry?.contentRect?.width || 0);
+						if (nw > 0 && Math.abs(nw - lastRoW) < 2) return;
+						if (nw > 0) lastRoW = nw;
+						relayout();
+					})
 				: null;
 		const center = document.querySelector(
 			'[data-wiki-scroll], .center-scroll',
 		);
 		if (center) ro?.observe(center);
-		ro?.observe(root);
+		// 勿 ro.observe(root/host)：写 height/width 会持续触发
 
 		root.addEventListener(
 			'webmd:dispose',
 			() => {
 				destroyed = true;
-				window.removeEventListener('resize', relayout);
+				if (winResizeT) window.clearTimeout(winResizeT);
+				window.removeEventListener('resize', onWinResize);
 				window.removeEventListener('keydown', onSelectAllKey, true);
 				host.removeEventListener('mousedown', onCornerSelectAll, true);
 				document.removeEventListener('fullscreenchange', onCenterFs);
