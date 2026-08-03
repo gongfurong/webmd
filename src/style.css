@@ -4321,12 +4321,24 @@ body.is-sheet-app-page .markdown-body .webmd-code.sheet-block.sheet-app {
 	font-weight: 500;
 	font-size: 0.72em;
 }
-/* 当前路径祖先：主题色略强调，字重不变 */
+/*
+ * 文件夹三态：
+ * - 常规：默认样式
+ * - 进入 is-on-path：当前打开文件的祖先（主题色字）
+ * - focus is-tree-focus：点目录 / 打开文件后所在目录（左侧强调条）
+ */
 .tree-dir.is-on-path > .tree-dir__summary {
 	color: var(--nav-active-fg);
 }
 .tree-dir.is-on-path > .tree-dir__summary .tree-count {
 	color: color-mix(in srgb, var(--nav-active-fg) 55%, var(--nav-count));
+}
+.tree-dir.is-tree-focus > .tree-dir__summary {
+	background: color-mix(in srgb, var(--accent) 10%, transparent);
+	box-shadow: inset 3px 0 0 var(--accent);
+}
+.tree-dir.is-on-path.is-tree-focus > .tree-dir__summary {
+	background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .tree-dir > summary::-webkit-details-marker {
 	display: none;
@@ -4338,6 +4350,9 @@ body.is-sheet-app-page .markdown-body .webmd-code.sheet-block.sheet-app {
 }
 .tree-dir.is-on-path > .tree-dir__summary:hover {
 	color: var(--nav-active-fg);
+}
+.tree-dir.is-tree-focus > .tree-dir__summary:hover {
+	background: color-mix(in srgb, var(--accent) 16%, var(--nav-hover-bg));
 }
 
 .tree-children {
@@ -5912,13 +5927,10 @@ body.is-col-resizing video {
 	outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
 	outline-offset: 1px;
 }
-/* 路径定位：左侧树短暂高亮 */
+/* 路径定位：左侧树短暂高亮（focus 常驻条见上方 .is-tree-focus） */
 .tree-dir.is-tree-flash > .tree-dir__summary,
 .tree-file.is-tree-flash {
 	animation: tree-focus-flash 1.2s ease;
-}
-.tree-dir.is-tree-focus > .tree-dir__summary {
-	box-shadow: inset 3px 0 0 var(--accent);
 }
 @keyframes tree-focus-flash {
 	0% {

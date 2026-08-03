@@ -14,6 +14,12 @@ content/
 │   ├── 量子/
 │   ├── comfyui/
 │   └── README.md
+├── term/                    # 术语库（一词一文件，主题分目录）
+│   └── 网络通信（Network-Communication）/
+│       ├── README.md        # 主题说明 + 子目录索引
+│       └── 分层与基础概念（…）/
+│           ├── README.md
+│           └── 端口（Port）.md
 ├── notes/                   # 短笔记 / 日记
 │   ├── hello.md
 │   └── daily/
@@ -38,10 +44,20 @@ content/
 | 目录 | 放什么 | 不放什么 |
 |------|--------|----------|
 | knowledge | 主题手册、调研 | 一次性日记 |
+| **term** | 术语词条（建议一词一 md；主题用子目录 + 可选 README） | 长文手册（放 knowledge） |
 | notes | 短记、log | 大型手册 |
 | media | 跨文复用的图音视频 | 仅某文私有且应进 _Res_ 的碎图可仍放文旁 _Res_ |
 | samples | 开发/验收格式 | 正式知识 |
 | guides/reference | 说明与参考 | 原始数据 dump |
+
+### 1.1 文件夹与 README（无强制 index）
+
+| 约定 | 说明 |
+|------|------|
+| **不强制** `index.md` | 目录落地说明用 `README.md` 即可；也可没有 |
+| README 里链子目录 | 写 `./子目录/` → 站内改写为树 **focus**（见 features §3.2.2），**不**生成目录页、不 404 |
+| 要打开 README 正文 | 显式写 `./子目录/README.md` |
+| 树即索引 | 左侧文件树是权威结构；README 索引可选 |
 
 ---
 

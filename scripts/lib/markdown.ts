@@ -10,6 +10,7 @@
  *
  * WebMD 仅在 enhanceCodeBlocksHtml 增加类型栏+复制（消毒之后、可信 DOM）。
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { Marked, Renderer, type Tokens } from 'marked';
 import hljs from 'highlight.js';
@@ -628,8 +629,54 @@ export function rewriteProjectAssetUrls(text: string): string {
 	return s;
 }
 
-/** 相对路径 ./xx、../xx 改为 /content/<dir>/xx；.md 相对链改为站内页路由 */
-export function rewriteRelativeToContent(mdSource: string, filePath: string): string {
+/**
+ * 判断 content 相对路径是否为目录（用于站内「文件夹链接」→ 树定位）。
+ * 无 contentDir 时：仅以尾斜杠启发式（作者写 ./foo/）。
+ */
+export function isContentRelativeDir(
+	relPosix: string,
+	contentDir?: string | null,
+): boolean {
+	const cleaned = String(relPosix || '')
+		.replace(/\\/g, '/')
+		.replace(/^\/+/, '')
+		.replace(/\/+$/, '');
+	if (!cleaned || cleaned.includes('..')) return false;
+	// 明确是文件扩展名则不是目录
+	if (/\.[a-z0-9]{1,8}$/i.test(cleaned.split('/').pop() || '')) {
+		// 仍可能是「名.称」文件夹；有 contentDir 时以磁盘为准
+		if (!contentDir) return false;
+	}
+	if (contentDir) {
+		const abs = path.join(contentDir, ...cleaned.split('/').filter(Boolean));
+		try {
+			return fs.existsSync(abs) && fs.statSync(abs).isDirectory();
+		} catch {
+			return false;
+		}
+	}
+	// 无磁盘信息：仅当原链以 / 结尾时视为目录意图
+	return /\/\s*$/.test(String(relPosix || '')) || /\/$/.test(String(relPosix || ''));
+}
+
+/** 站内文件夹 → 同路径栏：不跳转，用 #tree-dir= 供客户端定位左侧树 */
+export function treeDirHashHref(relPosix: string): string {
+	const cleaned = String(relPosix || '')
+		.replace(/\\/g, '/')
+		.replace(/^\/+/, '')
+		.replace(/\/+$/, '');
+	return `#tree-dir=${encodeURIComponent(cleaned)}`;
+}
+
+/**
+ * 相对路径 ./xx、../xx 改为 /content/<dir>/xx；.md 相对链改为站内页路由；
+ * **站内文件夹** → `#tree-dir=...`（与路径栏点文件夹一致，不生成目录页、不 404）。
+ */
+export function rewriteRelativeToContent(
+	mdSource: string,
+	filePath: string,
+	contentDir?: string | null,
+): string {
 	const dir = filePath.includes('/') ? filePath.replace(/\/[^/]+$/, '') : '';
 	return mdSource.replace(
 		/(!?\[[^\]]*\]\()(\.[^)\s]+)(\))|(src|href)=(["'])(\.[^"']+)\5/g,
@@ -637,16 +684,32 @@ export function rewriteRelativeToContent(mdSource: string, filePath: string): st
 			const rel = relMd || relHtml;
 			if (!rel || !rel.startsWith('.')) return full;
 			const joined = pathPosixResolve(dir, rel);
-			// 相对 .md 链接 → 页面路径
-			if (g1 && !String(g1).startsWith('!') && /\.(md|mdx)$/i.test(joined)) {
-				const noExt = joined.replace(/\.(md|mdx)$/i, '');
+			const joinedNoSlash = joined.replace(/\/+$/, '');
+			// 图片等：不按文件夹处理
+			if (g1 && String(g1).startsWith('!')) {
+				const abs = encodeContentUrl(joinedNoSlash || joined);
+				return `${g1}${abs}${g3}`;
+			}
+			// 相对 .md 链接 → 页面路径（兼容无 /pages 前缀的旧路由匹配）
+			if (g1 && /\.(md|mdx)$/i.test(joinedNoSlash)) {
+				const noExt = joinedNoSlash.replace(/\.(md|mdx)$/i, '');
 				const page =
 					noExt === 'index'
 						? '/'
 						: '/' + noExt.split('/').map(encodeURIComponent).join('/') + '/';
 				return `${g1}${page}${g3}`;
 			}
-			const abs = encodeContentUrl(joined);
+			// 站内文件夹 → 树定位 hash（markdown 链 与 html href）
+			const looksLikeDir =
+				/\/$/.test(rel) ||
+				isContentRelativeDir(joined, contentDir) ||
+				isContentRelativeDir(joinedNoSlash, contentDir);
+			if (looksLikeDir && joinedNoSlash) {
+				const hash = treeDirHashHref(joinedNoSlash);
+				if (g1) return `${g1}${hash}${g3}`;
+				return `${attr}=${quote}${hash}${quote}`;
+			}
+			const abs = encodeContentUrl(joinedNoSlash || joined);
 			if (g1) return `${g1}${abs}${g3}`;
 			return `${attr}=${quote}${abs}${quote}`;
 		},
@@ -845,17 +908,20 @@ export function wrapAsMarkdown(
 		bytes?: number;
 		officePreviewUrl?: string | null;
 		diagramExportPreview?: DiagramExportPreview | null;
+		/** 用于识别「相对路径是否为目录」→ 文件夹链改写为树定位 */
+		contentDir?: string | null;
 	},
 ): string {
 	const title = file.name;
 	const mime = MIME[file.ext] || '';
 	const officePreviewUrl = _opts?.officePreviewUrl || null;
 	const diagramExport = _opts?.diagramExportPreview || null;
+	const contentDir = _opts?.contentDir || null;
 
 	switch (file.kind) {
 		case 'markdown': {
 			let s = rewriteProjectAssetUrls(rawText);
-			s = rewriteRelativeToContent(s, file.path);
+			s = rewriteRelativeToContent(s, file.path, contentDir);
 			return s;
 		}
 		case 'image':

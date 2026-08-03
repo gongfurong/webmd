@@ -754,35 +754,177 @@ function syncTreeAccordionBtn() {
 	if (labelEl) labelEl.textContent = label;
 	else btn.textContent = label;
 	if (on) {
-		btn.title = '单开：同层只展开一个文件夹（点击切换为多开）';
+		btn.title =
+			'单开：只展开「当前文件路径」与 focus 目录相关文件夹，其余折叠（点击切换为多开）';
 		btn.setAttribute('aria-label', '文件夹展开：单开');
 	} else {
-		btn.title = '多开：可同时展开多个文件夹（点击切换为单开）';
+		btn.title =
+			'多开：可同时展开多个文件夹；当前路径与 focus 仍会保持展开（点击切换为单开）';
 		btn.setAttribute('aria-label', '文件夹展开：多开');
 	}
 }
 
-/**
- * 单开模式：每一层（同一 data-tree-level）最多保留一个展开的文件夹。
- * 优先保留路径上的 is-on-path，否则保留当前已 open 的第一个。
+/* ========== 文件树三态 ==========
+ * 常规：无 is-on-path / is-tree-focus
+ * 进入（is-on-path）：当前打开的文件祖先目录
+ * focus（is-tree-focus）：用户点文件夹，或打开文件时 focus 到文件所在目录
+ * 单开：仅展开「进入链 ∪ focus 链」；多开：保证这两条链展开，其余不强制关
  */
-function enforceTreeAccordion() {
-	if (!getTreeAccordion()) return;
+/** content 相对路径：当前 focus 的文件夹（至多一个） */
+let treeFocusDirPath = '';
+/** 程序改 open 时跳过 toggle 监听，避免循环 */
+let treeStateApplying = false;
+
+function normalizeTreeRel(path: string): string {
+	return (path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+}
+
+/** 文件 content 路径 → 所在目录（根下文件则 ''） */
+function parentDirOfFile(filePath: string): string {
+	const rel = normalizeTreeRel(filePath);
+	if (!rel) return '';
+	const i = rel.lastIndexOf('/');
+	return i < 0 ? '' : rel.slice(0, i);
+}
+
+/** 目录自身 + 全部祖先路径 */
+function dirAncestorChain(dirPath: string): string[] {
+	const rel = normalizeTreeRel(dirPath);
+	if (!rel) return [];
+	const parts = rel.split('/').filter(Boolean);
+	const out: string[] = [];
+	for (let i = 0; i < parts.length; i++) {
+		out.push(parts.slice(0, i + 1).join('/'));
+	}
+	return out;
+}
+
+function getActiveTreeFilePath(tree: HTMLElement): string {
+	const active = tree.querySelector<HTMLElement>('.tree-file.is-active');
+	const p = active?.dataset.path || '';
+	if (!p || p === '__home__') return '';
+	return normalizeTreeRel(p);
+}
+
+/**
+ * 应用进入 / focus class 与 open 集合。
+ * opts.scroll / flash：定位 focus 目录（路径栏、正文文件夹链）
+ */
+function applyTreeOpenState(opts?: {
+	scroll?: boolean;
+	flash?: boolean;
+	/** 滚动目标：默认 focus 目录；打开文件时可滚到文件 */
+	scrollFilePath?: string;
+}): void {
 	const tree = document.getElementById('file-tree');
 	if (!tree) return;
-	tree.querySelectorAll<HTMLElement>('[data-tree-level]').forEach((level) => {
-		const openDirs = [...level.children].filter(
-			(el): el is HTMLDetailsElement =>
-				el instanceof HTMLDetailsElement &&
-				el.classList.contains('tree-dir') &&
-				el.open,
-		);
-		if (openDirs.length <= 1) return;
-		const keep =
-			openDirs.find((d) => d.classList.contains('is-on-path')) || openDirs[0]!;
-		for (const d of openDirs) {
-			if (d !== keep) d.open = false;
+
+	const filePath = getActiveTreeFilePath(tree);
+	const enterParent = parentDirOfFile(filePath);
+	const mustOpen = new Set<string>();
+	for (const d of dirAncestorChain(enterParent)) mustOpen.add(d);
+	const focusRel = normalizeTreeRel(treeFocusDirPath);
+	for (const d of dirAncestorChain(focusRel)) mustOpen.add(d);
+
+	treeStateApplying = true;
+	try {
+		// —— class：进入 / focus ——
+		tree.querySelectorAll('.tree-dir.is-on-path').forEach((el) => {
+			el.classList.remove('is-on-path');
+		});
+		tree.querySelectorAll('.tree-dir.is-tree-focus').forEach((el) => {
+			el.classList.remove('is-tree-focus');
+		});
+
+		for (const d of dirAncestorChain(enterParent)) {
+			const el = tree.querySelector(`.tree-dir[data-path="${CSS.escape(d)}"]`);
+			el?.classList.add('is-on-path');
 		}
+		if (focusRel) {
+			const fel = tree.querySelector(
+				`.tree-dir[data-path="${CSS.escape(focusRel)}"]`,
+			);
+			fel?.classList.add('is-tree-focus');
+		}
+
+		// —— open ——
+		const accordion = getTreeAccordion();
+		tree.querySelectorAll<HTMLDetailsElement>('details.tree-dir').forEach((d) => {
+			const p = d.dataset.path || '';
+			if (accordion) {
+				// 单开：不在「进入∪focus」链上的一律折叠
+				d.open = mustOpen.has(p);
+			} else if (mustOpen.has(p)) {
+				// 多开：只保证链上展开，不关用户已开的其它夹
+				d.open = true;
+			}
+		});
+	} finally {
+		treeStateApplying = false;
+	}
+
+	const pane =
+		tree.querySelector<HTMLElement>('.tree-body') ||
+		document.querySelector<HTMLElement>('.tree-body');
+
+	if (opts?.scrollFilePath) {
+		const fp = normalizeTreeRel(opts.scrollFilePath);
+		const fileEl = tree.querySelector<HTMLElement>(
+			`.tree-file[data-path="${CSS.escape(fp)}"]`,
+		);
+		if (fileEl) {
+			if (opts.flash) {
+				fileEl.classList.remove('is-tree-flash');
+				void fileEl.offsetWidth;
+				fileEl.classList.add('is-tree-flash');
+				window.setTimeout(() => fileEl.classList.remove('is-tree-flash'), 1400);
+			}
+			if (opts.scroll !== false) {
+				requestAnimationFrame(() => {
+					scrollElWithinPane(fileEl, pane, { behavior: 'auto', offset: 10 });
+				});
+			}
+			return;
+		}
+	}
+
+	if ((opts?.scroll || opts?.flash) && focusRel) {
+		const focusEl = tree.querySelector<HTMLElement>(
+			`.tree-dir[data-path="${CSS.escape(focusRel)}"]`,
+		);
+		if (!focusEl) return;
+		const scrollTarget =
+			focusEl.querySelector<HTMLElement>(':scope > .tree-dir__summary') ||
+			focusEl;
+		if (opts.flash) {
+			focusEl.classList.remove('is-tree-flash');
+			void focusEl.offsetWidth;
+			focusEl.classList.add('is-tree-flash');
+			window.setTimeout(() => focusEl.classList.remove('is-tree-flash'), 1400);
+		}
+		if (opts.scroll) {
+			requestAnimationFrame(() => {
+				scrollElWithinPane(scrollTarget, pane, { behavior: 'auto', offset: 10 });
+				requestAnimationFrame(() => {
+					scrollElWithinPane(scrollTarget, pane, {
+						behavior: 'auto',
+						offset: 10,
+					});
+				});
+			});
+		}
+	}
+}
+
+/** 设置 focus 目录（点文件夹 / 路径栏 / 正文链） */
+function setTreeFocusDir(
+	dirPath: string,
+	opts?: { scroll?: boolean; flash?: boolean },
+): void {
+	treeFocusDirPath = normalizeTreeRel(dirPath);
+	applyTreeOpenState({
+		scroll: opts?.scroll ?? true,
+		flash: opts?.flash ?? true,
 	});
 }
 
@@ -929,16 +1071,22 @@ function refreshWikiPagerFromTree() {
 function bindFileTreeSort() {
 	const tree = document.getElementById('file-tree');
 	if (!tree) return;
+	// 首屏 / 重绑：进入由 is-active 推导，focus 默认同文件所在目录
+	const active0 = tree.querySelector<HTMLElement>('.tree-file.is-active');
+	const p0 = active0?.dataset.path;
+	if (p0 && p0 !== '__home__') {
+		treeFocusDirPath = parentDirOfFile(p0);
+	}
 	if (tree.dataset.treeToolsBound === '1') {
 		applyFileTreeSort();
 		syncTreeAccordionBtn();
-		enforceTreeAccordion();
+		applyTreeOpenState();
 		return;
 	}
 	tree.dataset.treeToolsBound = '1';
 	applyFileTreeSort();
 	syncTreeAccordionBtn();
-	enforceTreeAccordion();
+	applyTreeOpenState();
 
 	tree.querySelector<HTMLButtonElement>('[data-tree-sort]')?.addEventListener(
 		'click',
@@ -970,31 +1118,32 @@ function bindFileTreeSort() {
 			const next = !getTreeAccordion();
 			setTreeAccordion(next);
 			syncTreeAccordionBtn();
-			if (next) enforceTreeAccordion();
+			// 切到单开：立刻按「进入∪focus」收拢；多开只保证链上展开
+			applyTreeOpenState();
 		},
 	);
 
-	// 展开文件夹时：同层其它已展开的文件夹收起
+	// 用户点 summary 展开/折叠 → 改 focus（进入态只由当前文件决定）
 	tree.addEventListener(
 		'toggle',
 		(ev) => {
-			if (!getTreeAccordion()) return;
+			if (treeStateApplying) return;
 			const t = ev.target;
 			if (!(t instanceof HTMLDetailsElement) || !t.classList.contains('tree-dir')) {
 				return;
 			}
-			if (!t.open) return;
-			const parent = t.parentElement;
-			if (!parent) return;
-			for (const sib of parent.children) {
-				if (
-					sib !== t &&
-					sib instanceof HTMLDetailsElement &&
-					sib.classList.contains('tree-dir') &&
-					sib.open
-				) {
-					sib.open = false;
+			const path = normalizeTreeRel(t.dataset.path || '');
+			if (!path) return;
+			if (t.open) {
+				// 点开文件夹 = focus 到该目录
+				treeFocusDirPath = path;
+				applyTreeOpenState();
+			} else {
+				// 用户收起：若收的是 focus 夹则清 focus；进入链仍由 apply 强制展开（单开）
+				if (normalizeTreeRel(treeFocusDirPath) === path) {
+					treeFocusDirPath = '';
 				}
+				applyTreeOpenState();
 			}
 		},
 		true,
@@ -1967,10 +2116,9 @@ function scrollFileTreeToRoot() {
 		tree?.querySelector<HTMLElement>('.tree-body') ||
 		document.querySelector<HTMLElement>('.tree-body');
 	if (!pane) return;
-	// 清掉路径定位高亮
-	tree?.querySelectorAll('.tree-dir.is-tree-focus').forEach((el) => {
-		el.classList.remove('is-tree-focus');
-	});
+	// 根目录：清 focus；进入态仍跟当前文件（若有）
+	treeFocusDirPath = '';
+	applyTreeOpenState();
 	try {
 		pane.style.scrollBehavior = 'auto';
 	} catch {
@@ -1987,11 +2135,84 @@ function scrollFileTreeToRoot() {
 	}
 }
 
+/** 左侧树是否存在该 content 相对目录 */
+function treeHasDir(rel: string): boolean {
+	const path = (rel || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+	if (!path) return false;
+	const tree = document.getElementById('file-tree');
+	if (!tree) return false;
+	return Boolean(
+		tree.querySelector(`.tree-dir[data-path="${CSS.escape(path)}"]`),
+	);
+}
+
 /**
- * 路径栏点目录/文件名 → 左侧树展开祖先并滚到对应节点（不跳转）。
+ * 正文站内文件夹链 → 与路径栏一致的 content 相对路径。
+ * 支持：`#tree-dir=...`（构建改写）、`/content/dir/`、树中存在的路径。
+ */
+function resolveInternalTreeDirPath(a: HTMLAnchorElement): string | null {
+	const raw = (a.getAttribute('href') || '').trim();
+	if (!raw || raw.startsWith('mailto:') || raw.startsWith('javascript:')) {
+		return null;
+	}
+	// 构建期改写：#tree-dir=term%2F...
+	if (raw.startsWith('#tree-dir=')) {
+		try {
+			const p = decodeURIComponent(raw.slice('#tree-dir='.length))
+				.replace(/\\/g, '/')
+				.replace(/^\/+|\/+$/g, '');
+			return p || null;
+		} catch {
+			return null;
+		}
+	}
+	let url: URL;
+	try {
+		url = new URL(a.href, location.href);
+	} catch {
+		return null;
+	}
+	if (url.origin !== location.origin) return null;
+	let pathname = url.pathname || '';
+	try {
+		pathname = decodeURIComponent(pathname);
+	} catch {
+		/* keep */
+	}
+	pathname = pathname.replace(/\\/g, '/');
+	// /content/term/foo/ 或无尾斜杠
+	if (pathname === '/content' || pathname.startsWith('/content/')) {
+		const rel = pathname
+			.replace(/^\/content\/?/, '')
+			.replace(/\/+$/, '');
+		if (rel && treeHasDir(rel)) return rel;
+		// 构建后尚未校验树时：尾斜杠仍视为目录意图
+		if (rel && /\/$/.test(url.pathname)) return rel;
+		return null;
+	}
+	// /pages/term/foo/ ：无对应文件页、但是树里的目录 → 定位树
+	if (pathname === '/pages' || pathname.startsWith('/pages/')) {
+		const rel = pathname.replace(/^\/pages\/?/, '').replace(/\/+$/, '');
+		if (rel && treeHasDir(rel)) return rel;
+	}
+	return null;
+}
+
+/** 若为站内文件夹链：定位左侧树并返回 true（调用方应 preventDefault） */
+function tryRevealInternalFolderLink(a: HTMLAnchorElement): boolean {
+	const rel = resolveInternalTreeDirPath(a);
+	if (!rel || !treeHasDir(rel)) return false;
+	revealInFileTree(rel, 'dir');
+	return true;
+}
+
+/**
+ * 路径栏 / 正文文件夹链：
+ * - 点目录 → 只改 focus（不改进入）
+ * - 点文件名 → focus 到该文件所在目录并滚到文件
  */
 function revealInFileTree(path: string, kind: 'dir' | 'file' = 'dir') {
-	const rel = (path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+	const rel = normalizeTreeRel(path);
 	if (!rel) return;
 
 	ensureFileTreeVisible();
@@ -1999,61 +2220,27 @@ function revealInFileTree(path: string, kind: 'dir' | 'file' = 'dir') {
 
 	const tree = document.getElementById('file-tree');
 	if (!tree) return;
-	const pane =
-		tree.querySelector<HTMLElement>('.tree-body') ||
-		document.querySelector<HTMLElement>('.tree-body');
 
-	const sel =
-		kind === 'file'
-			? `.tree-file[data-path="${CSS.escape(rel)}"]`
-			: `.tree-dir[data-path="${CSS.escape(rel)}"]`;
-	const target = tree.querySelector<HTMLElement>(sel);
-	if (!target) return;
-
-	// 展开祖先目录
-	let p: HTMLElement | null = target.parentElement;
-	while (p && p !== tree) {
-		if (
-			p instanceof HTMLDetailsElement &&
-			p.classList.contains('tree-dir')
-		) {
-			p.open = true;
-		}
-		p = p.parentElement;
-	}
-	if (target instanceof HTMLDetailsElement) {
-		target.open = true;
-	}
-	// 路径高亮（目录）
-	if (kind === 'dir') {
-		tree.querySelectorAll('.tree-dir.is-tree-focus').forEach((el) => {
-			el.classList.remove('is-tree-focus');
+	if (kind === 'file') {
+		const fileEl = tree.querySelector(
+			`.tree-file[data-path="${CSS.escape(rel)}"]`,
+		);
+		if (!fileEl) return;
+		// focus = 文件所在目录（根文件则无 focus 夹）
+		treeFocusDirPath = parentDirOfFile(rel);
+		applyTreeOpenState({
+			scroll: true,
+			flash: true,
+			scrollFilePath: rel,
 		});
-		target.classList.add('is-tree-focus');
+		return;
 	}
-	enforceTreeAccordion();
 
-	const scrollTarget =
-		kind === 'dir'
-			? target.querySelector<HTMLElement>(':scope > .tree-dir__summary') ||
-				target
-			: target;
-
-	target.classList.remove('is-tree-flash');
-	// 强制重启动画
-	void target.offsetWidth;
-	target.classList.add('is-tree-flash');
-	window.setTimeout(() => {
-		target.classList.remove('is-tree-flash');
-	}, 1400);
-
-	// 布局展开后量一次再滚
-	requestAnimationFrame(() => {
-		scrollElWithinPane(scrollTarget, pane, { behavior: 'auto', offset: 10 });
-		requestAnimationFrame(() => {
-			scrollElWithinPane(scrollTarget, pane, { behavior: 'auto', offset: 10 });
-		});
-	});
+	const dirEl = tree.querySelector(
+		`.tree-dir[data-path="${CSS.escape(rel)}"]`,
+	);
+	if (!dirEl) return;
+	setTreeFocusDir(rel, { scroll: true, flash: true });
 }
 
 /** 文件信息弹层：水平居中；宽度跟屏走，尽量一行显示完整路径（不先卡 560 再左右滚） */
@@ -2283,6 +2470,19 @@ function bindPathReveal() {
 				kindAttr === 'file' ? 'file' : 'dir';
 			revealInFileTree(path, kind);
 			return;
+		}
+
+		// 正文内站内文件夹链（#tree-dir= / /content/目录）→ 同路径栏：只定位树
+		const folderA = t.closest('a[href]') as HTMLAnchorElement | null;
+		if (
+			folderA &&
+			(folderA.closest('#content') || folderA.closest('.markdown-body'))
+		) {
+			if (tryRevealInternalFolderLink(folderA)) {
+				ev.preventDefault();
+				ev.stopPropagation();
+				return;
+			}
 		}
 
 		// 仅 info 按钮打开/关闭文件信息弹层
@@ -3308,6 +3508,11 @@ function isSoftNavLink(a: HTMLAnchorElement): boolean {
 	return true;
 }
 
+/**
+ * 打开/切换文件页：
+ * - is-active / is-on-path（进入）跟当前文件
+ * - focus 同步到「该文件所在目录」
+ */
 function syncTreeActiveFromDoc(doc: Document) {
 	const tree = document.getElementById('file-tree');
 	if (!tree) return;
@@ -3316,31 +3521,22 @@ function syncTreeActiveFromDoc(doc: Document) {
 	tree.querySelectorAll('.tree-file.is-active').forEach((el) => {
 		el.classList.remove('is-active');
 	});
-	// 路径高亮（祖先目录主题色）
-	tree.querySelectorAll('.tree-dir.is-on-path').forEach((el) => {
-		el.classList.remove('is-on-path');
-	});
-	// 站级主页：无文件高亮，「文件」标题保持固定无状态
+	// 站级主页：无文件进入态；保留用户已有 focus（若有）
 	if (!path || path === '__home__') {
+		applyTreeOpenState();
 		return;
 	}
 	const link = tree.querySelector<HTMLElement>(
 		`.tree-file[data-path="${CSS.escape(path)}"]`,
 	);
-	if (link) {
-		link.classList.add('is-active');
-		// 展开并标记祖先目录
-		let p: HTMLElement | null = link.parentElement;
-		while (p && p !== tree) {
-			if (p.classList.contains('tree-dir') && p instanceof HTMLDetailsElement) {
-				p.open = true;
-				p.classList.add('is-on-path');
-			}
-			p = p.parentElement;
-		}
-		// 单开：同层只留路径上的文件夹
-		enforceTreeAccordion();
+	if (!link) {
+		applyTreeOpenState();
+		return;
 	}
+	link.classList.add('is-active');
+	// 打开新文件 ≡ focus 到该文件所在目录
+	treeFocusDirPath = parentDirOfFile(path);
+	applyTreeOpenState();
 }
 
 /**
@@ -3939,7 +4135,17 @@ function bindSoftNav() {
 			if (ev.button !== 0) return;
 			if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
 			const a = (ev.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
-			if (!a || !isSoftNavLink(a)) return;
+			if (!a) return;
+			// 正文文件夹链优先：不进 soft-nav / 不 404
+			if (
+				(a.closest('#content') || a.closest('.markdown-body')) &&
+				tryRevealInternalFolderLink(a)
+			) {
+				ev.preventDefault();
+				ev.stopPropagation();
+				return;
+			}
+			if (!isSoftNavLink(a)) return;
 			if (a.closest('#file-tree') || a.closest('.wiki-page-footer')) warmLink(a);
 			// 仅拦截站内导航相关区域 + 正文内链
 			if (

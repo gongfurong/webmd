@@ -146,6 +146,7 @@ export function renderFilePage(
 		bytes,
 		officePreviewUrl: officePrev?.url ?? null,
 		diagramExportPreview: diagramExportPrev,
+		contentDir: ctx.contentDir,
 	});
 	// 媒体/PDF/Office/表格/独立图示预览为完整 HTML，勿再过 marked
 	const isRawHtml =

@@ -20,11 +20,15 @@
 ## 2. 内容规范
 
 1. 知识长文 → `content/knowledge/`  
-2. 短记 → `content/notes/`  
-3. 格式验收 → `content/samples/`（勿与知识混放）  
-4. 媒体复用 → `content/media/{image,video,audio}/`  
-5. 禁止提交 Office 锁文件 `~$*`  
-6. 不在 content 内提交 `node_modules` / 解压排查目录  
+2. **术语词条** → `content/term/`（主题分目录；一词一文件；README 可选）  
+3. 短记 → `content/notes/`  
+4. 格式验收 → `content/samples/`（勿与知识混放）  
+5. 媒体复用 → `content/media/{image,video,audio}/`  
+6. 禁止提交 Office 锁文件 `~$*`  
+7. 不在 content 内提交 `node_modules` / 解压排查目录  
+8. **站内文件夹链接**写 `./子目录/`（尾 `/` 推荐）；**不要**指望站点生成「目录列表页」。要打开说明页则链 `README.md`。  
+
+---
 
 ---
 

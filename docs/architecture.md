@@ -97,17 +97,21 @@ dist/
 4. **build**：Vite 打 client → 对每个文件 `pageOutDir` 写 `index.html` → `cp content → dist/content`  
 5. 写 tree / search-index / 404  
 
-客户端：软导航替换中栏 → 再 bind PDF/表/图示/复制等。
+客户端：软导航替换中栏 → 再 bind PDF/表/图示/复制等；文件树 `applyTreeOpenState` 同步进入+focus。
 
 ### 4.1 软导航与缓存（运行期）
 
 ```text
 点击站内链
-  → 会话 HTML 缓存命中？ ──是──► 秒开（无 loading 条）
-  │                              └─ 后台 SWR（ETag/正文）不同则静默更新
-  └─否─► loading 条（路径栏上）→ fetch HTML（HTTP cache default）
-         → 写入会话缓存 → 应用 DOM → bind
+  ├─ 文件夹（#tree-dir= / 可识别目录）─► 仅 revealInFileTree（不换页）
+  └─ 文件页
+       → 会话 HTML 缓存命中？ ──是──► 秒开（无 loading 条）
+       │                              └─ 后台 SWR（ETag/正文）不同则静默更新
+       └─否─► loading 条（路径栏上）→ fetch HTML（HTTP cache default）
+              → 写入会话缓存 → 应用 DOM → bind → 树进入+focus=文件父目录
 ```
+
+**Markdown 相对路径**（`rewriteRelativeToContent`，dev/build 渲染时）：文件夹 → `#tree-dir=`；`.md` → 预览路由；其它 → `/content/...`。**不为文件夹 SSG 页面。**
 
 | 层 | 机制 | 失效 |
 |----|------|------|
