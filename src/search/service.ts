@@ -19,7 +19,7 @@ import {
 	DEFAULT_SCOPES,
 	SCOPE_FIELD_MAP,
 	folderAncestors,
-	folderMatchesSelection,
+	filePathMatchesSelection,
 	withHash,
 } from './types';
 import {
@@ -144,6 +144,11 @@ export class SearchService {
 		return this.facetCounts;
 	}
 
+	/** 全部可搜索文档（侧栏文件树） */
+	getDocs(): SearchDoc[] {
+		return [...this.docsById.values()];
+	}
+
 	private computeFacets(docs: SearchDoc[]): FacetCounts {
 		const format: Record<string, number> = {};
 		const folder: Record<string, number> = {};
@@ -222,9 +227,10 @@ export class SearchService {
 					const doc = this.docsById.get(String(result.id));
 					if (!doc) return false;
 					if (formatSet.size && !formatSet.has(doc.format)) return false;
+					// facets.folder 现为勾选的文件 path 集合
 					if (
 						folderSet.size &&
-						!folderMatchesSelection(doc.folder, folderSet)
+						!filePathMatchesSelection(doc.path, folderSet)
 					)
 						return false;
 					return true;
@@ -239,7 +245,7 @@ export class SearchService {
 				if (formatSet.size && !formatSet.has(doc.format)) continue;
 				if (
 					folderSet.size &&
-					!folderMatchesSelection(doc.folder, folderSet)
+					!filePathMatchesSelection(doc.path, folderSet)
 				)
 					continue;
 				candidateDocs.push(doc);

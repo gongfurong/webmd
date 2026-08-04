@@ -6,15 +6,47 @@ import { getSearchService } from './service';
 import type { SearchHit, SearchScopes } from './types';
 import {
 	DEFAULT_SCOPES,
-	buildFolderTree,
-	folderAncestors,
-	folderMatchesSelection,
-	sortFolderEntries,
-	type FolderTreeNode,
+	buildSearchFileTree,
+	filePathMatchesSelection,
+	type SearchTreeNode,
 } from './types';
 
 type Side = 'left' | 'right';
 const NONE = '__none__';
+/** 搜索左/右栏文件树：单开 / 多开各自独立（默认单开） */
+const MS_TREE_ACCORDION_KEY: Record<'left' | 'right', string> = {
+	left: 'webmd-ms-tree-accordion-left',
+	right: 'webmd-ms-tree-accordion-right',
+};
+
+function getMsTreeAccordion(side: 'left' | 'right'): boolean {
+	try {
+		// 兼容旧键：仅 left 迁移一次
+		if (side === 'left') {
+			const legacy = localStorage.getItem('webmd-ms-tree-accordion');
+			if (legacy === '0' || legacy === '1') {
+				if (localStorage.getItem(MS_TREE_ACCORDION_KEY.left) == null) {
+					localStorage.setItem(MS_TREE_ACCORDION_KEY.left, legacy);
+				}
+				localStorage.removeItem('webmd-ms-tree-accordion');
+			}
+		}
+		const v = localStorage.getItem(MS_TREE_ACCORDION_KEY[side]);
+		if (v === '0') return false;
+		if (v === '1') return true;
+	} catch {
+		/* ignore */
+	}
+	return true;
+}
+
+function setMsTreeAccordion(side: 'left' | 'right', on: boolean) {
+	try {
+		localStorage.setItem(MS_TREE_ACCORDION_KEY[side], on ? '1' : '0');
+	} catch {
+		/* ignore */
+	}
+}
 
 /** 搜索三栏：滚到底 + 回到顶（与主站 pane-scroll-edge 同形） */
 const ICON_MS_TO_TOP = `<svg class="wiki-breadcrumb__icon wiki-breadcrumb__icon--to-top" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14"/><path d="m5 14 7-7 7 7"/><path d="M12 7v12"/></svg>`;
@@ -95,6 +127,7 @@ const SHELL = `
 							</div>
 							<div class="ms-panel-label-end">
 								<button type="button" class="${MS_TEXT_BTN}" data-reset-left title="重置本栏筛选：全部勾选" aria-label="重置">重置</button>
+								<button type="button" class="${MS_TEXT_BTN} ms-tree-accordion-btn is-on" data-ms-tree-accordion="left" data-on="1" aria-pressed="true" title="单开：同层只展开一个文件夹（点击切换为多开）" aria-label="文件夹展开：单开"><span class="ms-tree-accordion-btn__label">单开</span></button>
 								${scrollEdgeHtml('left')}
 								<button type="button" class="ms-pane-collapse" data-ms-collapse="left" title="收起搜索筛选" aria-label="收起搜索筛选"><span aria-hidden="true">«</span></button>
 							</div>
@@ -102,6 +135,7 @@ const SHELL = `
 						<div class="ms-panel-body thin-scrollbar" data-left-body data-ms-scroll="left"></div>
 					</div>
 				</aside>
+				<div class="ms-gutter ms-gutter--left" data-ms-gutter="left" role="separator" aria-orientation="vertical" aria-label="拖拽调整搜索筛选宽度" title="拖拽调整宽度"></div>
 				<section class="ms-panel ms-panel--center" aria-label="搜索结果">
 					<div class="ms-panel-label ms-panel-label--center">
 						<div class="ms-panel-label-start">
@@ -122,6 +156,7 @@ const SHELL = `
 					</div>
 					<div class="ms-panel-body thin-scrollbar" data-ms-scroll="center"><ul class="ms-results" data-results></ul></div>
 				</section>
+				<div class="ms-gutter ms-gutter--right" data-ms-gutter="right" role="separator" aria-orientation="vertical" aria-label="拖拽调整结果筛选宽度" title="拖拽调整宽度"></div>
 				<aside class="ms-panel ms-panel--right" data-ms-panel="right" aria-label="结果筛选器">
 					<div class="ms-panel-main">
 						<div class="ms-panel-label">
@@ -130,6 +165,7 @@ const SHELL = `
 							</div>
 							<div class="ms-panel-label-end">
 								<button type="button" class="${MS_TEXT_BTN}" data-reset-right title="重置本栏筛选：全部勾选" aria-label="重置">重置</button>
+								<button type="button" class="${MS_TEXT_BTN} ms-tree-accordion-btn is-on" data-ms-tree-accordion="right" data-on="1" aria-pressed="true" title="单开：同层只展开一个文件夹（点击切换为多开）" aria-label="文件夹展开：单开"><span class="ms-tree-accordion-btn__label">单开</span></button>
 								${scrollEdgeHtml('right')}
 								<button type="button" class="ms-pane-collapse" data-ms-collapse="right" title="收起结果筛选" aria-label="收起结果筛选"><span aria-hidden="true">»</span></button>
 							</div>
@@ -179,6 +215,8 @@ export function mountSearch(mount: HTMLElement) {
 	const searchBody = root.querySelector<HTMLElement>('[data-search-body]')!;
 	const leftPanel = root.querySelector<HTMLElement>('[data-ms-panel="left"]')!;
 	const rightPanel = root.querySelector<HTMLElement>('[data-ms-panel="right"]')!;
+	const leftGutter = root.querySelector<HTMLElement>('[data-ms-gutter="left"]');
+	const rightGutter = root.querySelector<HTMLElement>('[data-ms-gutter="right"]');
 
 	/*
 	 * 布局模式判定（只看视口宽高，不区分设备）：
@@ -192,6 +230,45 @@ export function mountSearch(mount: HTMLElement) {
 	const MS_BREAK_LEFT = 760;
 	const MS_NARROW_MQ =
 		'(max-width: 49.99rem), (max-height: 32rem) and (max-width: 56rem)';
+	/** 侧栏宽：px，localStorage 记忆 */
+	const MS_SIDE_W_KEY = {
+		left: 'webmd-ms-left-w',
+		right: 'webmd-ms-right-w',
+	} as const;
+	/** 可拖到的最窄 */
+	const MS_SIDE_MIN = 240;
+	const MS_SIDE_MAX = 480;
+	const MS_SIDE_DEFAULT = 240;
+
+	const clampMsSide = (n: number) =>
+		Math.min(MS_SIDE_MAX, Math.max(MS_SIDE_MIN, Math.round(n)));
+
+	const loadMsSideWidth = (side: 'left' | 'right'): number => {
+		try {
+			const v = Number(localStorage.getItem(MS_SIDE_W_KEY[side]));
+			if (Number.isFinite(v) && v > 0) return clampMsSide(v);
+		} catch {
+			/* ignore */
+		}
+		return MS_SIDE_DEFAULT;
+	};
+
+	const saveMsSideWidth = (side: 'left' | 'right', px: number) => {
+		try {
+			localStorage.setItem(MS_SIDE_W_KEY[side], String(clampMsSide(px)));
+		} catch {
+			/* ignore */
+		}
+	};
+
+	const applyMsSideWidths = (leftPx?: number, rightPx?: number) => {
+		const L = leftPx ?? loadMsSideWidth('left');
+		const R = rightPx ?? loadMsSideWidth('right');
+		searchBody.style.setProperty('--ms-left-w', `${clampMsSide(L)}px`);
+		searchBody.style.setProperty('--ms-right-w', `${clampMsSide(R)}px`);
+	};
+	applyMsSideWidths();
+
 	const paneUi = {
 		left: {
 			collapsed: false,
@@ -225,6 +302,9 @@ export function mountSearch(mount: HTMLElement) {
 		// 收起后不占位；中间结果栏永不 hidden
 		leftPanel.hidden = L;
 		rightPanel.hidden = R;
+		// gutter 随侧栏：收起/窄屏抽屉不显示拖拽条
+		if (leftGutter) leftGutter.hidden = L || narrow;
+		if (rightGutter) rightGutter.hidden = R || narrow;
 		// 中间栏始终可见（侧栏 hidden 后靠固定 grid-column 占结果列）
 		const centerPanel = root.querySelector<HTMLElement>('.ms-panel--center');
 		if (centerPanel) {
@@ -239,6 +319,54 @@ export function mountSearch(mount: HTMLElement) {
 		leftPanel.setAttribute('aria-expanded', L ? 'false' : 'true');
 		rightPanel.setAttribute('aria-expanded', R ? 'false' : 'true');
 	};
+
+	/** 宽屏：拖拽 gutter 调整左右筛选栏宽度 */
+	const bindMsGutters = () => {
+		const bindOne = (gutter: HTMLElement | null, side: 'left' | 'right') => {
+			if (!gutter || gutter.dataset.msGutterBound === '1') return;
+			gutter.dataset.msGutterBound = '1';
+			gutter.addEventListener('pointerdown', (ev) => {
+				if (isNarrowSearch()) return;
+				if (side === 'left' && paneUi.left.collapsed) return;
+				if (side === 'right' && paneUi.right.collapsed) return;
+				ev.preventDefault();
+				document.body.classList.add('is-col-resizing');
+				gutter.classList.add('is-dragging');
+				const startX = ev.clientX;
+				const startW = loadMsSideWidth(side);
+				const onMove = (e: PointerEvent) => {
+					const dx = e.clientX - startX;
+					// 左栏：向右拖加宽；右栏：向左拖加宽
+					const next =
+						side === 'left' ? startW + dx : startW - dx;
+					applyMsSideWidths(
+						side === 'left' ? next : undefined,
+						side === 'right' ? next : undefined,
+					);
+				};
+				const onUp = (e: PointerEvent) => {
+					document.body.classList.remove('is-col-resizing');
+					gutter.classList.remove('is-dragging');
+					window.removeEventListener('pointermove', onMove);
+					window.removeEventListener('pointerup', onUp);
+					const dx = e.clientX - startX;
+					const next =
+						side === 'left' ? startW + dx : startW - dx;
+					const clamped = clampMsSide(next);
+					saveMsSideWidth(side, clamped);
+					applyMsSideWidths(
+						side === 'left' ? clamped : undefined,
+						side === 'right' ? clamped : undefined,
+					);
+				};
+				window.addEventListener('pointermove', onMove);
+				window.addEventListener('pointerup', onUp);
+			});
+		};
+		bindOne(leftGutter, 'left');
+		bindOne(rightGutter, 'right');
+	};
+	bindMsGutters();
 
 	const recomputeAutoPanes = () => {
 		const w = searchBody.clientWidth || dialog.clientWidth || window.innerWidth || 0;
@@ -539,8 +667,9 @@ export function mountSearch(mount: HTMLElement) {
 		});
 	};
 
-	const prepareDisplayHits = (): SearchHit[] =>
-		sortHitsByPath(applyRightFilter(lastBaseHits)).slice(0, 50);
+	/** 右栏筛选 + 名序后的全部结果（未截断） */
+	const getFilteredHits = (): SearchHit[] =>
+		sortHitsByPath(applyRightFilter(lastBaseHits));
 
 	const closeModal = () => {
 		if (dialog.open) dialog.close();
@@ -621,7 +750,7 @@ export function mountSearch(mount: HTMLElement) {
 		{ key: 'body', label: '正文' },
 	];
 
-	// 与左侧导航完全相同的文件夹图标（复用 tree-icon 类与 SVG）
+	// 与左侧导航相同的文件夹图标
 	const iconFolder = `<span class="tree-icon tree-icon--folder" aria-hidden="true">
 		<svg class="tree-icon__svg tree-icon__folder-closed" width="18" height="18" viewBox="0 0 20 20" fill="none">
 			<path class="tree-icon__folder-back" d="M2.4 5.1C2.4 4.22 3.12 3.5 4 3.5h3.35c.28 0 .55.1.76.28l1.05.9c.2.18.47.28.75.28H16c.88 0 1.6.72 1.6 1.6v.72H2.4V5.1Z"/>
@@ -635,34 +764,90 @@ export function mountSearch(mount: HTMLElement) {
 			<path class="tree-icon__folder-gloss" d="M3.55 9.45h12.9l-1.05 4.3c-.05.2-.23.35-.44.35H5.04c-.21 0-.39-.15-.44-.35l-1.05-4.3Z"/>
 		</svg>
 	</span>`;
+	const iconFile = `<span class="tree-icon tree-icon--file tree-icon--markdown" aria-hidden="true"><svg class="tree-icon__svg" width="18" height="18" viewBox="0 0 16 16" fill="none"><path class="tree-icon__page" d="M4 1.5C4 1.22 4.22 1 4.5 1h5.59c.27 0 .52.1.71.29l3.41 3.41c.19.19.29.44.29.71V13.5c0 .83-.67 1.5-1.5 1.5h-8A1.5 1.5 0 0 1 4 13.5V1.5Z"/><path class="tree-icon__fold" d="M10.25 1.1v2.9c0 .41.34.75.75.75h2.9"/><path class="tree-icon__stripe" d="M5.35 5.45h5.9" stroke-linecap="round"/><text class="tree-icon__badge" x="8.5" y="11.9" text-anchor="middle" font-size="4.6" font-weight="700" font-family="Segoe UI,system-ui,sans-serif">MD</text></svg></span>`;
 
-	const renderFolderTreeHtml = (
-		nodes: FolderTreeNode[],
+	/** 文件是否在选中集合（allOn 或 path 命中） */
+	const fileSelected = (
+		path: string,
+		selected: Set<string>,
+		allOn: boolean,
+	): boolean => allOn || selected.has(path);
+
+	/** 目录：子树内所有文件是否均选中 / 部分 / 无 */
+	const dirCheckState = (
+		node: SearchTreeNode,
+		selected: Set<string>,
+		allOn: boolean,
+	): 'all' | 'some' | 'none' => {
+		if (node.kind === 'file') {
+			return fileSelected(node.path, selected, allOn) ? 'all' : 'none';
+		}
+		const files: string[] = [];
+		const walk = (n: SearchTreeNode) => {
+			if (n.kind === 'file') files.push(n.path);
+			else n.children.forEach(walk);
+		};
+		walk(node);
+		if (!files.length) return 'none';
+		let on = 0;
+		for (const p of files) if (fileSelected(p, selected, allOn)) on++;
+		if (on === 0) return 'none';
+		if (on === files.length) return 'all';
+		return 'some';
+	};
+
+	const renderSearchTreeHtml = (
+		nodes: SearchTreeNode[],
 		selected: Set<string>,
 		allOn: boolean,
 		depth = 0,
 	): string => {
 		return nodes
 			.map((node) => {
-				const on = allOn || selected.has(node.path);
+				if (node.kind === 'file') {
+					const on = fileSelected(node.path, selected, allOn);
+					return `<div class="ms-folder-node ms-file-node" data-kind="file" data-folder-path="${escapeAttr(node.path)}">
+						<div class="ms-folder-row" style="--ms-folder-depth:${depth}">
+							<span class="ms-folder-twist-spacer" aria-hidden="true"></span>
+							<label class="ms-filter-value ms-folder-item" title="${escapeAttr(node.path)}">
+								<input type="checkbox" data-facet="file" data-value="${escapeAttr(node.path)}" ${on ? 'checked' : ''} />
+								${iconFile}
+								<span class="ms-filter-label">${escapeAttr(node.label)}</span>
+							</label>
+						</div>
+					</div>`;
+				}
+				// 空目录不渲染（建树时已剪）
+				if (node.total <= 0) return '';
+				const st = dirCheckState(node, selected, allOn);
+				const on = st === 'all';
+				const indet = st === 'some';
 				const hasKids = node.children.length > 0;
-				// 左：勾选+图标+名+(总数/本层) 紧跟；右：折叠箭头
+				const countTitle =
+					node.count !== node.total
+						? '本层文件数 / 含子目录共'
+						: '文件数';
+				const countText =
+					node.count !== node.total
+						? `(${node.count}/${node.total})`
+						: `(${node.total})`;
+				// 折叠钮在最左，再是勾选 + 图标 + 名
 				const row = `<div class="ms-folder-row" style="--ms-folder-depth:${depth}">
-					<label class="ms-filter-value ms-folder-item" title="${escapeAttr(node.path)}">
-						<input type="checkbox" data-facet="folder" data-value="${escapeAttr(node.path)}" ${on ? 'checked' : ''} />
-						${iconFolder}
-						<span class="ms-filter-label">${escapeAttr(node.label)}</span><span class="ms-filter-count" title="${hasKids ? '本层文件数 / 含子目录共' : '本层文件数'}">${hasKids ? `(${node.count}/${node.total})` : `(${node.count})`}</span>
-					</label>
 					${
 						hasKids
 							? `<button type="button" class="ms-folder-twist" aria-expanded="false" title="展开/折叠" data-folder-twist aria-label="展开/折叠"><span class="ms-folder-chevron" aria-hidden="true"></span></button>`
 							: `<span class="ms-folder-twist-spacer" aria-hidden="true"></span>`
 					}
+					<label class="ms-filter-value ms-folder-item" title="${escapeAttr(node.path)}">
+						<input type="checkbox" data-facet="folder" data-value="${escapeAttr(node.path)}" ${on ? 'checked' : ''}${indet ? ' data-indeterminate' : ''} />
+						${iconFolder}
+						<span class="ms-filter-label">${escapeAttr(node.label)}</span><span class="ms-filter-count" title="${countTitle}">${countText}</span>
+					</label>
 				</div>`;
 				const kids = hasKids
-					? `<div class="ms-folder-children" hidden>${renderFolderTreeHtml(node.children, selected, allOn, depth + 1)}</div>`
+					? `<div class="ms-folder-children" hidden>${renderSearchTreeHtml(node.children, selected, allOn, depth + 1)}</div>`
 					: '';
-				return `<div class="ms-folder-node" data-folder-path="${escapeAttr(node.path)}">${row}${kids}</div>`;
+				return `<div class="ms-folder-node" data-kind="dir" data-folder-path="${escapeAttr(node.path)}">${row}${kids}</div>`;
 			})
 			.join('');
 	};
@@ -674,20 +859,17 @@ export function mountSearch(mount: HTMLElement) {
 		entries: [string, number][],
 		selected: Set<string>,
 	) => {
-		if (!entries.length) return '';
+		if (!entries.length && group !== 'files') return '';
 		const allOn = selected.size === 0;
-		const body =
-			group === 'folder'
-				? `<div class="ms-folder-tree">${renderFolderTreeHtml(buildFolderTree(entries), selected, allOn)}</div>`
-				: entries
-						.map(([val, count]) => {
-							const on = allOn || selected.has(val);
-							return `<label class="ms-filter-value">
+		const body = entries
+			.map(([val, count]) => {
+				const on = allOn || selected.has(val);
+				return `<label class="ms-filter-value">
 							<input type="checkbox" data-facet="${escapeAttr(group)}" data-value="${escapeAttr(val)}" ${on ? 'checked' : ''} />
 							<span class="ms-filter-label">${escapeAttr(val)}<span class="ms-filter-count">(${count})</span></span>
 						</label>`;
-						})
-						.join('');
+			})
+			.join('');
 		return `
 		<div class="ms-filter-block is-open" data-group="${escapeAttr(group)}">
 			<div class="ms-filter-head">
@@ -701,6 +883,127 @@ export function mountSearch(mount: HTMLElement) {
 				${body}
 			</div>
 		</div>`;
+	};
+
+	/** 「文件」块：文件夹+文件树；勾选递归；筛选按文件 path */
+	const filesBlockHtml = (
+		tree: SearchTreeNode[],
+		selected: Set<string>,
+	) => {
+		if (!tree.length) return '';
+		const allOn = selected.size === 0;
+		// 预计算标题旁「已勾/总数」（渲染后 DOM 再 sync 一次）
+		let totalFiles = 0;
+		const walkCount = (nodes: SearchTreeNode[]) => {
+			for (const n of nodes) {
+				if (n.kind === 'file') totalFiles += 1;
+				else walkCount(n.children);
+			}
+		};
+		walkCount(tree);
+		const checkedGuess = allOn
+			? totalFiles
+			: Math.min(selected.size, totalFiles);
+		return `
+		<div class="ms-filter-block is-open" data-group="files">
+			<div class="ms-filter-head">
+				<input type="checkbox" class="ms-group-switch" ${allOn ? 'checked' : ''} title="全选 / 全取消全部文件与文件夹" />
+				<button type="button" class="ms-filter-collapse" aria-expanded="true">
+					<span class="ms-filter-title">文件</span>
+					<span class="ms-filter-count ms-files-summary" data-ms-files-summary title="已勾选文件数 / 全部文件数">(${checkedGuess}/${totalFiles})</span>
+					<span class="ms-chevron" aria-hidden="true"></span>
+				</button>
+			</div>
+			<div class="ms-filter-group">
+				<div class="ms-folder-tree" data-ms-file-tree>${renderSearchTreeHtml(tree, selected, allOn)}</div>
+			</div>
+		</div>`;
+	};
+
+	/** 读某栏「文件」树勾选统计（与标题旁数字同一套） */
+	const readFilesSummaryCounts = (
+		panel: HTMLElement,
+	): { checked: number; total: number } => {
+		const block = panel.querySelector<HTMLElement>(
+			'.ms-filter-block[data-group="files"]',
+		);
+		if (!block) return { checked: 0, total: 0 };
+		const boxes = [
+			...block.querySelectorAll<HTMLInputElement>('input[data-facet="file"]'),
+		];
+		const total = boxes.length;
+		const checked = boxes.filter((b) => b.checked).length;
+		return { checked, total };
+	};
+
+	/** 更新「文件」标题旁：已勾选文件数 / 全部文件数（仅文件树，不含范围/格式） */
+	const updateFilesSummary = (panel: HTMLElement) => {
+		const { checked, total } = readFilesSummaryCounts(panel);
+		const summary = panel.querySelector<HTMLElement>('[data-ms-files-summary]');
+		if (summary) {
+			summary.textContent = `(${checked}/${total})`;
+			summary.title = `已勾选文件数 / 全部文件数：${checked}/${total}`;
+		}
+	};
+
+	/**
+	 * 搜索结果标题后：(可展示条数 / 结果文件总数)
+	 * - 分子 = 范围 + 格式 + 文件勾选 全部右筛后的真实列表条数（getFilteredHits）
+	 * - 分母 = 右侧「文件」树文件总数（与文件栏分母一致；无树时用 lastBaseHits）
+	 * 注意：分子可因范围/格式小于「文件」已勾选数，这是预期行为。
+	 */
+	const syncResultCountStatus = (displayHits?: SearchHit[]) => {
+		const q = input.value.trim();
+		if (!q) {
+			statusEl.textContent = '';
+			statusEl.removeAttribute('title');
+			return;
+		}
+		const shown =
+			displayHits != null ? displayHits.length : getFilteredHits().length;
+		const filesBlock = rightBody.querySelector(
+			'.ms-filter-block[data-group="files"]',
+		);
+		const total = filesBlock
+			? readFilesSummaryCounts(rightBody).total
+			: lastBaseHits.length;
+		statusEl.textContent = `(${shown}/${total})`;
+		statusEl.title = `可展示 ${shown} 条（范围·格式·文件筛选后）/ 结果共 ${total} 个文件`;
+	};
+
+	/** 自底向上同步文件夹勾选 / indeterminate */
+	const syncFileTreeChecks = (treeRoot: HTMLElement) => {
+		const dirs = [
+			...treeRoot.querySelectorAll<HTMLElement>(
+				'.ms-folder-node[data-kind="dir"]',
+			),
+		];
+		dirs.sort(
+			(a, b) =>
+				(b.dataset.folderPath || '').split('/').filter(Boolean).length -
+				(a.dataset.folderPath || '').split('/').filter(Boolean).length,
+		);
+		for (const dir of dirs) {
+			const fileBoxes = [
+				...dir.querySelectorAll<HTMLInputElement>('input[data-facet="file"]'),
+			];
+			const folderBox = dir.querySelector<HTMLInputElement>(
+				':scope > .ms-folder-row input[data-facet="folder"]',
+			);
+			if (!folderBox) continue;
+			if (!fileBoxes.length) {
+				folderBox.checked = false;
+				folderBox.indeterminate = false;
+				continue;
+			}
+			const n = fileBoxes.filter((b) => b.checked).length;
+			folderBox.checked = n === fileBoxes.length;
+			folderBox.indeterminate = n > 0 && n < fileBoxes.length;
+		}
+		const panel = treeRoot.closest('[data-left-body], [data-right-body]') as
+			| HTMLElement
+			| null;
+		if (panel) updateFilesSummary(panel);
 	};
 
 	const scopeBlockHtml = (scopes: SearchScopes, available?: SearchScopes) => {
@@ -753,16 +1056,14 @@ export function mountSearch(mount: HTMLElement) {
 		const formats = Object.entries(facets.format || {})
 			.filter(([, c]) => c > 0)
 			.sort((a, b) => a[0].localeCompare(b[0], 'zh')) as [string, number][];
-		const folders = sortFolderEntries(
-			Object.entries(facets.folder || {}).filter(([, c]) => c > 0) as [
-				string,
-				number,
-			][],
-		);
+		const fileTree = buildSearchFileTree(service.getDocs());
 		leftBody.innerHTML =
 			scopeBlockHtml(leftScopes) +
 			facetBlockHtml('left', '格式', 'format', formats, leftFormat) +
-			facetBlockHtml('left', '目录', 'folder', folders, leftFolder);
+			filesBlockHtml(fileTree, leftFolder);
+		const tree = leftBody.querySelector<HTMLElement>('[data-ms-file-tree]');
+		if (tree) syncFileTreeChecks(tree);
+		updateFilesSummary(leftBody);
 		syncIndeterminate(leftBody);
 	};
 
@@ -774,22 +1075,21 @@ export function mountSearch(mount: HTMLElement) {
 			body: leftScopes.body && hits.some((h) => h.match.body),
 		};
 		const formats: Record<string, number> = {};
-		const folders: Record<string, number> = {};
 		for (const h of hits) {
 			formats[h.format] = (formats[h.format] || 0) + 1;
-			folders[h.folder] = (folders[h.folder] || 0) + 1;
 		}
-		for (const key of Object.keys(folders)) {
-			for (const a of folderAncestors(key)) {
-				if (folders[a] == null) folders[a] = 0;
-			}
-		}
+		const fileTree = buildSearchFileTree(
+			hits.map((h) => ({
+				path: h.id,
+				file: h.id.split('/').pop() || h.displayTitle,
+			})),
+		);
 		return {
 			scopeAvail,
 			formats: Object.entries(formats).sort((a, b) =>
 				a[0].localeCompare(b[0], 'zh'),
 			) as [string, number][],
-			folders: sortFolderEntries(Object.entries(folders) as [string, number][]),
+			fileTree,
 		};
 	};
 
@@ -804,6 +1104,11 @@ export function mountSearch(mount: HTMLElement) {
 		return new Set(on);
 	};
 
+	/** 读文件树勾选 → 文件 path 集合（空=全选，NONE=全不选） */
+	const readFilePathSelection = (panel: HTMLElement): Set<string> => {
+		return readFacetSelection(panel, 'file');
+	};
+
 	const readScopesFrom = (panel: HTMLElement): SearchScopes => {
 		const scope: SearchScopes = { file: false, title: false, abstract: false, body: false };
 		panel.querySelectorAll<HTMLInputElement>('input[data-scope]').forEach((el) => {
@@ -814,7 +1119,7 @@ export function mountSearch(mount: HTMLElement) {
 	};
 
 	const resetRightFromHits = (hits: SearchHit[]) => {
-		const { scopeAvail, formats, folders } = buildRightOptions(hits);
+		const { scopeAvail, formats, fileTree } = buildRightOptions(hits);
 		rightScopes = {
 			file: !!scopeAvail.file,
 			title: !!scopeAvail.title,
@@ -830,7 +1135,10 @@ export function mountSearch(mount: HTMLElement) {
 		rightBody.innerHTML =
 			scopeBlockHtml(rightScopes, scopeAvail) +
 			facetBlockHtml('right', '格式', 'format', formats, rightFormat) +
-			facetBlockHtml('right', '目录', 'folder', folders, rightFolder);
+			filesBlockHtml(fileTree, rightFolder);
+		const tree = rightBody.querySelector<HTMLElement>('[data-ms-file-tree]');
+		if (tree) syncFileTreeChecks(tree);
+		updateFilesSummary(rightBody);
 		syncIndeterminate(rightBody);
 	};
 
@@ -881,7 +1189,7 @@ export function mountSearch(mount: HTMLElement) {
 				if (rightFormat.size && !rightFormat.has(h.format)) return false;
 				if (
 					rightFolder.size &&
-					!folderMatchesSelection(h.folder, rightFolder)
+					!filePathMatchesSelection(h.id, rightFolder)
 				)
 					return false;
 				return true;
@@ -893,19 +1201,20 @@ export function mountSearch(mount: HTMLElement) {
 			});
 	};
 
+	/** 渲染结果列表；标题 (可展示/结果文件总数) 与列表同源 */
 	const renderResults = (hits: SearchHit[], q: string) => {
 		if (!q.trim()) {
 			statusEl.textContent = '';
+			statusEl.removeAttribute('title');
 			resultsEl.innerHTML = '';
 			rightBody.innerHTML = `<p class="ms-panel-empty">搜索后显示可筛选项</p>`;
 			return;
 		}
+		syncResultCountStatus(hits);
 		if (!hits.length) {
-			statusEl.textContent = '· 0 条';
 			resultsEl.innerHTML = '';
 			return;
 		}
-		statusEl.textContent = `· ${hits.length} 条`;
 
 		const branch = (kind: 'mid' | 'end' | 'pipe' | 'blank') => {
 			const ch =
@@ -960,7 +1269,8 @@ export function mountSearch(mount: HTMLElement) {
 
 	const runLeftSearch = () => {
 		if (!service.isReady) {
-			statusEl.textContent = '· 加载中…';
+			statusEl.textContent = '';
+			statusEl.title = '索引加载中…';
 			return;
 		}
 		const q = matchMode === 'strict' ? input.value : input.value.trim();
@@ -976,27 +1286,31 @@ export function mountSearch(mount: HTMLElement) {
 			leftScopes = { ...DEFAULT_SCOPES };
 		}
 		leftFormat = readFacetSelection(leftBody, 'format');
-		leftFolder = readFacetSelection(leftBody, 'folder');
+		leftFolder = readFilePathSelection(leftBody);
+		const lTree = leftBody.querySelector<HTMLElement>('[data-ms-file-tree]');
+		if (lTree) syncFileTreeChecks(lTree);
 		if (leftFormat.has(NONE) || leftFolder.has(NONE)) {
 			lastBaseHits = [];
 			resetRightFromHits([]);
 			renderResults([], q);
-			statusEl.textContent = '· 无匹配';
 			return;
 		}
 		lastBaseHits = service.search({
 			q,
 			scopes: leftScopes,
 			facets: { format: [...leftFormat], folder: [...leftFolder] },
-			limit: 200,
+			// 不人为截断：列表与右侧文件树按完整结果建
+			limit: 10000,
 			fuzzy: matchMode === 'fuzzy',
 			combine: combineMode,
 			strict: matchMode === 'strict',
 			caseSensitive: caseMode === 'sensitive',
 			wholeWord: tokenMode === 'word',
 		});
+		// 先铺右侧文件树（全勾选），再按勾选过滤列表；计数与右侧「文件」同源
 		resetRightFromHits(lastBaseHits);
-		renderResults(prepareDisplayHits(), q);
+		rightFolder = readFilePathSelection(rightBody);
+		renderResults(getFilteredHits(), q);
 	};
 
 	const runRightFilterOnly = () => {
@@ -1013,9 +1327,13 @@ export function mountSearch(mount: HTMLElement) {
 			rightScopes.abstract = scopeDom.abstract;
 		if (rightBody.querySelector('input[data-scope="body"]')) rightScopes.body = scopeDom.body;
 		rightFormat = readFacetSelection(rightBody, 'format');
-		rightFolder = readFacetSelection(rightBody, 'folder');
+		rightFolder = readFilePathSelection(rightBody);
+		const rTree = rightBody.querySelector<HTMLElement>('[data-ms-file-tree]');
+		if (rTree) syncFileTreeChecks(rTree);
+		updateFilesSummary(rightBody);
 		syncIndeterminate(rightBody);
-		renderResults(prepareDisplayHits(), q);
+		// 列表按右筛过滤；标题 (n/m) 与右侧「文件」一致（updateFilesSummary 已 sync）
+		renderResults(getFilteredHits(), q);
 	};
 
 	const scheduleLeft = () => {
@@ -1027,6 +1345,106 @@ export function mountSearch(mount: HTMLElement) {
 	};
 
 	input.addEventListener('input', () => scheduleLeft());
+
+	const syncMsTreeAccordionBtn = (side: Side) => {
+		const btn = root.querySelector<HTMLButtonElement>(
+			`[data-ms-tree-accordion="${side}"]`,
+		);
+		if (!btn) return;
+		const on = getMsTreeAccordion(side);
+		const label = on ? '单开' : '多开';
+		btn.dataset.on = on ? '1' : '0';
+		btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+		btn.classList.toggle('is-on', on);
+		const labelEl = btn.querySelector('.ms-tree-accordion-btn__label');
+		if (labelEl) labelEl.textContent = label;
+		else btn.textContent = label;
+		if (on) {
+			btn.title = '单开：同层只展开一个文件夹（点击切换为多开）';
+			btn.setAttribute('aria-label', '文件夹展开：单开');
+		} else {
+			btn.title = '多开：可同时展开多个文件夹（点击切换为单开）';
+			btn.setAttribute('aria-label', '文件夹展开：多开');
+		}
+	};
+
+	/** 关闭某一文件夹节点（隐藏 children + 更新 twist） */
+	const closeMsFolderNode = (node: Element) => {
+		const kids = node.querySelector(
+			':scope > .ms-folder-children',
+		) as HTMLElement | null;
+		const twist = node.querySelector(
+			':scope > .ms-folder-row [data-folder-twist]',
+		) as HTMLButtonElement | null;
+		if (kids) kids.setAttribute('hidden', '');
+		if (twist) {
+			twist.setAttribute('aria-expanded', 'false');
+			twist.classList.remove('is-open');
+		}
+		node.classList.remove('is-open');
+	};
+
+	/** 单开：同父层其它已展开的文件夹收起（按侧栏独立） */
+	const enforceMsTreeAccordion = (side: Side, openedNode: Element) => {
+		if (!getMsTreeAccordion(side)) return;
+		const parent = openedNode.parentElement;
+		if (!parent) return;
+		for (const sib of parent.children) {
+			if (sib === openedNode) continue;
+			if (
+				sib instanceof HTMLElement &&
+				sib.classList.contains('ms-folder-node') &&
+				sib.dataset.kind === 'dir' &&
+				sib.classList.contains('is-open')
+			) {
+				closeMsFolderNode(sib);
+			}
+		}
+	};
+
+	/** 切到单开时：该侧文件树每层只保留第一个已展开目录 */
+	const collapseMsTreeToAccordion = (side: Side) => {
+		if (!getMsTreeAccordion(side)) return;
+		const panel = side === 'left' ? leftBody : rightBody;
+		panel.querySelectorAll<HTMLElement>('[data-ms-file-tree]').forEach((tree) => {
+			const walkLevel = (container: Element) => {
+				const openDirs = [...container.children].filter(
+					(el): el is HTMLElement =>
+						el instanceof HTMLElement &&
+						el.classList.contains('ms-folder-node') &&
+						el.dataset.kind === 'dir' &&
+						el.classList.contains('is-open'),
+				);
+				if (openDirs.length > 1) {
+					for (let i = 1; i < openDirs.length; i++) {
+						closeMsFolderNode(openDirs[i]!);
+					}
+				}
+				for (const child of container.children) {
+					if (!(child instanceof HTMLElement)) continue;
+					const kids = child.querySelector(':scope > .ms-folder-children');
+					if (kids) walkLevel(kids);
+				}
+			};
+			walkLevel(tree);
+		});
+	};
+
+	const bindMsTreeAccordionBtn = (side: Side) => {
+		syncMsTreeAccordionBtn(side);
+		root
+			.querySelector(`[data-ms-tree-accordion="${side}"]`)
+			?.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const next = !getMsTreeAccordion(side);
+				setMsTreeAccordion(side, next);
+				syncMsTreeAccordionBtn(side);
+				if (next) collapseMsTreeToAccordion(side);
+			});
+	};
+	bindMsTreeAccordionBtn('left');
+	bindMsTreeAccordionBtn('right');
 
 	const bindPanel = (panel: HTMLElement, side: Side) => {
 		panel.addEventListener('click', (e) => {
@@ -1042,8 +1460,11 @@ export function mountSearch(mount: HTMLElement) {
 				) as HTMLElement | null;
 				if (!node || !kids) return;
 				const open = kids.hasAttribute('hidden');
-				if (open) kids.removeAttribute('hidden');
-				else kids.setAttribute('hidden', '');
+				if (open) {
+					kids.removeAttribute('hidden');
+					// 本侧单开：同层其它夹收起
+					enforceMsTreeAccordion(side, node);
+				} else kids.setAttribute('hidden', '');
 				twist.setAttribute('aria-expanded', open ? 'true' : 'false');
 				twist.classList.toggle('is-open', open);
 				// 节点与文件夹图标同步开合态
@@ -1069,11 +1490,35 @@ export function mountSearch(mount: HTMLElement) {
 				const block = t.closest('.ms-filter-block');
 				const on = t.checked;
 				block
-					?.querySelectorAll<HTMLInputElement>('input[data-scope], input[data-facet]')
+					?.querySelectorAll<HTMLInputElement>(
+						'input[data-scope], input[data-facet]',
+					)
 					.forEach((box) => {
 						box.checked = on;
+						box.indeterminate = false;
 					});
 				t.indeterminate = false;
+				const tree = block?.querySelector<HTMLElement>('[data-ms-file-tree]');
+				if (tree) syncFileTreeChecks(tree);
+			} else if (t.matches('input[data-facet="folder"]')) {
+				// 文件夹勾选：递归子文件 + 子文件夹
+				const node = t.closest('.ms-folder-node[data-kind="dir"]');
+				const on = t.checked;
+				t.indeterminate = false;
+				node
+					?.querySelectorAll<HTMLInputElement>(
+						'input[data-facet="file"], input[data-facet="folder"]',
+					)
+					.forEach((box) => {
+						box.checked = on;
+						box.indeterminate = false;
+					});
+				const tree = t.closest('[data-ms-file-tree]') as HTMLElement | null;
+				if (tree) syncFileTreeChecks(tree);
+			} else if (t.matches('input[data-facet="file"]')) {
+				// 单文件：向上同步文件夹 indeterminate
+				const tree = t.closest('[data-ms-file-tree]') as HTMLElement | null;
+				if (tree) syncFileTreeChecks(tree);
 			} else if (!t.matches('input[data-scope], input[data-facet]')) {
 				return;
 			}
@@ -1118,8 +1563,8 @@ export function mountSearch(mount: HTMLElement) {
 		e.stopPropagation();
 		filesOnly = !filesOnly;
 		syncFilesOnlyBtn();
-		if (!input.value.trim()) return;
-		renderResults(prepareDisplayHits(), input.value.trim());
+		if (!input.value.trim() || !lastBaseHits.length) return;
+		renderResults(getFilteredHits(), input.value.trim());
 	});
 	matchModeSeg.addEventListener('click', (e) => {
 		e.preventDefault();
@@ -1188,10 +1633,11 @@ export function mountSearch(mount: HTMLElement) {
 		pathSort = pathSort === 'asc' ? 'desc' : 'asc';
 		syncPathSortBtn();
 		if (!input.value.trim() || !lastBaseHits.length) return;
-		renderResults(prepareDisplayHits(), input.value.trim());
+		renderResults(getFilteredHits(), input.value.trim());
 	});
 
-	statusEl.textContent = '· 加载中…';
+	statusEl.textContent = '';
+	statusEl.title = '索引加载中…';
 	service
 		.load('/search-index.json')
 		.then(() => {
@@ -1202,6 +1648,7 @@ export function mountSearch(mount: HTMLElement) {
 		})
 		.catch((err) => {
 			console.error('[search]', err);
-			statusEl.textContent = '· 索引不可用';
+			statusEl.textContent = '';
+			statusEl.title = '索引不可用';
 		});
 }

@@ -2923,6 +2923,53 @@ function renderKatexBlocks() {
 }
 
 let tocSpyAbort: AbortController | null = null;
+/** 点击大纲后短时锁定选中，避免短文几乎不滚时 spy 又盖成最后一节 */
+let tocClickLockUntil = 0;
+let tocClickLockId = '';
+
+/** 大纲 a[href] → 标题 id（兼容编码与裸 #） */
+function tocLinkId(href: string | null | undefined): string {
+	if (!href) return '';
+	let s = href.trim();
+	// 完整 URL 时只取 hash
+	const hashIdx = s.indexOf('#');
+	if (hashIdx >= 0) s = s.slice(hashIdx + 1);
+	else if (s.startsWith('#')) s = s.slice(1);
+	if (!s) return '';
+	try {
+		return decodeURIComponent(s);
+	} catch {
+		return s;
+	}
+}
+
+function collectTocLinks(): HTMLAnchorElement[] {
+	const toc = document.getElementById('doc-toc');
+	const list: HTMLAnchorElement[] = [];
+	if (toc) list.push(...toc.querySelectorAll<HTMLAnchorElement>('a[href]'));
+	list.push(
+		...document.querySelectorAll<HTMLAnchorElement>('.inline-toc__nav a[href]'),
+	);
+	return list;
+}
+
+/** 按标题 id 设置大纲选中（点击跳转后立刻反馈） */
+function setTocActiveById(id: string): void {
+	const want = (id || '').trim();
+	if (!want) return;
+	const links = collectTocLinks();
+	if (!links.length) return;
+	let matched = false;
+	for (const l of links) {
+		const on = tocLinkId(l.getAttribute('href')) === want;
+		l.classList.toggle('is-active', on);
+		if (on) matched = true;
+	}
+	// 未匹配到时不强行清空，交给 spy
+	if (!matched && links[0]) {
+		/* keep */
+	}
+}
 
 function bindTocSpy() {
 	tocSpyAbort?.abort();
@@ -2932,29 +2979,55 @@ function bindTocSpy() {
 	const toc = document.getElementById('doc-toc');
 	const scrollEl =
 		document.querySelector<HTMLElement>('[data-wiki-scroll]') ||
+		document.querySelector<HTMLElement>('.center-scroll') ||
 		document.querySelector<HTMLElement>('[data-wiki-main]');
 	const content = document.getElementById('content');
 	if (!toc || !scrollEl || !content) return;
-	const heads = content.querySelectorAll('h1, h2, h3, h4, h5, h6');
+	const heads = [
+		...content.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'),
+	].filter((h) => h.id);
 	if (!heads.length) return;
 
+	/**
+	 * 滚动 spy：取「中栏顶部附近」最后经过的标题。
+	 * 用相对 scroll 容器的坐标；href 与 id 比较时 decode（中文/全角）。
+	 * 点击锁定期内不覆盖用户刚点的项（短文几乎不滚时否则会一直亮最后一节）。
+	 */
 	const mark = () => {
-		const links = [
-			...toc.querySelectorAll('a'),
-			...document.querySelectorAll('.inline-toc__nav a'),
-		];
-		let current: Element | undefined = links[0];
+		const links = collectTocLinks();
+		if (!links.length) return;
+		if (Date.now() < tocClickLockUntil && tocClickLockId) {
+			setTocActiveById(tocClickLockId);
+			return;
+		}
+		const pr = scrollEl.getBoundingClientRect();
+		// 路径栏下方一点：标题越过此线即视为当前节
+		const line = pr.top + 56;
+		let currentId = heads[0]?.id || '';
 		for (const h of heads) {
-			if (h.getBoundingClientRect().top <= 120) {
-				const hit = links.find((l) => l.getAttribute('href') === `#${h.id}`);
-				if (hit) current = hit;
+			const top = h.getBoundingClientRect().top;
+			if (top <= line) currentId = h.id;
+			else break; // heads 为文档序，后面的更靠下
+		}
+		// 若第一个标题都在线下方（页顶），仍高亮第一节
+		if (heads[0] && heads[0].getBoundingClientRect().top > line) {
+			currentId = heads[0].id;
+		}
+		let current: Element | undefined;
+		for (const l of links) {
+			if (tocLinkId(l.getAttribute('href')) === currentId) {
+				current = l;
+				break;
 			}
 		}
+		if (!current) current = links[0];
 		links.forEach((l) => l.classList.toggle('is-active', l === current));
 	};
 
 	scrollEl.addEventListener('scroll', mark, { passive: true, signal });
-	mark();
+	// 布局变化后再算一次
+	requestAnimationFrame(mark);
+	window.setTimeout(mark, 50);
 
 	document.querySelectorAll('.inline-toc__nav a').forEach((a) => {
 		a.addEventListener(
@@ -3459,7 +3532,9 @@ function bindSmoothAnchors() {
 		if (!a) return;
 		// 软导航进行中忽略锚点，避免与换页抢 scroll
 		if (softNavBusy) return;
-		const id = decodeURIComponent(a.getAttribute('href') || '').slice(1);
+		// 文件夹树定位链不走大纲逻辑
+		if (a.getAttribute('href')?.startsWith('#tree-dir=')) return;
+		const id = tocLinkId(a.getAttribute('href'));
 		if (!id) return;
 		const el = document.getElementById(id);
 		if (!el) return;
@@ -3473,7 +3548,24 @@ function bindSmoothAnchors() {
 		 * 宽屏也统一 auto，避免同类竞态；观感几乎无差。
 		 */
 		scrollElWithinPane(el, pane, { behavior: 'auto', offset: 12 });
-		history.replaceState(null, '', `#${id}`);
+		// 大纲点击：立刻切换选中 + 短时锁定（防 spy 盖掉）
+		if (
+			a.closest('#doc-toc') ||
+			a.closest('.inline-toc') ||
+			a.closest('.doc-toc')
+		) {
+			tocClickLockId = id;
+			tocClickLockUntil = Date.now() + 600;
+			setTocActiveById(id);
+			// 滚动后再钉一次（forcePaneScrollTop 可能触发 scroll → spy）
+			requestAnimationFrame(() => setTocActiveById(id));
+		}
+		// hash 编码更稳妥（中文 id）
+		try {
+			history.replaceState(null, '', `#${encodeURIComponent(id)}`);
+		} catch {
+			history.replaceState(null, '', `#${id}`);
+		}
 	});
 }
 

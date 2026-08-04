@@ -568,13 +568,14 @@ html[data-theme='dark'] .theme-toggle__icon--moon {
 	padding: 0;
 	border: none;
 	border-radius: 0 0 0.65rem 0.65rem; /* 贴顶：只保留底圆角 */
-	width: min(96rem, calc(100vw - 3rem));
-	max-width: calc(100vw - 3rem);
-	/* 从视口顶向下占高，底边略留白 */
-	height: min(56rem, calc(100vh - 1rem));
-	max-height: calc(100vh - 1rem);
-	height: min(56rem, calc(100dvh - 1rem));
-	max-height: calc(100dvh - 1rem);
+	/* 宽屏再加宽：贴边更近 + 上限抬高（窄屏全屏规则不变） */
+	width: min(120rem, calc(100vw - 0.75rem));
+	max-width: calc(100vw - 0.75rem);
+	/* 从视口顶向下占高 */
+	height: min(58rem, calc(100vh - 1.75rem));
+	max-height: calc(100vh - 1.75rem);
+	height: min(58rem, calc(100dvh - 1.75rem));
+	max-height: calc(100dvh - 1.75rem);
 	margin: 0 auto;
 	background: var(--bg);
 	color: var(--fg);
@@ -942,6 +943,10 @@ html[data-theme='dark'] .webmd-ms-search .ms-caption-btn {
 	.webmd-ms-search .search-body.has-drawer-open .ms-drawer-backdrop:not([hidden]) {
 		display: block;
 	}
+	/* 窄屏抽屉：不显示 gutter（拖宽仅宽屏） */
+	.webmd-ms-search .ms-gutter {
+		display: none !important;
+	}
 	.webmd-ms-search .ms-panel--left:not([hidden]),
 	.webmd-ms-search .ms-panel--right:not([hidden]) {
 		display: flex !important;
@@ -993,9 +998,10 @@ html[data-theme='dark'] .webmd-ms-search .ms-caption-btn {
 	.webmd-ms-search .ms-status-inline {
 		flex: 0 1 auto;
 		min-width: 0;
-		max-width: 6.5rem;
+		max-width: 8rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		font-variant-numeric: tabular-nums;
 	}
 	.webmd-ms-search .ms-panel-label--center .ms-panel-label-start {
 		min-width: 0;
@@ -1224,21 +1230,28 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	background: color-mix(in srgb, var(--accent) 18%, var(--bg));
 	color: var(--accent-hover, var(--accent));
 }
-/* 三栏线分割（对齐主站 nav | 正文 | toc），可收起左右 */
+/* 三栏 + 可拖分割（对齐主站 nav | gutter | 正文 | gutter | toc） */
 .webmd-ms-search {
-	--ms-side-w: minmax(12rem, 15rem);
+	/* 由 JS 写成 px（localStorage）；默认约 15rem */
+	--ms-left-w: 15rem;
+	--ms-right-w: 15rem;
+	--ms-gutter-w: 1px;
 	--ms-rail-w: 2rem;
+	/* 兼容旧变量：收起态等仍可能引用 */
+	--ms-side-w: var(--ms-left-w);
 	/* 三栏标题行统一高度（展开标题栏 = 收起条顶栏） */
 	--ms-panel-label-h: 2.5rem;
 }
 .webmd-ms-search .search-body {
 	display: grid;
 	/*
-	 * 三列固定：左筛选 | 结果 | 右筛选。
+	 * 五列：左筛选 | 左 g | 结果 | 右 g | 右筛选。
 	 * 子项必须写死 grid-column，否则侧栏 display:none 后
 	 * 中间栏会 auto-place 进第 1 列（宽为 0）→ 三栏「全没了」。
 	 */
-	grid-template-columns: var(--ms-side-w) minmax(0, 1fr) var(--ms-side-w);
+	grid-template-columns:
+		var(--ms-left-w) var(--ms-gutter-w) minmax(0, 1fr) var(--ms-gutter-w)
+		var(--ms-right-w);
 	grid-template-rows: minmax(0, 1fr);
 	gap: 0;
 	align-items: stretch;
@@ -1249,6 +1262,46 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	border-radius: 0.5rem;
 	background: var(--bg);
 	box-sizing: border-box;
+}
+/* 搜索侧栏拖拽条：1px 线 + 伪元素热区（同 .wiki-gutter） */
+.webmd-ms-search .ms-gutter {
+	grid-row: 1;
+	cursor: col-resize;
+	touch-action: none;
+	background: var(--border);
+	position: relative;
+	z-index: 4;
+	min-width: 0;
+	align-self: stretch;
+}
+.webmd-ms-search .ms-gutter--left {
+	grid-column: 2;
+}
+.webmd-ms-search .ms-gutter--right {
+	grid-column: 4;
+}
+.webmd-ms-search .ms-gutter::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 50%;
+	width: 9px;
+	transform: translateX(-50%);
+	cursor: col-resize;
+}
+.webmd-ms-search .ms-gutter:hover,
+.webmd-ms-search .ms-gutter:active,
+.webmd-ms-search .ms-gutter.is-dragging,
+body.is-col-resizing .webmd-ms-search .ms-gutter.is-dragging {
+	background: var(--accent);
+}
+.webmd-ms-search .ms-gutter:hover::after,
+.webmd-ms-search .ms-gutter.is-dragging::after {
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.webmd-ms-search .ms-gutter[hidden] {
+	display: none !important;
 }
 .webmd-ms-search .ms-panel.is-collapsed,
 .webmd-ms-search .ms-panel[hidden] {
@@ -1286,11 +1339,14 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 .webmd-ms-search .ms-panel--left {
 	grid-column: 1;
 	grid-row: 1;
-	border-inline-end: 1px solid var(--border);
+	/* 分割线由 .ms-gutter 承担，勿再 border 叠双线 */
+	border-inline-end: none;
 	background: var(--bg-sidebar, var(--bg-muted));
+	min-width: 0;
+	overflow: hidden;
 }
 .webmd-ms-search .ms-panel--center {
-	grid-column: 2;
+	grid-column: 3;
 	grid-row: 1;
 	background: var(--bg);
 	display: grid;
@@ -1298,10 +1354,12 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	min-width: 0;
 }
 .webmd-ms-search .ms-panel--right {
-	grid-column: 3;
+	grid-column: 5;
 	grid-row: 1;
-	border-inline-start: 1px solid var(--border);
+	border-inline-start: none;
 	background: var(--bg-sidebar, var(--bg-muted));
+	min-width: 0;
+	overflow: hidden;
 }
 /* 双侧都收起：只剩一列，中间栏占满 */
 .webmd-ms-search .search-body.is-left-collapsed.is-right-collapsed {
@@ -1310,25 +1368,40 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 .webmd-ms-search .search-body.is-left-collapsed.is-right-collapsed .ms-panel--center {
 	grid-column: 1;
 }
-/* 仅收左：中=1 右=2（列定义已是 0 | 1fr | side）— 仍用 2/3 会错位，改为按可见列 */
+.webmd-ms-search .search-body.is-left-collapsed.is-right-collapsed .ms-gutter {
+	display: none !important;
+}
+/* 仅收左：中 | g | 右 */
 .webmd-ms-search .search-body.is-left-collapsed:not(.is-right-collapsed) {
-	grid-template-columns: minmax(0, 1fr) var(--ms-side-w);
+	grid-template-columns: minmax(0, 1fr) var(--ms-gutter-w) var(--ms-right-w);
 }
 .webmd-ms-search .search-body.is-left-collapsed:not(.is-right-collapsed) .ms-panel--center {
 	grid-column: 1;
 }
-.webmd-ms-search .search-body.is-left-collapsed:not(.is-right-collapsed) .ms-panel--right {
+.webmd-ms-search .search-body.is-left-collapsed:not(.is-right-collapsed) .ms-gutter--left {
+	display: none !important;
+}
+.webmd-ms-search .search-body.is-left-collapsed:not(.is-right-collapsed) .ms-gutter--right {
 	grid-column: 2;
 }
-/* 仅收右：左=1 中=2 */
+.webmd-ms-search .search-body.is-left-collapsed:not(.is-right-collapsed) .ms-panel--right {
+	grid-column: 3;
+}
+/* 仅收右：左 | g | 中 */
 .webmd-ms-search .search-body.is-right-collapsed:not(.is-left-collapsed) {
-	grid-template-columns: var(--ms-side-w) minmax(0, 1fr);
+	grid-template-columns: var(--ms-left-w) var(--ms-gutter-w) minmax(0, 1fr);
 }
 .webmd-ms-search .search-body.is-right-collapsed:not(.is-left-collapsed) .ms-panel--left {
 	grid-column: 1;
 }
-.webmd-ms-search .search-body.is-right-collapsed:not(.is-left-collapsed) .ms-panel--center {
+.webmd-ms-search .search-body.is-right-collapsed:not(.is-left-collapsed) .ms-gutter--left {
 	grid-column: 2;
+}
+.webmd-ms-search .search-body.is-right-collapsed:not(.is-left-collapsed) .ms-gutter--right {
+	display: none !important;
+}
+.webmd-ms-search .search-body.is-right-collapsed:not(.is-left-collapsed) .ms-panel--center {
+	grid-column: 3;
 }
 /* 收起后：在「搜索结果」标题栏两侧展开，无全高竖条 */
 .webmd-ms-search .ms-pane-expand {
@@ -1382,7 +1455,8 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 }
 .webmd-ms-search .ms-panel-body {
 	min-height: 0;
-	overflow-x: hidden;
+	/* 文件树可左右滑看长名/深层结构 */
+	overflow-x: auto;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	padding: 0.45rem 0.65rem 0.6rem;
@@ -1468,6 +1542,8 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	text-transform: none;
 	color: var(--fg-muted);
 	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+	margin-inline-start: 0.2rem;
 }
 .webmd-ms-search .ms-center-tools {
 	display: inline-flex;
@@ -1482,6 +1558,12 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	padding: 0 0.28rem;
 	font-size: 0.72rem;
 	margin: 0;
+}
+/* 搜索筛选：文件树单开/多开（重置右侧） */
+.webmd-ms-search .ms-tree-accordion-btn.is-on {
+	color: var(--accent);
+	border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+	background: color-mix(in srgb, var(--accent) 10%, var(--bg));
 }
 .webmd-ms-search .ms-panel-label-end .ms-icon-btn {
 	width: 1.45rem !important;
@@ -1544,12 +1626,23 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	cursor: pointer;
 }
 .webmd-ms-search .ms-filter-title {
-	flex: 1;
 	font-weight: 700;
 	font-size: 0.9rem;
 	color: var(--fg);
 	text-transform: none;
 	letter-spacing: 0;
+}
+/* 「文件」标题后：已勾选/全部（折叠时也可见） */
+.webmd-ms-search .ms-files-summary {
+	flex: 0 0 auto;
+	margin-inline-start: 0.25rem;
+	font-weight: 600;
+	font-size: 0.78rem;
+	color: var(--fg-muted);
+	font-variant-numeric: tabular-nums;
+}
+.webmd-ms-search .ms-filter-collapse .ms-chevron {
+	margin-inline-start: auto;
 }
 .webmd-ms-search .ms-chevron {
 	width: 0.45rem;
@@ -1597,22 +1690,31 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 	width: 0.9rem;
 	height: 0.9rem;
 }
-/* 搜索文件夹树：与左侧导航同系图标，但可勾选 + 数量 */
+/* 搜索文件夹树：与左侧导航同系图标，但可勾选 + 数量；可横向滚动 */
 .webmd-ms-search .ms-folder-tree {
 	display: flex;
 	flex-direction: column;
 	gap: 0.1rem;
+	min-width: max-content;
+	width: 100%;
+	box-sizing: border-box;
+}
+.webmd-ms-search .ms-folder-node {
+	min-width: max-content;
 }
 .webmd-ms-search .ms-folder-row {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: 0.2rem;
 	padding-inline-start: calc(var(--ms-folder-depth, 0) * 0.85rem);
+	min-width: max-content;
+	width: max-content;
+	box-sizing: border-box;
 }
 .webmd-ms-search .ms-folder-row .ms-filter-value {
-	flex: 1 1 auto;
-	min-width: 0;
+	flex: 0 1 auto;
+	min-width: max-content;
 }
 /* 搜索目录树：文件夹图标复用 .tree-icon--folder（与左侧导航同一套） */
 .webmd-ms-search .ms-folder-row .tree-icon {
@@ -1625,13 +1727,19 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 .webmd-ms-search .ms-folder-node.is-open > .ms-folder-row .tree-icon--folder .tree-icon__folder-open {
 	display: block;
 }
-/* 折叠在最右侧：与左侧树 chevron 同系（闭=右指，开=下指） */
+/* 搜索文件树：文件行与目录行同款 */
+.webmd-ms-search .ms-file-node .ms-folder-row .tree-icon--file {
+	flex: 0 0 auto;
+	width: 1.125rem;
+	height: 1.125rem;
+}
+/* 折叠在最左：闭=右指 ▶，开=下指 ▼（与主页树一致） */
 .webmd-ms-search .ms-folder-twist,
 .webmd-ms-search .ms-folder-twist-spacer {
 	flex-shrink: 0;
 	width: 1.15rem;
 	height: 1.15rem;
-	margin: 0 0 0 0.15rem;
+	margin: 0 0.1rem 0 0;
 	padding: 0;
 	border: 0;
 	background: transparent;
@@ -1678,12 +1786,12 @@ html[data-theme='dark'] .webmd-ms-search .ms-seg__opt.is-active {
 .webmd-ms-search .ms-folder-children[hidden] {
 	display: none !important;
 }
-/* 名称 + 数量紧贴（数量不顶到行尾） */
+/* 名称完整显示；过长时由 .ms-panel-body 横向滚动 */
 .webmd-ms-search .ms-filter-label {
-	flex: 0 1 auto;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	flex: 0 0 auto;
+	min-width: max-content;
+	overflow: visible;
+	text-overflow: clip;
 	white-space: nowrap;
 	font-weight: 500;
 	font-size: 0.875rem;
@@ -2426,9 +2534,17 @@ body.is-file-page .markdown-body > .webmd-code > pre {
 .tree-body {
 	flex: 1 1 auto;
 	min-height: 0;
-	overflow: auto;
+	/* 纵 + 横：深层缩进 / 长文件名可左右滑 */
+	overflow-x: auto;
+	overflow-y: auto;
 	overscroll-behavior: contain;
 	padding: 0.4rem 0.55rem 0.85rem;
+}
+/* 内容按最长行撑开，才能触发横向滚动条 */
+.tree-body [data-tree-level],
+.tree-body .tree-children {
+	min-width: max-content;
+	box-sizing: border-box;
 }
 .tree-home {
 	display: flex;
@@ -2497,6 +2613,15 @@ body.is-file-page .markdown-body > .webmd-code > pre {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.tree-home__count {
+	flex: 0 0 auto;
+	margin-inline-start: 0.1rem;
+	font-weight: 600;
+	font-size: 0.78em;
+	color: var(--nav-count, var(--fg-muted));
+	font-variant-numeric: tabular-nums;
+	line-height: 1.2;
 }
 
 .tree-sort-btn,
@@ -4241,9 +4366,11 @@ body.is-sheet-app-page .markdown-body .webmd-code.sheet-block.sheet-app {
 	fill: var(--bg);
 }
 .tree-label {
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	/* 完整显示文件名，横向滚动查看（不省略号截断） */
+	flex: 0 0 auto;
+	min-width: max-content;
+	overflow: visible;
+	text-overflow: clip;
 	white-space: nowrap;
 	font-size: inherit;
 	line-height: inherit;
@@ -4263,15 +4390,16 @@ body.is-sheet-app-page .markdown-body .webmd-code.sheet-block.sheet-app {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.32rem;
-	min-width: 0;
-	flex: 1 1 auto;
+	min-width: max-content;
+	flex: 0 1 auto;
 }
-/* 折叠在右侧 */
+/* 折叠箭头：文件夹行最左 */
 .tree-chevron {
 	flex-shrink: 0;
 	width: 0.9rem;
 	height: 0.9rem;
-	margin-inline-start: 0.1rem;
+	margin-inline-end: 0.12rem;
+	margin-inline-start: 0;
 	position: relative;
 	color: var(--nav-count);
 	opacity: 0.85;
@@ -4300,10 +4428,14 @@ body.is-sheet-app-page .markdown-body .webmd-code.sheet-block.sheet-app {
 	cursor: pointer;
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: 0.2rem;
 	padding: 0.32rem var(--nav-item-px);
 	border-radius: var(--radius-sm);
+	/* 按内容撑开宽度，配合 .tree-body 横向滚动 */
+	width: max-content;
+	min-width: 100%;
+	box-sizing: border-box;
 	/* 文件夹 ≈ 小标题：大一号 + 加粗 */
 	font-weight: 650;
 	font-size: var(--nav-dir-fs);
@@ -4366,7 +4498,9 @@ body.is-sheet-app-page .markdown-body .webmd-code.sheet-block.sheet-app {
 	display: flex;
 	align-items: center;
 	gap: 0.32rem;
-	width: 100%;
+	/* 长文件名撑开行宽 → 父级横向滚动 */
+	width: max-content;
+	min-width: 100%;
 	padding: var(--nav-item-py) var(--nav-item-px);
 	margin: 0.04rem 0 0;
 	border-radius: var(--radius-sm);

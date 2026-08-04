@@ -173,7 +173,8 @@ export function renderTreeHtml(
 				const countTitle = hasSubdirs
 					? '本层文件数 / 含子目录共'
 					: '本层文件数';
-				html += `<details class="tree-dir${pathCls}" data-path="${esc(n.path)}" data-sort-name="${esc(n.name)}" data-kind="dir"${open}><summary class="tree-dir__summary"><span class="tree-dir__main">${iconFolder}<span class="tree-label">${esc(n.name)}</span><span class="tree-count" title="${countTitle}">${countText}</span></span><span class="tree-chevron" aria-hidden="true"></span></summary><div class="tree-children" data-tree-level>`;
+				// 折叠箭头在最左（▶/▼），再是图标 + 名 + 计数
+				html += `<details class="tree-dir${pathCls}" data-path="${esc(n.path)}" data-sort-name="${esc(n.name)}" data-kind="dir"${open}><summary class="tree-dir__summary"><span class="tree-chevron" aria-hidden="true"></span><span class="tree-dir__main">${iconFolder}<span class="tree-label">${esc(n.name)}</span><span class="tree-count" title="${countTitle}">${countText}</span></span></summary><div class="tree-children" data-tree-level>`;
 				html += walk(n.children || []);
 				html += `</div></details>`;
 			} else {
@@ -194,7 +195,10 @@ export function renderTreeHtml(
 
 	/* 「文件」展开态：叠放文档（与收起态单页图标不同） */
 	const homeIcon = `<span class="tree-home__icon" data-pane-state="expanded" aria-hidden="true"><svg class="tree-home__svg tree-home__svg--open" width="22" height="22" viewBox="0 0 24 24" fill="none"><path class="tree-home__sheet tree-home__sheet--back" d="M6 4.5A2 2 0 0 1 8 2.5h6.2c.4 0 .78.16 1.06.44l3.3 3.3c.28.28.44.66.44 1.06V16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4.5Z"/><path class="tree-home__fold" d="M14.5 2.7v3.3c0 .55.45 1 1 1h3.3"/><path class="tree-home__sheet tree-home__sheet--front" d="M4 7.5A2 2 0 0 1 6 5.5h.8V17c0 1.38 1.12 2.5 2.5 2.5H17c.55 0 1 .45 1 1s-.45 1-1 1H9.3A4.3 4.3 0 0 1 5 17.2V7.5Z"/><path class="tree-home__lines" d="M9.2 11h6.6M9.2 14h5.2" stroke-linecap="round"/></svg></span>`;
-	const home = `<div class="tree-home" title="文件" aria-label="文件">${homeIcon}<span class="tree-home__label">文件</span></div>`;
+	// 标题后显示全站可导航文件总数（与树内各夹计数口径一致）
+	let treeFileTotal = 0;
+	for (const n of nodes) treeFileTotal += countFiles(n);
+	const home = `<div class="tree-home" title="文件（共 ${treeFileTotal} 个）" aria-label="文件，共 ${treeFileTotal} 个">${homeIcon}<span class="tree-home__label">文件</span><span class="tree-home__count" title="可导航文件总数">(${treeFileTotal})</span></div>`;
 	const sortBtn = `<button type="button" class="tree-sort-btn" data-tree-sort data-order="${sortOrder}" title="${sortOrder === 'asc' ? '文件名升序（点击切换降序）' : '文件名降序（点击切换升序）'}" aria-label="文件树排序：${sortOrder === 'asc' ? '升序' : '降序'}">
 		<span class="tree-sort-btn__label">名序</span>
 		<svg class="tree-sort-btn__arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v10"/><path d="M4.5 6.5 8 3l3.5 3.5"/></svg>

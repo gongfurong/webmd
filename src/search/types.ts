@@ -218,20 +218,33 @@ export function folderAncestors(folder: string): string[] {
 }
 
 /**
- * 勾选的目录是否匹配该文档：
- * 取文档目录链路（根→自身）中**最深一级**必须在勾选集合里。
- * 这样取消 notes/daily 后，即使勾了 notes，也不会命中 daily 下文件。
- * selected 为空 = 全选（不过滤）。
+ * 勾选的**文件 path**是否包含该文档（content 相对路径）。
+ * selected 为空 = 全选；含特殊哨兵由 UI 侧读勾选时处理。
+ * 注意：不再按「目录键」匹配——取消父夹时会递归取消子文件勾选，筛选只看文件 path。
  */
 export function folderMatchesSelection(
 	docFolder: string,
 	selected: Iterable<string>,
 ): boolean {
+	// 兼容旧调用：仅当 selected 是目录键集合时用文档 folder
 	const set = selected instanceof Set ? selected : new Set(selected);
 	if (!set.size) return true;
 	const folder = docFolder || '根目录';
-	// 文档自身目录必须被勾选（不再用父目录「吞掉」子目录）
 	return set.has(folder);
+}
+
+/**
+ * 文件 path 是否在勾选集合中（搜索主过滤）。
+ * selected 为空 = 全选；否则须含 docPath。
+ */
+export function filePathMatchesSelection(
+	docPath: string,
+	selected: Iterable<string>,
+): boolean {
+	const set = selected instanceof Set ? selected : new Set(selected);
+	if (!set.size) return true;
+	const path = String(docPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+	return set.has(path);
 }
 
 /** 目录分面排序：根目录优先，再按路径 */
@@ -263,6 +276,19 @@ export type FolderTreeNode = {
 	/** 递归总数（本目录 + 子树；有子文件夹时展示 当前/总数） */
 	total: number;
 	children: FolderTreeNode[];
+};
+
+/** 搜索侧栏：文件+文件夹树节点 */
+export type SearchTreeNode = {
+	kind: 'dir' | 'file';
+	/** 目录：content 相对目录；文件：content 相对 path（含扩展名） */
+	path: string;
+	label: string;
+	/** 目录：本层直属文件数；文件：1 */
+	count: number;
+	/** 目录：递归可搜索文件数；文件：1 */
+	total: number;
+	children: SearchTreeNode[];
 };
 
 /** 将扁平目录分面建成树（path 为完整目录键；count 为直属文件数） */
@@ -305,4 +331,122 @@ export function buildFolderTree(
 	};
 	for (const r of roots) fillTotal(r);
 	return roots;
+}
+
+function sortSearchTreeKids(kids: SearchTreeNode[]): void {
+	// 与主导航默认一致：文件在上，再名序
+	kids.sort((a, b) => {
+		const ra = a.kind === 'file' ? 0 : 1;
+		const rb = b.kind === 'file' ? 0 : 1;
+		if (ra !== rb) return ra - rb;
+		return a.label.localeCompare(b.label, 'zh-CN', {
+			numeric: true,
+			sensitivity: 'base',
+		});
+	});
+	for (const k of kids) {
+		if (k.kind === 'dir') sortSearchTreeKids(k.children);
+	}
+}
+
+/**
+ * 从可搜索文档列表建「文件+文件夹」树。
+ * - 仅含索引内文件；空目录（递归文件数 0）不出现
+ * - 根下文件挂在「根目录」节点下（若有）
+ */
+export function buildSearchFileTree(
+	docs: { path: string; file?: string }[],
+): SearchTreeNode[] {
+	const dirMap = new Map<string, SearchTreeNode>();
+	const ensureDir = (dirPath: string): SearchTreeNode => {
+		const key = dirPath || '根目录';
+		let n = dirMap.get(key);
+		if (n) return n;
+		const label =
+			key === '根目录'
+				? '根目录'
+				: key.split('/').filter(Boolean).pop() || key;
+		n = {
+			kind: 'dir',
+			path: key,
+			label,
+			count: 0,
+			total: 0,
+			children: [],
+		};
+		dirMap.set(key, n);
+		return n;
+	};
+
+	// 先保证根
+	ensureDir('根目录');
+
+	for (const d of docs) {
+		const path = String(d.path || '')
+			.replace(/\\/g, '/')
+			.replace(/^\/+/, '');
+		if (!path) continue;
+		const parts = path.split('/').filter(Boolean);
+		if (!parts.length) continue;
+		const fileName = parts[parts.length - 1]!;
+		// 建祖先目录
+		let parentKey = '根目录';
+		for (let i = 0; i < parts.length - 1; i++) {
+			const dirKey = parts.slice(0, i + 1).join('/');
+			const parent = ensureDir(parentKey);
+			const child = ensureDir(dirKey);
+			if (!parent.children.some((c) => c.kind === 'dir' && c.path === dirKey)) {
+				parent.children.push(child);
+			}
+			parentKey = dirKey;
+		}
+		const parent = ensureDir(parentKey);
+		// 避免重复 path
+		if (parent.children.some((c) => c.kind === 'file' && c.path === path)) {
+			continue;
+		}
+		parent.children.push({
+			kind: 'file',
+			path,
+			label: d.file || fileName,
+			count: 1,
+			total: 1,
+			children: [],
+		});
+		parent.count += 1;
+	}
+
+	// 自底向上 total；剪掉 total===0 的空目录
+	const fillAndPrune = (node: SearchTreeNode): number => {
+		if (node.kind === 'file') {
+			node.total = 1;
+			return 1;
+		}
+		const kept: SearchTreeNode[] = [];
+		let sum = 0;
+		let direct = 0;
+		for (const c of node.children) {
+			const t = fillAndPrune(c);
+			if (c.kind === 'file') {
+				kept.push(c);
+				direct += 1;
+				sum += t;
+			} else if (t > 0) {
+				kept.push(c);
+				sum += t;
+			}
+		}
+		node.children = kept;
+		node.count = direct;
+		node.total = sum;
+		return sum;
+	};
+
+	const root = dirMap.get('根目录')!;
+	fillAndPrune(root);
+	sortSearchTreeKids(root.children);
+
+	// 不展示「根目录」节点：直接列出根下文件与一级文件夹
+	if (root.total === 0) return [];
+	return root.children;
 }
