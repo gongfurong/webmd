@@ -41,13 +41,15 @@
 
 ## 3. 模型从哪里来？（站内 vs 远程）
 
-### 3.1 推荐：站内同源（当前主路径）
+### 3.1 站内同源（默认、仓库内自带）
 
-1. 构建机执行 `npm run vector-models`，把权重放到 **`public/models/...`**。  
-2. 发布时随静态资源上线（Pages / R2 / 同源 CDN）。  
-3. 浏览器优先探测  
-   `GET /models/Xenova/multilingual-e5-small/config.json`  
-   成功则 **只从本站** 拉 onnx/tokenizer（**不访问 Hugging Face**）。
+1. **`public/models/` 纳入 Git**（大文件 `*.onnx` 用 **Git LFS**）；`npm run build` 前会 `ensure-vector-assets`（缺则自动下载）。  
+2. 构建把模型拷到 **`dist/models/`**，Cloudflare 部署后手机从  
+   `https://你的站/models/Xenova/multilingual-e5-small/...`  
+   **同源加载**（优先不走 Hugging Face）。  
+3. 浏览器探测 `GET /models/.../config.json` 成功 → Console：`model source: same-origin /models/`。  
+
+**注意 Cloudflare Pages 单文件体积上限**（免费档常见 **25MB**）：e5-small 量化 onnx 约 **113MB**，可能无法直接放 Pages 免费静态托管。若部署报文件过大，请：用 **R2 + 自定义域名/Workers 反代 `/models/*`**，或升级套餐后确认平台单文件限制。本地与「产物里带 models」的意图不变。
 
 ### 3.2 回退：远程（仅同源不可用时）
 

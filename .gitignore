@@ -34,9 +34,6 @@ public/tree.json
 **/*~$*
 
 
-# local vector index (npm run vector-index / build)
-public/vector-index.json
-
-# browser embedding models (npm run vector-models)
-public/models/
+# 向量索引与模型权重：提交进仓库，Cloudflare 部署后同源 /models + /vector-index.json
+# （大文件 onnx 走 Git LFS，见 .gitattributes）
 

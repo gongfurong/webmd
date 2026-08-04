@@ -14,7 +14,9 @@
 | Node | **`22.22.2`**（`NODE_VERSION` + `.nvmrc`） |
 
 构建机通常**无** LibreOffice / ffmpeg → Word/PPT 预览与视频封面依赖仓库已有 `_Res_*`。  
-向量：构建会跑 `vector-index`（可 `WEBMD_VECTOR_SKIP=1`）；**模型文件**若未提交 `public/models`，CI 需执行 **`npm run vector-models`**，否则访客只能回退 HF/镜像（易失败）。
+向量：**`public/models` 与 `vector-index.json` 进仓库**（onnx 走 Git LFS）。`npm run build` 会 `ensure-vector-assets` 并写入 `dist/models/`。克隆后若 LFS 未拉全，执行 `git lfs pull` 或 `npm run vector-models`。  
+
+**Cloudflare Pages 单文件限制**：量化 onnx ≈113MB，免费档常 **25MB/文件** 会拒收。若 deploy 失败，将 `/models` 放到 **R2** 并用 Worker/路由同源提供，或确认套餐文件上限。
 
 ### 1.1 缓存：控制台要不要再设？
 

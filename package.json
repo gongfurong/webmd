@@ -9,10 +9,11 @@
   },
   "scripts": {
     "dev": "tsx scripts/ensure-port.ts && vite",
-    "build": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build && tsx scripts/build-site.ts",
+    "build": "tsx scripts/ensure-vector-assets.ts && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && vite build && tsx scripts/build-site.ts",
     "search-index": "tsx -e \"import {buildSearchIndex} from './scripts/lib/search-index.ts';import fs from 'fs';import path from 'path';const c=path.join(process.cwd(),'content');const i=buildSearchIndex(c);fs.mkdirSync('public',{recursive:true});fs.writeFileSync('public/search-index.json',JSON.stringify(i));console.log('[search-index]',i.docs.length,'docs');\"",
     "vector-index": "tsx scripts/build-vector-index.ts",
     "vector-models": "tsx scripts/download-vector-models.ts",
+    "vector-assets": "tsx scripts/ensure-vector-assets.ts",
     "preview": "tsx scripts/ensure-port.ts && vite preview",
     "scan": "tsx scripts/scan-content.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"

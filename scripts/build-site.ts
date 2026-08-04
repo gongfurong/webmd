@@ -103,6 +103,18 @@ async function main() {
 		`[ssg] wrote home + ${count} content pages + 404.html + search-index (${searchIdx.docs.length} docs, minisearch) → dist/`,
 	);
 
+	// 同源 embedding 权重：确保 dist/models 与 public 一致（vite 已拷 public，再兜底一次）
+	const modelsSrc = path.join(publicDir, 'models');
+	const modelsDst = path.join(distDir, 'models');
+	if (fs.existsSync(modelsSrc)) {
+		fs.cpSync(modelsSrc, modelsDst, { recursive: true });
+		console.log('[ssg] models/ → dist/models/（同源向量模型，手机可直接用）');
+	} else {
+		console.warn(
+			'[ssg] 缺少 public/models — 请 npm run vector-models；否则访客只能回退 HF',
+		);
+	}
+
 	// 本地向量索引（embedding 小模型；WEBMD_VECTOR_SKIP=1 可跳过）
 	const { buildAndWriteVectorIndex } = await import('./lib/vector-index');
 	await buildAndWriteVectorIndex(searchIdx, publicDir, distDir);
