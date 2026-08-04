@@ -247,7 +247,8 @@ function fileToDoc(contentDir: string, f: TreeFile): SearchDoc {
 			headings = parts.headings;
 			bodyParts = parts.bodyParts;
 		} catch {
-			body = `${fileName} ${pathLabel}`;
+			// 失败回退：只留文件名，路径走 folder/file 字段，避免「关文件夹仍靠 body 命中目录名」
+			body = fileName;
 		}
 	} else if (isTextualKind(f.kind) && fs.existsSync(full)) {
 		try {
@@ -264,21 +265,22 @@ function fileToDoc(contentDir: string, f: TreeFile): SearchDoc {
 				text: text.slice(0, MAX_PART),
 			}));
 		} catch {
-			body = `${fileName} ${pathLabel}`;
+			body = fileName;
 		}
 	} else {
-		// 媒体等：文件名 + 路径可搜
-		body = `${fileName} ${pathLabel} ${f.kind} ${f.ext}`;
+		// 媒体等：仅文件名 + 类型可进 body；目录名只靠 scopes.folder 匹配
+		body = `${fileName} ${f.kind} ${f.ext}`.trim();
 	}
 
 	const join = (arr: string[]) => (arr.length ? arr.join('\n') : '');
+	const h1Joined = join(h1);
 
 	return {
 		id: pathLabel,
 		href,
 		file: fileName,
 		path: pathLabel,
-		h1: join(h1),
+		h1: h1Joined,
 		h2: join(h2),
 		h3: join(h3),
 		abstract,
@@ -288,7 +290,8 @@ function fileToDoc(contentDir: string, f: TreeFile): SearchDoc {
 		bodyParts,
 		format,
 		folder,
-		displayTitle: pathLabel,
+		// 展示名：标题优先，勿用完整 path（path 另有字段；塞 path 会污染向量/误导）
+		displayTitle: (h1[0] || fileName || pathLabel).trim(),
 	};
 }
 

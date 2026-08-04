@@ -38,5 +38,13 @@
 /search-index.json
   Cache-Control: public, max-age=60, stale-while-revalidate=3600
 
+# 向量索引（随 content 重建；版本/模型变则客户端拒绝旧文件）
+/vector-index.json
+  Cache-Control: public, max-age=60, stale-while-revalidate=3600
+
+# 浏览器端 embedding 权重（按路径固定型号；更新时换路径或 purge）
+/models/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+
 /manifest.webmanifest
   Cache-Control: public, max-age=86400

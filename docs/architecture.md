@@ -45,7 +45,7 @@
 | 图示 | mermaid · @plantuml/core · @hpcc-js/wasm-graphviz |
 | PDF | pdfjs-dist |
 | 表格 | xlsx + x-data-spreadsheet |
-| 搜索 | minisearch |
+| 搜索 | minisearch（关键字）+ `@xenova/transformers` / e5-small（浏览器向量） |
 | 可选本机 | ffmpeg · LibreOffice |
 
 ---
@@ -60,8 +60,9 @@
 | `src/client.ts` | 壳交互总入口（布局、软导航/缓存、路径栏、全屏…） |
 | `src/previews/*` | 图示 bind |
 | `src/excel-viewer.ts` | 表格 bind（只读文本 + 显示向操作） |
-| `src/search/*` | 搜索 |
-| `scripts/lib/*` | 扫盘、渲染、shell、prepare、`version.ts` |
+| `src/search/*` | 关键字 + 混合向量 UI/服务（见 [search.md](./search.md)） |
+| `public/models/` | 可选：浏览器同源 embedding 权重（`npm run vector-models`） |
+| `scripts/lib/*` | 扫盘、渲染、shell、prepare、向量索引、`version.ts` |
 | `config/*` · `site.config.ts` | 配置 |
 | `docs/` | 项目元文档 |
 
@@ -76,6 +77,8 @@ dist/
   404.html
   tree.json
   search-index.json
+  vector-index.json    # 文档 embedding（e5-small，version=2）
+  models/              # 推荐：e5 量化权重（与 public/models 同步）
   _headers
 ```
 
@@ -95,9 +98,11 @@ dist/
 2. `prepareAllVideoPosters` / `prepareAllOfficePreviews`（可选工具）  
 3. **dev**：请求 → `matchFileByUrl` → `renderFilePage`  
 4. **build**：Vite 打 client → 对每个文件 `pageOutDir` 写 `index.html` → `cp content → dist/content`  
-5. 写 tree / search-index / 404  
+5. 写 tree / search-index / **vector-index**（可 `WEBMD_VECTOR_SKIP=1` 跳过）/ 404  
+6. 部署前建议已有 `public/models/...`（`npm run vector-models`），否则浏览器回退远程拉模  
 
-客户端：软导航替换中栏 → 再 bind PDF/表/图示/复制等；文件树 `applyTreeOpenState` 同步进入+focus。
+客户端：软导航替换中栏 → 再 bind PDF/表/图示/复制等；文件树 `applyTreeOpenState` 同步进入+focus。  
+搜索：MiniSearch ∪ 可选本地向量（同源 `/models` 优先），详见 [search.md](./search.md)。
 
 ### 4.1 软导航与缓存（运行期）
 

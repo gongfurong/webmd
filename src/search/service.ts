@@ -1,5 +1,5 @@
 /**
- * 统一搜索服务：MiniSearch + 多字段 scopes/facets
+ * 统一搜索服务：MiniSearch 关键词 + 可选本地向量（混合，无大模型）
  * UI 只调用 search() / getFacets()，不写第二套逻辑
  */
 import MiniSearch from 'minisearch';
@@ -28,11 +28,119 @@ import {
 	fieldsMatchTerms,
 	fieldMatches,
 	highlightText,
+	highlightTextWithVectorExpand,
 	literalMatches,
 	splitQueryTerms,
+	stripHighlightHtml,
 	type CombineMode,
 	type MatchMode,
 } from './highlight';
+import {
+	highlightVectorText,
+	loadVectorIndex,
+	vectorSearch,
+} from './vector';
+import { expandVectorQueries } from './vector-expand';
+
+/**
+ * 路径行高亮：仅高亮「允许且应亮」的段。
+ * - highlightFolder：高亮目录段（最后一个 / 之前）
+ * - highlightFile：高亮文件名段
+ * 关「文件夹」时 highlightFolder 必须为 false，避免目录词被染上（含纯向量结果）。
+ */
+function buildPathHtmlByMatch(
+	pathText: string,
+	fileName: string,
+	highlightFolder: boolean,
+	highlightFile: boolean,
+	hl: (text: string) => string,
+): string {
+	const full = String(pathText || fileName || '');
+	if (!full) return '';
+	if (!highlightFolder && !highlightFile) return escapeHtml(full);
+
+	const slash = full.lastIndexOf('/');
+	if (slash < 0) {
+		return highlightFile ? hl(full) : escapeHtml(full);
+	}
+	const folderPart = full.slice(0, slash);
+	const filePart = full.slice(slash + 1) || fileName;
+	const folderHtml = highlightFolder
+		? hl(folderPart)
+		: escapeHtml(folderPart);
+	const fileHtml = highlightFile ? hl(filePart) : escapeHtml(filePart);
+	return `${folderHtml}/${fileHtml}`;
+}
+
+/** 段内是否出现查询/扩展词（用于向量结果按范围决定能否染路径） */
+function segmentHasQueryTerms(
+	text: string,
+	q: string,
+	expandQ: string,
+): boolean {
+	const t = String(text || '');
+	if (!t) return false;
+	if (fieldMatches(t, q, 'fuzzy', 'OR', false, false)) return true;
+	const eq = String(expandQ || '').trim();
+	if (eq && fieldMatches(t, eq, 'fuzzy', 'OR', false, false)) return true;
+	return false;
+}
+
+/**
+ * 是否存在「可展示的向量侧词」：双色高亮后必须出现 ms-mark--vector（青绿）。
+ * 仅 field 命中扩展词但界面染不出绿 → 不算双（避免只有黄「编程」却标双）。
+ */
+function hasVisibleVectorExpandMark(
+	text: string,
+	_keywordQ: string,
+	expandQ: string,
+	hlDual: (s: string) => string,
+): boolean {
+	const bag = String(text || '').trim();
+	if (!bag || !String(expandQ || '').trim()) return false;
+	// reHlDual 内部：查询词琥珀 + 扩展词青绿；无青绿 class 即无可展示向量侧词
+	return hlDual(bag).includes('ms-mark--vector');
+}
+
+/**
+ * 纯向量入选：必须能在路径/文件名/摘要上高亮到查询或扩展词（可解释）。
+ * 且遵守文件夹范围：字面只在未勾选的目录上 → 丢弃。
+ */
+function pureVectorAllowedByScopes(
+	scopes: SearchScopes,
+	parts: {
+		folder: string;
+		file: string;
+		path: string;
+		snippet: string;
+	},
+	q: string,
+	expandQ: string,
+): boolean {
+	const pathText = parts.path || '';
+	const slash = pathText.lastIndexOf('/');
+	const folderPart =
+		parts.folder ||
+		(slash >= 0 ? pathText.slice(0, slash) : '');
+	const filePart =
+		parts.file ||
+		(slash >= 0 ? pathText.slice(slash + 1) : pathText);
+
+	const inFolder = segmentHasQueryTerms(folderPart, q, expandQ);
+	const inFile = segmentHasQueryTerms(filePart, q, expandQ);
+	const inSnippet = segmentHasQueryTerms(parts.snippet || '', q, expandQ);
+
+	// 无任何可高亮字面 → 不入选（纯「分数近」不够）
+	if (!inFolder && !inFile && !inSnippet) return false;
+
+	// 查询字面只沾目录、目录范围未开 → 不要
+	if (inFolder && !scopes.folder && !inFile && !inSnippet) return false;
+
+	if (scopes.folder && inFolder) return true;
+	if (scopes.file && inFile) return true;
+	if ((scopes.abstract || scopes.body) && inSnippet) return true;
+	return false;
+}
 
 /** 单文件段落命中上限（摘要+正文合计，避免刷屏） */
 const MAX_PROSE_HITS = 8;
@@ -59,6 +167,7 @@ export function searchTokenize(text: string): string[] {
 
 function scopesToFields(scopes: SearchScopes): string[] {
 	const fields: string[] = [];
+	if (scopes.folder) fields.push(...SCOPE_FIELD_MAP.folder);
 	if (scopes.file) fields.push(...SCOPE_FIELD_MAP.file);
 	if (scopes.title) fields.push(...SCOPE_FIELD_MAP.title);
 	if (scopes.abstract) fields.push(...SCOPE_FIELD_MAP.abstract);
@@ -68,6 +177,7 @@ function scopesToFields(scopes: SearchScopes): string[] {
 
 function normalizeScopes(scopes?: Partial<SearchScopes>): SearchScopes {
 	return {
+		folder: scopes?.folder ?? DEFAULT_SCOPES.folder,
 		file: scopes?.file ?? DEFAULT_SCOPES.file,
 		title: scopes?.title ?? DEFAULT_SCOPES.title,
 		abstract: scopes?.abstract ?? DEFAULT_SCOPES.abstract,
@@ -83,7 +193,8 @@ export class SearchService {
 
 	constructor() {
 		this.mini = new MiniSearch<SearchDoc>({
-			fields: ['file', 'path', 'h1', 'h2', 'h3', 'abstract', 'body'],
+			// path 仍存但不进检索字段：文件名=file，目录=folder，避免「勾文件却扫整条路径」
+			fields: ['file', 'folder', 'h1', 'h2', 'h3', 'abstract', 'body'],
 			storeFields: [
 				'id',
 				'href',
@@ -103,8 +214,8 @@ export class SearchService {
 			processTerm: (term) => term.toLowerCase(),
 			searchOptions: {
 				boost: {
-					path: 6,
 					file: 6,
+					folder: 5,
 					h1: 4,
 					h2: 3,
 					h3: 2,
@@ -165,9 +276,9 @@ export class SearchService {
 	}
 
 	/**
-	 * 统一入口：分面过滤 + 字段检索 + 按 scopes 高亮
+	 * 统一入口：关键词（MiniSearch）+ 可选向量；async 因向量需本地 embed
 	 */
-	search(query: SearchQuery): SearchHit[] {
+	async search(query: SearchQuery): Promise<SearchHit[]> {
 		if (!this.ready) return [];
 		/** 完全匹配：保留原始查询（含空格），不做 trim */
 		const strict = query.strict === true;
@@ -177,8 +288,9 @@ export class SearchService {
 
 		const scopes = normalizeScopes(query.scopes);
 		const fields = scopesToFields(scopes);
-		// 范围全关 → 无结果
-		if (!fields.length) return [];
+		// 关键词侧：范围全关则不做关键词检索（仍可走向量）
+		const keywordWanted = fields.length > 0;
+		const vectorWanted = query.vectorEnabled !== false;
 
 		const formatSet = new Set(query.facets?.format || []);
 		const folderSet = new Set(query.facets?.folder || []);
@@ -194,76 +306,82 @@ export class SearchService {
 		/** 词模式：主要约束拉丁词边界；中文仍按串 */
 		const wholeWord = query.wholeWord === true;
 		const terms = strict ? [q] : splitQueryTerms(q);
-		if (!terms.length) return [];
+		if (keywordWanted && !terms.length && !vectorWanted) return [];
 
 		/**
-		 * 候选：
+		 * 关键词候选：
 		 * - 完全匹配 / 非模糊：全库扫
 		 * - 模糊：MiniSearch（多词用 combineWith）
 		 */
 		let candidateDocs: SearchDoc[] = [];
-		if (fuzzyOn) {
-			const raw = this.mini.search(q, {
-				fields,
-				boost: {
-					path: 6,
-					file: 6,
-					h1: 4,
-					h2: 3,
-					h3: 2,
-					abstract: 3,
-					body: 1,
-				},
-				fuzzy: 0.15,
-				prefix: true,
-				// 多词汇组合由用户开关决定；单字中文仍可用 OR 放宽
-				combineWith:
-					terms.length > 1
-						? combine
-						: q.length <= 2 || /[\u4e00-\u9fff]/.test(q)
-							? 'OR'
-							: 'AND',
-				filter: (result) => {
-					const doc = this.docsById.get(String(result.id));
-					if (!doc) return false;
-					if (formatSet.size && !formatSet.has(doc.format)) return false;
-					// facets.folder 现为勾选的文件 path 集合
+		if (keywordWanted && terms.length) {
+			if (fuzzyOn) {
+				const raw = this.mini.search(q, {
+					fields,
+					boost: {
+						file: 6,
+						folder: 5,
+						h1: 4,
+						h2: 3,
+						h3: 2,
+						abstract: 3,
+						body: 1,
+					},
+					fuzzy: 0.15,
+					prefix: true,
+					combineWith:
+						terms.length > 1
+							? combine
+							: q.length <= 2 || /[\u4e00-\u9fff]/.test(q)
+								? 'OR'
+								: 'AND',
+					filter: (result) => {
+						const doc = this.docsById.get(String(result.id));
+						if (!doc) return false;
+						if (formatSet.size && !formatSet.has(doc.format)) return false;
+						if (
+							folderSet.size &&
+							!filePathMatchesSelection(doc.path, folderSet)
+						)
+							return false;
+						return true;
+					},
+				});
+				for (const r of raw) {
+					const doc = this.docsById.get(String(r.id));
+					if (doc) candidateDocs.push(doc);
+				}
+			} else {
+				for (const doc of this.docsById.values()) {
+					if (formatSet.size && !formatSet.has(doc.format)) continue;
 					if (
 						folderSet.size &&
 						!filePathMatchesSelection(doc.path, folderSet)
 					)
-						return false;
-					return true;
-				},
-			});
-			for (const r of raw) {
-				const doc = this.docsById.get(String(r.id));
-				if (doc) candidateDocs.push(doc);
-			}
-		} else {
-			for (const doc of this.docsById.values()) {
-				if (formatSet.size && !formatSet.has(doc.format)) continue;
-				if (
-					folderSet.size &&
-					!filePathMatchesSelection(doc.path, folderSet)
-				)
-					continue;
-				candidateDocs.push(doc);
+						continue;
+					candidateDocs.push(doc);
+				}
 			}
 		}
 
+		const hitsById = new Map<string, SearchHit>();
 		const hits: SearchHit[] = [];
 		for (const doc of candidateDocs) {
 			// 精确：整段包含（不拆词）；模糊/与或仅在非精确时生效；大小写单独控制
+			// 文件 = 仅文件名；文件夹 = 仅目录路径（doc.folder），互不混用完整 path
+			let folderHit: boolean;
 			let fileHit: boolean;
 			let titleHit: boolean;
 			let abstractHit: boolean;
 			let bodyHit: boolean;
+			const folderText = doc.folder || '';
 			if (strict) {
+				folderHit =
+					scopes.folder &&
+					literalMatches(folderText, q, caseSensitive, wholeWord);
 				fileHit =
 					scopes.file &&
-					(literalMatches(doc.file, q, caseSensitive, wholeWord) ||
-						literalMatches(doc.path, q, caseSensitive, wholeWord));
+					literalMatches(doc.file, q, caseSensitive, wholeWord);
 				titleHit =
 					scopes.title &&
 					(literalMatches(doc.h1, q, caseSensitive, wholeWord) ||
@@ -276,10 +394,20 @@ export class SearchService {
 					scopes.body &&
 					literalMatches(doc.body, q, caseSensitive, wholeWord);
 			} else {
+				folderHit =
+					scopes.folder &&
+					fieldMatches(
+						folderText,
+						q,
+						matchMode,
+						combine,
+						caseSensitive,
+						wholeWord,
+					);
 				fileHit =
 					scopes.file &&
-					fieldsMatchTerms(
-						[doc.file, doc.path],
+					fieldMatches(
+						doc.file,
 						q,
 						matchMode,
 						combine,
@@ -317,7 +445,14 @@ export class SearchService {
 						wholeWord,
 					);
 			}
-			if (!fileHit && !titleHit && !abstractHit && !bodyHit) continue;
+			if (
+				!folderHit &&
+				!fileHit &&
+				!titleHit &&
+				!abstractHit &&
+				!bodyHit
+			)
+				continue;
 
 			const headingBySlug = new Map(
 				(doc.headings || []).map((h) => [h.slug, h])
@@ -334,6 +469,7 @@ export class SearchService {
 							caseSensitive,
 							wholeWord,
 						);
+			// 关键字阶段只染查询词（琥珀）。扩展青绿仅在后面打成「双」时补上，避免「全是关却一片绿」
 			const hl = (text: string) =>
 				highlightText(
 					text,
@@ -521,19 +657,28 @@ export class SearchService {
 			}
 
 			const pathText = doc.path || doc.file;
-			hits.push({
+			const hit: SearchHit = {
 				id: doc.id,
 				href: doc.href,
 				displayTitle: doc.displayTitle || pathText,
 				format: doc.format,
 				folder: doc.folder,
 				match: {
+					folder: folderHit,
 					file: fileHit,
 					title: titleHit,
 					abstract: abstractHit,
 					body: bodyHit,
 				},
-				pathHtml: fileHit ? hl(pathText) : escapeHtml(pathText),
+				sources: { keyword: true, vector: false },
+				pathHtml: buildPathHtmlByMatch(
+					pathText,
+					doc.file,
+					// 未勾文件夹：目录段永不匹配/高亮；勾了才允许对目录段 hl
+					Boolean(scopes.folder && folderHit),
+					Boolean(scopes.file && fileHit),
+					hl,
+				),
 				sections,
 				headingHits,
 				abstractHtml,
@@ -542,13 +687,275 @@ export class SearchService {
 				bodyHtml: bodyHits[0]?.html,
 				bodyHref: bodyHits[0]?.href,
 				score: 1,
-			});
+			};
+			hitsById.set(doc.id, hit);
+			hits.push(hit);
 		}
 
-		// 默认按文件路径排序（locale 友好中文/数字路径）
+		// —— 向量检索（本地 embedding，可选）——
+		if (vectorWanted) {
+			try {
+				await loadVectorIndex();
+				const { hits: vHits } = await vectorSearch(q, {
+					// 宽一点：保证关键字已中的文能并成「双」；纯向量再在下方收紧
+					limit: Math.min(60, Math.max(limit, 40)),
+					minScore: 0.8,
+					formatSet,
+					filePathSet: folderSet,
+					filePathMatches: filePathMatchesSelection,
+				});
+				const vecExpandQ = expandVectorQueries(q).join(' ');
+				const reHlDual = (text: string) =>
+					highlightTextWithVectorExpand(
+						text,
+						q,
+						vecExpandQ,
+						matchMode,
+						combine,
+						strict,
+						caseSensitive,
+						wholeWord,
+					);
+				const peakVec = vHits[0]?.score ?? 0;
+				const expandTerms = expandVectorQueries(q);
+				const hlQ = expandTerms.join(' ');
+
+				for (const vh of vHits) {
+					const existing = hitsById.get(vh.item.id);
+					if (existing) {
+						// 双方式：关键字已中 + 向量候选 + 可见区有青绿扩展词
+						// 未勾「文件夹」：目录段不参与证据、不匹配、不高亮
+						const fullPath =
+							existing.id ||
+							(existing.folder
+								? `${existing.folder}/${existing.displayTitle}`
+								: existing.displayTitle);
+						const slash = fullPath.lastIndexOf('/');
+						const folderPart =
+							slash >= 0 ? fullPath.slice(0, slash) : '';
+						const filePart =
+							slash >= 0
+								? fullPath.slice(slash + 1)
+								: fullPath;
+						const pathEvidence = [
+							scopes.folder ? folderPart : '',
+							scopes.file ? filePart : '',
+						]
+							.filter(Boolean)
+							.join('\n');
+						const visibleBag = [
+							pathEvidence,
+							existing.displayTitle,
+							...(existing.headingHits || []).map((h) =>
+								stripHighlightHtml(h.html),
+							),
+							...(existing.sections || []).flatMap((s) => [
+								s.headingHtml
+									? stripHighlightHtml(s.headingHtml)
+									: '',
+								...(s.prose || []).map((p) =>
+									stripHighlightHtml(p.html),
+								),
+							]),
+							existing.abstractHtml
+								? stripHighlightHtml(existing.abstractHtml)
+								: '',
+							...(existing.bodyHits || []).map((b) =>
+								stripHighlightHtml(b.html),
+							),
+						]
+							.filter(Boolean)
+							.join('\n');
+						if (
+							!hasVisibleVectorExpandMark(
+								visibleBag,
+								q,
+								vecExpandQ,
+								reHlDual,
+							)
+						) {
+							continue;
+						}
+						// 路径分段高亮：仅勾选的范围可染（关文件夹 → 目录段纯文本）
+						const pathHtmlDual = buildPathHtmlByMatch(
+							fullPath,
+							filePart || existing.displayTitle,
+							Boolean(scopes.folder),
+							Boolean(scopes.file),
+							reHlDual,
+						);
+						const sectionDual = (existing.sections || []).map(
+							(sec) => ({
+								...sec,
+								headingHtml: sec.headingHtml
+									? reHlDual(
+											stripHighlightHtml(sec.headingHtml),
+										)
+									: sec.headingHtml,
+								prose: (sec.prose || []).map((p) => ({
+									...p,
+									html: reHlDual(stripHighlightHtml(p.html)),
+								})),
+							}),
+						);
+						const headingDual = (existing.headingHits || []).map(
+							(h) => ({
+								...h,
+								html: reHlDual(stripHighlightHtml(h.html)),
+							}),
+						);
+						const bodyDual = (existing.bodyHits || []).map((b) => ({
+							...b,
+							html: reHlDual(stripHighlightHtml(b.html)),
+						}));
+						const abstractDual = existing.abstractHtml
+							? reHlDual(
+									stripHighlightHtml(existing.abstractHtml),
+								)
+							: existing.abstractHtml;
+						const anyGreen = [
+							// 路径：只认允许高亮的段（buildPathHtml 已处理）
+							pathHtmlDual,
+							abstractDual,
+							...headingDual.map((h) => h.html),
+							...bodyDual.map((b) => b.html),
+							...sectionDual.flatMap((s) => [
+								s.headingHtml || '',
+								...(s.prose || []).map((p) => p.html),
+							]),
+						].some((h) =>
+							String(h || '').includes('ms-mark--vector'),
+						);
+						if (!anyGreen) continue;
+
+						existing.sources.vector = true;
+						existing.vectorScore = vh.score;
+						existing.score = Math.max(existing.score, 1 + vh.score);
+						existing.pathHtml = pathHtmlDual;
+						existing.sections = sectionDual;
+						existing.headingHits = headingDual;
+						existing.bodyHits = bodyDual;
+						existing.abstractHtml = abstractDual;
+						if (existing.bodyHtml && bodyDual[0]) {
+							existing.bodyHtml = bodyDual[0].html;
+						} else if (existing.bodyHtml) {
+							existing.bodyHtml = reHlDual(
+								stripHighlightHtml(existing.bodyHtml),
+							);
+						}
+						continue;
+					}
+					// 纯向量：分数门槛 + 必须能在路径/摘要高亮到查询或扩展词
+					if (peakVec > 0 && vh.score < peakVec - 0.04) continue;
+					if (vh.score < 0.83) continue;
+
+					const pathText = vh.item.path || vh.item.file;
+					const titleText = vh.item.displayTitle || pathText;
+					const snip = vh.item.snippet || '';
+					const vMark = 'ms-mark--vector';
+					if (
+						!pureVectorAllowedByScopes(
+							scopes,
+							{
+								folder: vh.item.folder || '',
+								file: vh.item.file || '',
+								path: pathText,
+								snippet: snip,
+							},
+							q,
+							hlQ,
+						)
+					) {
+						continue;
+					}
+					// 路径分段：关「文件夹」绝不匹配/高亮目录段；关「文件」不染文件名
+					const slash = pathText.lastIndexOf('/');
+					const folderPart =
+						slash >= 0 ? pathText.slice(0, slash) : '';
+					const filePart =
+						slash >= 0
+							? pathText.slice(slash + 1)
+							: pathText || vh.item.file;
+					// 可展示袋：不含未勾选范围的路径段
+					const showBag = [
+						scopes.folder ? folderPart : '',
+						scopes.file ? filePart : '',
+						titleText,
+						snip,
+					]
+						.filter(Boolean)
+						.join('\n');
+					if (!segmentHasQueryTerms(showBag, q, hlQ)) continue;
+
+					const snipHtml = snip
+						? await highlightVectorText(snip, hlQ, null, vMark)
+						: '';
+					const folderHtml =
+						scopes.folder && folderPart
+							? await highlightVectorText(
+									folderPart,
+									hlQ,
+									null,
+									vMark,
+								)
+							: escapeHtml(folderPart);
+					const fileHtml = scopes.file
+						? await highlightVectorText(
+								filePart || vh.item.file,
+								hlQ,
+								null,
+								vMark,
+							)
+						: escapeHtml(filePart || vh.item.file || '');
+					const pathLineHtml = folderPart
+						? `${folderHtml}/${fileHtml}`
+						: fileHtml;
+					const vectorOnly: SearchHit = {
+						id: vh.item.id,
+						href: vh.item.href,
+						displayTitle: titleText,
+						format: vh.item.format,
+						folder: vh.item.folder,
+						match: {
+							// 纯向量不记关键字范围命中，避免结果筛选误出「文件夹」
+							folder: false,
+							file: false,
+							title: false,
+							abstract: Boolean(snip),
+							body: Boolean(snip),
+						},
+						sources: { keyword: false, vector: true },
+						vectorScore: vh.score,
+						pathHtml: pathLineHtml,
+						sections: snipHtml
+							? [
+									{
+										prose: [
+											{
+												html: snipHtml,
+												href: vh.item.href,
+												kind: 'abstract',
+											},
+										],
+									},
+								]
+							: [],
+						headingHits: [],
+						bodyHits: [],
+						score: vh.score,
+					};
+					hitsById.set(vh.item.id, vectorOnly);
+					hits.push(vectorOnly);
+				}
+			} catch (e) {
+				console.warn('[search] vector branch failed', e);
+			}
+		}
+
+		// 最终列表序由 UI（方式序 / 名序）决定；此处仅稳定完整路径序作兜底
 		hits.sort((a, b) => {
-			const pa = a.displayTitle || a.id || '';
-			const pb = b.displayTitle || b.id || '';
+			const pa = a.id || a.displayTitle || '';
+			const pb = b.id || b.displayTitle || '';
 			return pa.localeCompare(pb, 'zh-CN', {
 				numeric: true,
 				sensitivity: 'base',

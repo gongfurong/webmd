@@ -32,7 +32,7 @@ function findAssets(): { js: string; css: string } {
 	};
 }
 
-function main() {
+async function main() {
 	if (!fs.existsSync(distDir)) fs.mkdirSync(distDir, { recursive: true });
 
 	const { tree, files } = getTreeAndFiles(contentDir);
@@ -102,6 +102,13 @@ function main() {
 	console.log(
 		`[ssg] wrote home + ${count} content pages + 404.html + search-index (${searchIdx.docs.length} docs, minisearch) → dist/`,
 	);
+
+	// 本地向量索引（embedding 小模型；WEBMD_VECTOR_SKIP=1 可跳过）
+	const { buildAndWriteVectorIndex } = await import('./lib/vector-index');
+	await buildAndWriteVectorIndex(searchIdx, publicDir, distDir);
 }
 
-main();
+main().catch((e) => {
+	console.error('[ssg] failed', e);
+	process.exit(1);
+});

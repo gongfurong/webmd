@@ -34,7 +34,7 @@
 |----|------|------|
 | G1 | content 即真相，可 Git  diff | 无隐藏 DB |
 | G2 | 主路径纯静态可部署 | Cloudflare Pages 可上线 |
-| G3 | MD 阅读体验专业 | GitHub 风 + 树 + 大纲 + 搜索 |
+| G3 | MD 阅读体验专业 | GitHub 风 + 树 + 大纲 + 关键字/向量混合搜索 |
 | G4 | 常见办公/媒体/图示可预览 | 见 formats.md |
 | G5 | 扩展按类型插件化 | preview-framework |
 | G6 | 目录可对照、可审计 | `pages` 路径对齐 content |

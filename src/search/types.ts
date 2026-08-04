@@ -42,6 +42,14 @@ export type SearchDoc = {
 };
 
 export type SearchScopes = {
+	/**
+	 * 文件夹：用目录路径（doc.folder）做关键字匹配。
+	 * 默认关：避免「大领域」目录名刷出大量结果。
+	 */
+	folder: boolean;
+	/**
+	 * 文件：仅文件名（doc.file）匹配，不含完整路径/目录段。
+	 */
 	file: boolean;
 	title: boolean;
 	/** 摘要（与正文分离） */
@@ -54,10 +62,18 @@ export type SearchFacets = {
 	folder: string[];
 };
 
+/** 命中来源：关键词 / 向量（可并存） */
+export type SearchSourceFlags = {
+	keyword: boolean;
+	vector: boolean;
+};
+
 export type SearchQuery = {
 	q: string;
 	scopes: SearchScopes;
 	facets: SearchFacets;
+	/** 是否启用向量检索（混合）；默认 true 由 UI 控制 */
+	vectorEnabled?: boolean;
 	limit?: number;
 	/**
 	 * 模糊搜索（默认 true）
@@ -140,11 +156,16 @@ export type SearchHit = {
 	format: string;
 	folder: string;
 	match: {
+		folder: boolean;
 		file: boolean;
 		title: boolean;
 		abstract: boolean;
 		body: boolean;
 	};
+	/** 关键词 / 向量命中标记（混合检索） */
+	sources: SearchSourceFlags;
+	/** 向量相似度 0～1；仅向量侧有 */
+	vectorScore?: number;
 	pathHtml?: string;
 	/** 按 h* 文档顺序的结构块（摘要与正文统一归入） */
 	sections: SearchSection[];
@@ -172,14 +193,20 @@ export type SearchIndexFile = {
 };
 
 export const DEFAULT_SCOPES: SearchScopes = {
+	/**
+	 * 文件夹默认关：目录名常是领域大类（术语/编程…），默认开会刷屏且像「搜错了」。
+	 * 需要按路径目录搜时再勾「文件夹」。文件/标题/摘要/正文默认开。
+	 */
+	folder: false,
 	file: true,
 	title: true,
 	abstract: true,
 	body: true,
 };
 
-/** 范围顺序：文件 → 标题 → 摘要 → 正文 */
+/** 范围顺序：文件夹 → 文件 → 标题 → 摘要 → 正文 */
 export const SCOPE_ORDER: (keyof SearchScopes)[] = [
+	'folder',
 	'file',
 	'title',
 	'abstract',
@@ -187,6 +214,7 @@ export const SCOPE_ORDER: (keyof SearchScopes)[] = [
 ];
 
 export const SCOPE_LABELS: Record<keyof SearchScopes, string> = {
+	folder: '文件夹',
 	file: '文件',
 	title: '标题',
 	abstract: '摘要',
@@ -194,7 +222,10 @@ export const SCOPE_LABELS: Record<keyof SearchScopes, string> = {
 };
 
 export const SCOPE_FIELD_MAP = {
-	file: ['file', 'path'] as const,
+	/** 仅目录路径，不含文件名 */
+	folder: ['folder'] as const,
+	/** 仅文件名 */
+	file: ['file'] as const,
 	title: ['h1', 'h2', 'h3'] as const,
 	abstract: ['abstract'] as const,
 	body: ['body'] as const,

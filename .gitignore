@@ -33,3 +33,10 @@ public/tree.json
 **/~$*
 **/*~$*
 
+
+# local vector index (npm run vector-index / build)
+public/vector-index.json
+
+# browser embedding models (npm run vector-models)
+public/models/
+

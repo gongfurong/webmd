@@ -55,7 +55,8 @@
 | F-UI-01c | 中栏全屏 | 无左右栏、无分割线、无 rail |
 | F-UI-02 | 窄屏抽屉 | 断点见 layout 配置 |
 | F-UI-03 | 明暗主题 | 记忆；图示随主题 |
-| F-UI-04 | 站内搜索 | MiniSearch + 索引 |
+| F-UI-04 | 站内搜索 | MiniSearch + 索引；可选本地向量混合（e5-small，见 search.md） |
+| F-UI-04a | 向量混合检索 | 开关默认开；同源 `/models` 优先；索引 version/model 校验；关·双·向与双色高亮 |
 | F-UI-05 | 404 页 | 静态 404.html |
 | F-UI-06 | 内容宽度铺满/固定 | 默认**铺满**（`webmd-content-width-v2`）；路径栏可切换；**表格页始终铺满中栏** |
 | F-UI-07 | 软导航加载反馈 | 未命中缓存时：header 下、路径栏上仅进度条（无文字） |

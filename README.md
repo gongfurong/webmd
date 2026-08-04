@@ -1,6 +1,6 @@
 # WebMD
 
-个人 **静态 Wiki**：以 `content/` 为真相，GitHub 风 Markdown + 左树 / 右大纲 / 多格式预览 / 搜索。  
+个人 **静态 Wiki**：以 `content/` 为真相，GitHub 风 Markdown + 左树 / 右大纲 / 多格式预览 / **关键字 + 本地向量混合搜索**。  
 技术栈轻量（Vite + 自研 SSG），**无** Astro/Starlight 运行时；可部署 Cloudflare Pages。
 
 ---
@@ -17,6 +17,7 @@
 | [docs/architecture.md](./docs/architecture.md) | 架构与 dist |
 | [docs/content-model.md](./docs/content-model.md) | content 分类与 `_Res_*` |
 | [docs/development.md](./docs/development.md) | 命令与扩展 |
+| [docs/search.md](./docs/search.md) | 混合搜索、模型与缓存 |
 | [docs/conventions.md](./docs/conventions.md) | 规范（含 AI 协议） |
 | [docs/roadmap.md](./docs/roadmap.md) | 进度 |
 | [docs/deployment.md](./docs/deployment.md) | 部署 |
@@ -36,9 +37,14 @@ npm run preview
 | 命令 | 说明 |
 |------|------|
 | `dev` | 开发；预览 `/pages/...`，原件 `/content/...` |
-| `build` | typecheck + Vite + SSG |
+| `build` | typecheck + Vite + SSG（含 vector-index，可 `WEBMD_VECTOR_SKIP=1`） |
+| `vector-models` | 下载 e5-small 到 `public/models/`（浏览器同源，部署推荐） |
+| `vector-index` | 重建向量索引 |
+| `search-index` | 重建关键字索引 |
 | `scan` | 树 + 可选预生成旁路资源 |
 | `typecheck` | TypeScript |
+
+混合搜索说明 → [docs/search.md](./docs/search.md)。
 
 ---
 
@@ -62,10 +68,13 @@ content/
 
 ```text
 dist/
-  content/    # content 拷贝
-  pages/      # 预览 HTML（路径对齐 content）
-  assets/     # JS/CSS
-  index.html  # 站首页
+  content/              # content 拷贝
+  pages/                # 预览 HTML（路径对齐 content）
+  assets/               # JS/CSS
+  models/               # 推荐：embedding 权重
+  search-index.json
+  vector-index.json
+  index.html            # 站首页
 ```
 
 ---

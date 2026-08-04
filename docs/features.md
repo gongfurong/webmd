@@ -320,11 +320,20 @@
 
 ---
 
-## 7. 搜索
+## 7. 搜索（关键字 + 本地向量混合）
 
-- 客户端 **MiniSearch** + 构建/开发提供的 `search-index.json`  
-- 支持目录树筛选、结果高亮等（实现见 `src/search/*`）  
-- `site.features.search` 可关  
+> 专题：**[search.md](./search.md)**（模型来源、缓存、命令、Cloudflare）。
+
+| 项 | 行为 |
+|----|------|
+| **关键字** | MiniSearch + `search-index.json`；模糊/精确、与或、大小写、词界；左栏范围/格式/文件树筛选 |
+| **向量** | 搜索框前 **向量搜索** 勾选（默认开）；`multilingual-e5-small` 量化，浏览器内 embedding；`vector-index.json` |
+| **混合结果** | **关 / 双 / 向**：双需可见区扩展青绿；向需可高亮字面；琥珀=查询词，青绿=扩展词 |
+| **结果栏** | **搜索方式排序**（默认勾：**双 → 关 → 向**，组内名序）；**名序**升/降；仅文件 |
+| **结果筛选** | 方式顺序 **双 → 关键字 → 向量**；计数 **`(可显示/该类总数)`**（受范围·格式·文件影响）；范围可含 **文件夹**（默认关）；**关文件夹则目录段不匹配/不高亮**；**文件=仅文件名** |
+| **开关** | `site.features.search` 可关整站搜索 |
+
+控制台成功标志：`[vector] model source: same-origin /models/`、`embedder ready`、`hits=… model=e5-small`。
 
 ---
 

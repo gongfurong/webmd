@@ -13,7 +13,8 @@
 | Output directory | **`dist`** |
 | Node | **`22.22.2`**（`NODE_VERSION` + `.nvmrc`） |
 
-构建机通常**无** LibreOffice / ffmpeg → Word/PPT 预览与视频封面依赖仓库已有 `_Res_*`。
+构建机通常**无** LibreOffice / ffmpeg → Word/PPT 预览与视频封面依赖仓库已有 `_Res_*`。  
+向量：构建会跑 `vector-index`（可 `WEBMD_VECTOR_SKIP=1`）；**模型文件**若未提交 `public/models`，CI 需执行 **`npm run vector-models`**，否则访客只能回退 HF/镜像（易失败）。
 
 ### 1.1 缓存：控制台要不要再设？
 
@@ -33,7 +34,8 @@
 ```text
 dist/
   index.html / 404.html / _headers
-  tree.json / search-index.json
+  tree.json / search-index.json / vector-index.json
+  models/          # 推荐：e5-small 量化（构建前 npm run vector-models）
   assets/          # JS/CSS
   content/         # 原 content 拷贝（含 _Res_*）
   pages/           # 预览 HTML
@@ -55,7 +57,10 @@ dist/
 | `/assets/*` | `max-age=31536000, immutable` | 带 hash 的 JS/CSS，可永久缓存 |
 | `/pages/*`、站级 HTML | `max-age=60, stale-while-revalidate=86400` | 短新鲜度 + 过期仍可先显示再后台校验 |
 | `/content/*` | `max-age=3600, SWR=86400` | 原件中等缓存 |
-| `tree.json` / `search-index.json` | `max-age=60, SWR=3600` | 索引常变，勿长缓存 |
+| `tree.json` / `search-index.json` / `vector-index.json` | `max-age=60, SWR=3600` | 索引常变，勿长缓存 |
+| `/models/*` | `max-age=604800, SWR=86400` | embedding 权重大；换模请 purge 或改路径 |
+
+**向量搜索缓存细节**（浏览器 Cache API + 索引版本校验）→ [search.md](./search.md) §4。
 
 **浏览器软导航另有一层「页面内会话缓存」**（`src/client.ts`）：
 

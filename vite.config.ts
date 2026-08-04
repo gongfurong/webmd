@@ -97,7 +97,10 @@ function webmdPlugin() {
 					rawUrl.startsWith('/node_modules') ||
 					rawUrl.startsWith('/assets/') ||
 					rawUrl.startsWith('/content/') ||
+					// 浏览器端 embedding 模型（public/models）
+					rawUrl.startsWith('/models/') ||
 					rawUrl === '/search-index.json' ||
+					rawUrl === '/vector-index.json' ||
 					rawUrl === '/tree.json' ||
 					rawUrl === '/favicon.ico' ||
 					rawUrl.endsWith('.js') ||
@@ -105,6 +108,8 @@ function webmdPlugin() {
 					rawUrl.endsWith('.ts') ||
 					rawUrl.endsWith('.map') ||
 					rawUrl.endsWith('.json') ||
+					rawUrl.endsWith('.onnx') ||
+					rawUrl.endsWith('.wasm') ||
 					rawUrl.endsWith('.svg') ||
 					rawUrl.endsWith('.png') ||
 					rawUrl.endsWith('.jpg') ||
@@ -296,13 +301,22 @@ export default defineConfig({
 	// SheetJS 仅 Excel 页动态 import，预构建避免 dev 解析怪异
 	optimizeDeps: {
 		include: ['xlsx'],
-		// PlantUML TeaVM 体积大且依赖经典脚本 viz-global；按需动态 import，勿预构建
-		exclude: ['@plantuml/core'],
-		// x-data-spreadsheet 用 dist UMD（window.x_spreadsheet），勿强制 prebundle src
+		// PlantUML / transformers+onnxruntime：Vite prebundle 会打坏 ort registerBackend
+		exclude: [
+			'@plantuml/core',
+			'@xenova/transformers',
+			'onnxruntime-web',
+		],
 	},
+	// wasm 原样交给浏览器
+	assetsInclude: ['**/*.wasm'],
 	build: {
 		outDir: 'dist',
 		emptyOutDir: true,
+		commonjsOptions: {
+			// ort 的 UMD 勿被 rollup 错误折叠
+			transformMixedEsModules: true,
+		},
 		rollupOptions: {
 			input: path.resolve(root, 'src/client.ts'),
 			output: {

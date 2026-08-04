@@ -26,7 +26,11 @@ npm install
 | `npm run preview` | 静态预览 dist |
 | `npm run scan` | 只扫盘 + 预生成旁路（不写全站 HTML） |
 | `npm run typecheck` | `tsc` 双项目 |
-| `npm run search-index` | 仅重建搜索索引到 public |
+| `npm run search-index` | 仅重建 **关键字** 索引到 public |
+| `npm run vector-index` | 重建 **向量** 索引 `vector-index.json`（e5-small） |
+| `npm run vector-models` | 下载 e5-small 量化到 `public/models/`（浏览器同源，部署推荐） |
+
+向量专题 → [search.md](./search.md)。
 
 ### 干净重建
 
@@ -48,7 +52,8 @@ content/
   → prepareAllOfficePreviews（可选 LO）
   → [dev] 按 URL renderFilePage
   → [build] Vite assets + 每文件 pages/**/index.html + cp content→dist/content
-  → tree.json / search-index.json
+  → tree.json / search-index.json / vector-index.json
+  →（可选独立）vector-models → public/models/
 ```
 
 | 阶段 | 写 content 源？ | 写 `_Res_*`？ |
@@ -76,7 +81,10 @@ content/
 | `src/client.ts` | 布局、软导航/缓存、路径栏、全屏、下载分流、绑定预览 |
 | `src/previews/*` | 图示 bind |
 | `src/excel-viewer.ts` | 表格 bind（`mode:read`；无加载文案；重载无确认；铺满+滚动条槽） |
-| `src/search/*` | 搜索 |
+| `src/search/*` | 关键字 + 混合向量搜索 |
+| `scripts/lib/vector-index.ts` | Node 建向量索引 |
+| `scripts/download-vector-models.ts` | 下载 embedding 到 public/models |
+| `public/models/` | 浏览器同源模型（gitignore，CI/本机 `vector-models`） |
 | `public/_headers` | Cloudflare Pages 缓存头 |
 | `site.config.ts` + `config/*` | 配置 |
 

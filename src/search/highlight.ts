@@ -232,22 +232,90 @@ function mergeRanges(ranges: [number, number][]): [number, number][] {
 	return merged;
 }
 
-function paintRanges(plain: string, ranges: [number, number][]): string {
+function paintRanges(
+	plain: string,
+	ranges: [number, number][],
+	markClass?: string,
+): string {
 	if (!ranges.length) return escapeHtml(plain);
+	const cls =
+		markClass && /^[a-zA-Z0-9_-]+(?:\s+[a-zA-Z0-9_-]+)*$/.test(markClass)
+			? ` class="${markClass}"`
+			: '';
 	let out = '';
 	let cur = 0;
 	for (const [a, b] of ranges) {
 		if (a > cur) out += escapeHtml(plain.slice(cur, a));
-		out += `<mark>${escapeHtml(plain.slice(a, b))}</mark>`;
+		out += `<mark${cls}>${escapeHtml(plain.slice(a, b))}</mark>`;
 		cur = b;
 	}
 	if (cur < plain.length) out += escapeHtml(plain.slice(cur));
 	return out;
 }
 
+type TaggedRange = { a: number; b: number; cls?: string };
+
+/** 按区间染色；重叠时先写入的优先（调用方应先放关键字再放向量） */
+function paintTaggedRanges(plain: string, tagged: TaggedRange[]): string {
+	if (!tagged.length) return escapeHtml(plain);
+	// 切成互不重叠的原子段，每段取「最先覆盖」的 class
+	const points = new Set<number>([0, plain.length]);
+	for (const t of tagged) {
+		points.add(Math.max(0, t.a));
+		points.add(Math.min(plain.length, t.b));
+	}
+	const sorted = [...points].sort((x, y) => x - y);
+	let out = '';
+	for (let i = 0; i < sorted.length - 1; i++) {
+		const a = sorted[i]!;
+		const b = sorted[i + 1]!;
+		if (a >= b) continue;
+		const mid = (a + b) / 2;
+		let cls: string | undefined;
+		for (const t of tagged) {
+			if (mid >= t.a && mid < t.b) {
+				cls = t.cls;
+				break;
+			}
+		}
+		const slice = escapeHtml(plain.slice(a, b));
+		if (cls && /^[a-zA-Z0-9_-]+(?:\s+[a-zA-Z0-9_-]+)*$/.test(cls)) {
+			out += `<mark class="${cls}">${slice}</mark>`;
+		} else if (cls === '' || cls === undefined) {
+			// cls 显式空字符串 = 默认关键字 mark；undefined 且未命中 = 纯文本
+			const covered = tagged.some((t) => mid >= t.a && mid < t.b);
+			out += covered ? `<mark>${slice}</mark>` : slice;
+		} else {
+			out += slice;
+		}
+	}
+	return out;
+}
+
+function rangesForQuery(
+	plain: string,
+	query: string,
+	mode: MatchMode,
+	strict: boolean,
+	caseSensitive: boolean,
+	wholeWord: boolean,
+): [number, number][] {
+	if (!plain || !query) return [];
+	if (strict) {
+		return findAllRanges(plain, query, caseSensitive, wholeWord);
+	}
+	const terms = highlightTerms(query, mode);
+	const ranges: [number, number][] = [];
+	for (const term of terms) {
+		ranges.push(...findAllRanges(plain, term, caseSensitive, wholeWord));
+	}
+	return mergeRanges(ranges);
+}
+
 /**
  * 在纯文本上高亮；按分隔符拆词后分别高亮
  * strict：只高亮整段查询串（不拆词）；大小写/词界由参数决定
+ * markClass：可选，如纯向量命中用 ms-mark--vector
  */
 export function highlightText(
 	text: string,
@@ -257,27 +325,77 @@ export function highlightText(
 	strict = false,
 	caseSensitive = false,
 	wholeWord = false,
+	markClass?: string,
 ): string {
 	const plain = String(text || '');
 	if (!plain) return '';
-	if (strict) {
-		const q = String(query ?? '');
-		if (!q) return escapeHtml(plain);
-		return paintRanges(
-			plain,
-			findAllRanges(plain, q, caseSensitive, wholeWord),
-		);
-	}
-
-	const q = String(query || '').trim();
+	const q = strict ? String(query ?? '') : String(query || '').trim();
 	if (!q) return escapeHtml(plain);
+	return paintRanges(
+		plain,
+		rangesForQuery(plain, q, mode, strict, caseSensitive, wholeWord),
+		markClass,
+	);
+}
 
-	const terms = highlightTerms(q, mode);
-	const ranges: [number, number][] = [];
-	for (const term of terms) {
-		ranges.push(...findAllRanges(plain, term, caseSensitive, wholeWord));
+/**
+ * 关键字 + 向量扩展词双色高亮：
+ * - 用户查询词 → 默认琥珀色 mark
+ * - 向量扩展词（如 等待→await）中「多出来」的命中 → 青绿 ms-mark--vector
+ * 重叠区间优先关键字色。
+ */
+export function highlightTextWithVectorExpand(
+	text: string,
+	keywordQuery: string,
+	vectorExpandQuery: string,
+	mode: MatchMode = 'fuzzy',
+	_combine: CombineMode = 'AND',
+	strict = false,
+	caseSensitive = false,
+	wholeWord = false,
+): string {
+	const plain = String(text || '');
+	if (!plain) return '';
+	const kq = strict
+		? String(keywordQuery ?? '')
+		: String(keywordQuery || '').trim();
+	const vq = String(vectorExpandQuery || '').trim();
+	if (!kq && !vq) return escapeHtml(plain);
+
+	const kwRanges = kq
+		? rangesForQuery(plain, kq, mode, strict, caseSensitive, wholeWord)
+		: [];
+	const vecRanges = vq
+		? rangesForQuery(plain, vq, 'fuzzy', false, false, false)
+		: [];
+
+	const tagged: TaggedRange[] = [];
+	// 先关键字（空 class → 默认 mark）
+	for (const [a, b] of kwRanges) tagged.push({ a, b, cls: '' });
+	// 再向量色：仅补「未被关键字覆盖」的片段（按原子切分在 paint 里用先到先得）
+	for (const [a, b] of vecRanges) {
+		tagged.push({ a, b, cls: 'ms-mark--vector' });
 	}
-	return paintRanges(plain, mergeRanges(ranges));
+	// 关键字须优先：把关键字段挪到前面
+	tagged.sort((x, y) => {
+		const px = x.cls === '' ? 0 : 1;
+		const py = y.cls === '' ? 0 : 1;
+		if (px !== py) return px - py;
+		return x.a - y.a;
+	});
+	return paintTaggedRanges(plain, tagged);
+}
+
+/** 去掉高亮 HTML，还原纯文本（再高亮用） */
+export function stripHighlightHtml(html: string): string {
+	return String(html || '')
+		.replace(/<[^>]+>/g, '')
+		.replace(/&nbsp;/g, ' ')
+		.replace(/&amp;/g, '&')
+		.replace(/&lt;/g, '<')
+		.replace(/&gt;/g, '>')
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;/g, "'");
 }
 
 /** 从长正文取含关键词的摘录并高亮 */
@@ -290,12 +408,41 @@ export function excerptHighlight(
 	strict = false,
 	caseSensitive = false,
 	wholeWord = false,
+	markClass?: string,
+	/** 向量扩展查询串；有则与关键字双色高亮 */
+	vectorExpandQuery?: string,
 ): string {
 	// 完全匹配：保留原文空白，不折叠空格
 	const plain = strict
 		? String(text || '')
 		: String(text || '').replace(/\s+/g, ' ').trim();
 	if (!plain) return '';
+
+	const paintSlice = (slice: string, strictMode: boolean) => {
+		const vq = String(vectorExpandQuery || '').trim();
+		if (vq) {
+			return highlightTextWithVectorExpand(
+				slice,
+				query,
+				vq,
+				mode,
+				combine,
+				strictMode,
+				caseSensitive,
+				wholeWord,
+			);
+		}
+		return highlightText(
+			slice,
+			query,
+			mode,
+			combine,
+			strictMode,
+			caseSensitive,
+			wholeWord,
+			markClass,
+		);
+	};
 
 	if (strict) {
 		const q = String(query ?? '');
@@ -313,7 +460,7 @@ export function excerptHighlight(
 		const end = Math.min(plain.length, i + q.length + radius);
 		const slice =
 			(start > 0 ? '…' : '') + plain.slice(start, end) + (end < plain.length ? '…' : '');
-		return highlightText(slice, q, mode, combine, true, caseSensitive, wholeWord);
+		return paintSlice(slice, true);
 	}
 
 	const q = String(query || '').trim();
@@ -322,10 +469,14 @@ export function excerptHighlight(
 		return escapeHtml(head) + (plain.length > head.length ? '…' : '');
 	}
 
-	const terms = highlightTerms(q, mode);
+	// 锚点：关键字词 + 向量扩展词，优先靠前的命中
+	const anchorTerms = [
+		...highlightTerms(q, mode),
+		...highlightTerms(String(vectorExpandQuery || '').trim(), 'fuzzy'),
+	];
 	let best = -1;
 	let bestTerm = '';
-	for (const term of terms) {
+	for (const term of anchorTerms) {
 		const ranges = findAllRanges(plain, term, caseSensitive, wholeWord);
 		const i = ranges[0]?.[0] ?? -1;
 		if (i >= 0 && (best < 0 || i < best)) {
@@ -341,5 +492,5 @@ export function excerptHighlight(
 	const end = Math.min(plain.length, best + bestTerm.length + radius);
 	const slice =
 		(start > 0 ? '…' : '') + plain.slice(start, end) + (end < plain.length ? '…' : '');
-	return highlightText(slice, query, mode, combine, false, caseSensitive, wholeWord);
+	return paintSlice(slice, false);
 }

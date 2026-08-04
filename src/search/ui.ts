@@ -4,6 +4,7 @@
  */
 import { getSearchService } from './service';
 import type { SearchHit, SearchScopes } from './types';
+import { getLastVectorDiag } from './vector';
 import {
 	DEFAULT_SCOPES,
 	buildSearchFileTree,
@@ -115,6 +116,10 @@ const SHELL = `
 		</header>
 		<div class="search-shell">
 			<div class="search-input-row">
+				<label class="ms-vector-enable" title="启用浏览器内多语向量检索（multilingual-e5-small，约 118MB 首次下载；中英语义；与关键词混合）。取消则仅关键词。">
+					<input type="checkbox" data-vector-enable checked />
+					<span class="ms-vector-enable__text">向量搜索</span>
+				</label>
 				<input type="search" class="ms-input" data-search-input placeholder="搜索文档…" autocomplete="off" enterkeyhint="search" />
 			</div>
 			<div class="search-body" data-search-body>
@@ -145,6 +150,10 @@ const SHELL = `
 						</div>
 						<div class="ms-panel-label-end">
 							<div class="ms-center-tools">
+								<label class="ms-method-sort-check" title="勾选：先双方式，再关键字，再纯向量；组内名序。取消：全部仅按名序">
+									<input type="checkbox" data-method-sort checked />
+									<span class="ms-method-sort-check__text">搜索方式排序</span>
+								</label>
 								<button type="button" class="${MS_TEXT_BTN} ms-sort-btn" data-path-sort data-order="asc" title="按文件路径排序：升序；点击切换为降序" aria-label="名序：升序" aria-pressed="false">
 									<span class="ms-sort-label">名序</span>${ICON_MS_SORT_ARROW}
 								</button>
@@ -210,6 +219,8 @@ export function mountSearch(mount: HTMLElement) {
 		[...caseModeSeg.querySelectorAll<HTMLButtonElement>('[data-case-mode-opt]')];
 	const tokenModeOpts = () =>
 		[...tokenModeSeg.querySelectorAll<HTMLButtonElement>('[data-token-mode-opt]')];
+	const methodSortEl = () =>
+		root.querySelector<HTMLInputElement>('input[data-method-sort]');
 	const pathSortBtn = root.querySelector<HTMLButtonElement>('[data-path-sort]')!;
 	const modKey = root.querySelector<HTMLElement>('[data-mod-key]');
 	const searchBody = root.querySelector<HTMLElement>('[data-search-body]')!;
@@ -564,6 +575,9 @@ export function mountSearch(mount: HTMLElement) {
 	let lastBaseHits: SearchHit[] = [];
 	let debounceTimer: number | null = null;
 
+	/** 默认勾选：先关键字（含双命中），再纯向量；组内名序 */
+	const isMethodSortOn = () => methodSortEl()?.checked !== false;
+
 	const syncPathSortBtn = () => {
 		const asc = pathSort === 'asc';
 		pathSortBtn.dataset.order = pathSort;
@@ -655,21 +669,44 @@ export function mountSearch(mount: HTMLElement) {
 	};
 	syncFilesOnlyBtn();
 
-	const sortHitsByPath = (hits: SearchHit[]): SearchHit[] => {
+	/** 名序 / 路径展示键：用完整 id（content 相对路径），勿用 displayTitle（可能是 h1 标题） */
+	const pathKey = (h: SearchHit) => h.id || h.displayTitle || '';
+
+	const cmpPath = (a: SearchHit, b: SearchHit) => {
 		const dir = pathSort === 'asc' ? 1 : -1;
+		return (
+			dir *
+			pathKey(a).localeCompare(pathKey(b), 'zh-CN', {
+				numeric: true,
+				sensitivity: 'base',
+			})
+		);
+	};
+
+	/** 搜索方式排序：双方式 → 关键字 → 纯向量（数字越小越靠前） */
+	const methodRank = (h: SearchHit) => {
+		const src = h.sources || { keyword: true, vector: false };
+		if (src.keyword && src.vector) return 0;
+		if (src.keyword) return 1;
+		if (src.vector) return 2;
+		return 3;
+	};
+
+	const sortHitsForDisplay = (hits: SearchHit[]): SearchHit[] => {
+		const byMethod = isMethodSortOn();
 		return [...hits].sort((a, b) => {
-			const pa = a.displayTitle || a.id || '';
-			const pb = b.displayTitle || b.id || '';
-			return (
-				dir *
-				pa.localeCompare(pb, 'zh-CN', { numeric: true, sensitivity: 'base' })
-			);
+			if (byMethod) {
+				const ma = methodRank(a);
+				const mb = methodRank(b);
+				if (ma !== mb) return ma - mb;
+			}
+			return cmpPath(a, b);
 		});
 	};
 
-	/** 右栏筛选 + 名序后的全部结果（未截断） */
+	/** 右栏筛选 + 方式序/名序后的全部结果（未截断） */
 	const getFilteredHits = (): SearchHit[] =>
-		sortHitsByPath(applyRightFilter(lastBaseHits));
+		sortHitsForDisplay(applyRightFilter(lastBaseHits));
 
 	const closeModal = () => {
 		if (dialog.open) dialog.close();
@@ -744,6 +781,7 @@ export function mountSearch(mount: HTMLElement) {
 	});
 
 	const scopeLabels: { key: keyof SearchScopes; label: string }[] = [
+		{ key: 'folder', label: '文件夹' },
 		{ key: 'file', label: '文件' },
 		{ key: 'title', label: '标题' },
 		{ key: 'abstract', label: '摘要' },
@@ -967,8 +1005,15 @@ export function mountSearch(mount: HTMLElement) {
 		const total = filesBlock
 			? readFilesSummaryCounts(rightBody).total
 			: lastBaseHits.length;
+		const diag = getLastVectorDiag();
+		const vecHint =
+			diag.ok && typeof diag.hitCount === 'number'
+				? `；向量命中 ${diag.hitCount}（top ${diag.topScore?.toFixed(2) ?? '-'}）`
+				: diag.reason
+					? `；向量未生效：${diag.reason}`
+					: '';
 		statusEl.textContent = `(${shown}/${total})`;
-		statusEl.title = `可展示 ${shown} 条（范围·格式·文件筛选后）/ 结果共 ${total} 个文件`;
+		statusEl.title = `可展示 ${shown} 条（范围·格式·文件筛选后）/ 结果共 ${total} 个文件${vecHint}`;
 	};
 
 	/** 自底向上同步文件夹勾选 / indeterminate */
@@ -1006,7 +1051,11 @@ export function mountSearch(mount: HTMLElement) {
 		if (panel) updateFilesSummary(panel);
 	};
 
-	const scopeBlockHtml = (scopes: SearchScopes, available?: SearchScopes) => {
+	const scopeBlockHtml = (
+		scopes: SearchScopes,
+		available?: SearchScopes,
+		counts?: Partial<Record<keyof SearchScopes, number>>,
+	) => {
 		const items = scopeLabels.filter(({ key }) => !available || available[key]);
 		if (!items.length) return '';
 		const allOn = items.every(({ key }) => scopes[key]);
@@ -1022,13 +1071,18 @@ export function mountSearch(mount: HTMLElement) {
 			</div>
 			<div class="ms-filter-group">
 				${items
-					.map(
-						({ key, label }) => `
+					.map(({ key, label }) => {
+						const n = counts?.[key];
+						const countHtml =
+							typeof n === 'number'
+								? `<span class="ms-filter-count">(${n})</span>`
+								: '';
+						return `
 					<label class="ms-filter-value">
 						<input type="checkbox" data-scope="${key}" ${scopes[key] ? 'checked' : ''} />
-						<span>${label}</span>
-					</label>`,
-					)
+						<span class="ms-filter-label">${label}${countHtml}</span>
+					</label>`;
+					})
 					.join('')}
 			</div>
 		</div>`;
@@ -1067,17 +1121,48 @@ export function mountSearch(mount: HTMLElement) {
 		syncIndeterminate(leftBody);
 	};
 
+	const hitMethodKind = (
+		h: SearchHit,
+	): 'keyword' | 'dual' | 'vector' | null => {
+		const src = h.sources || { keyword: true, vector: false };
+		if (src.keyword && src.vector) return 'dual';
+		if (src.keyword) return 'keyword';
+		if (src.vector) return 'vector';
+		return null;
+	};
+
 	const buildRightOptions = (hits: SearchHit[]) => {
-		const scopeAvail: SearchScopes = {
-			file: leftScopes.file && hits.some((h) => h.match.file),
-			title: leftScopes.title && hits.some((h) => h.match.title),
-			abstract: leftScopes.abstract && hits.some((h) => h.match.abstract),
-			body: leftScopes.body && hits.some((h) => h.match.body),
+		const scopeCounts: Record<keyof SearchScopes, number> = {
+			folder: 0,
+			file: 0,
+			title: 0,
+			abstract: 0,
+			body: 0,
 		};
+		let pureKeyword = 0;
+		let pureVector = 0;
+		let dual = 0;
 		const formats: Record<string, number> = {};
 		for (const h of hits) {
+			const kind = hitMethodKind(h);
+			if (kind === 'keyword') pureKeyword++;
+			else if (kind === 'vector') pureVector++;
+			else if (kind === 'dual') dual++;
+			if (h.match.folder) scopeCounts.folder++;
+			if (h.match.file) scopeCounts.file++;
+			if (h.match.title) scopeCounts.title++;
+			if (h.match.abstract) scopeCounts.abstract++;
+			if (h.match.body) scopeCounts.body++;
 			formats[h.format] = (formats[h.format] || 0) + 1;
 		}
+		const scopeAvail: SearchScopes = {
+			// 结果侧：有文件夹命中才显示「文件夹」（在文件之上）
+			folder: scopeCounts.folder > 0,
+			file: leftScopes.file && scopeCounts.file > 0,
+			title: leftScopes.title && scopeCounts.title > 0,
+			abstract: leftScopes.abstract && scopeCounts.abstract > 0,
+			body: leftScopes.body && scopeCounts.body > 0,
+		};
 		const fileTree = buildSearchFileTree(
 			hits.map((h) => ({
 				path: h.id,
@@ -1086,6 +1171,10 @@ export function mountSearch(mount: HTMLElement) {
 		);
 		return {
 			scopeAvail,
+			scopeCounts,
+			pureKeyword,
+			pureVector,
+			dual,
 			formats: Object.entries(formats).sort((a, b) =>
 				a[0].localeCompare(b[0], 'zh'),
 			) as [string, number][],
@@ -1110,7 +1199,13 @@ export function mountSearch(mount: HTMLElement) {
 	};
 
 	const readScopesFrom = (panel: HTMLElement): SearchScopes => {
-		const scope: SearchScopes = { file: false, title: false, abstract: false, body: false };
+		const scope: SearchScopes = {
+			folder: false,
+			file: false,
+			title: false,
+			abstract: false,
+			body: false,
+		};
 		panel.querySelectorAll<HTMLInputElement>('input[data-scope]').forEach((el) => {
 			const k = el.dataset.scope as keyof SearchScopes;
 			if (k) scope[k] = el.checked;
@@ -1118,22 +1213,209 @@ export function mountSearch(mount: HTMLElement) {
 		return scope;
 	};
 
-	const resetRightFromHits = (hits: SearchHit[]) => {
-		const { scopeAvail, formats, fileTree } = buildRightOptions(hits);
-		rightScopes = {
-			file: !!scopeAvail.file,
-			title: !!scopeAvail.title,
-			abstract: !!scopeAvail.abstract,
-			body: !!scopeAvail.body,
+	/**
+	 * 从当前 DOM 读某 facet 各 value 勾选；并归纳 all / none / partial。
+	 * 无对应勾选框时返回 null（表示尚无状态，按「全选」处理）。
+	 */
+	const readFacetCheckMap = (
+		panel: HTMLElement,
+		group: string,
+	): { mode: 'all' | 'none' | 'partial'; checked: Map<string, boolean> } | null => {
+		const boxes = [
+			...panel.querySelectorAll<HTMLInputElement>(
+				`input[data-facet="${group}"]`,
+			),
+		];
+		if (!boxes.length) return null;
+		const checked = new Map<string, boolean>();
+		let onN = 0;
+		for (const b of boxes) {
+			const v = b.dataset.value;
+			if (!v) continue;
+			checked.set(v, b.checked);
+			if (b.checked) onN++;
+		}
+		if (!checked.size) return null;
+		const mode: 'all' | 'none' | 'partial' =
+			onN === 0 ? 'none' : onN === checked.size ? 'all' : 'partial';
+		return { mode, checked };
+	};
+
+	/**
+	 * 合并旧勾选与新可选值：
+	 * - 旧项：保持原勾选
+	 * - 新出现的项：默认勾选（便于看到新结果）；若整体原为「全不选」则新项也不勾
+	 * 返回 facet 用的 Set：空=全选，NONE=全不选，否则为已勾 value 集合
+	 */
+	const mergeFacetSelection = (
+		available: string[],
+		prev: { mode: 'all' | 'none' | 'partial'; checked: Map<string, boolean> } | null,
+		forceAll: boolean,
+	): Set<string> => {
+		if (forceAll || !prev) return new Set();
+		if (prev.mode === 'none') return new Set([NONE]);
+		if (prev.mode === 'all') return new Set();
+		const on: string[] = [];
+		for (const v of available) {
+			if (prev.checked.has(v)) {
+				if (prev.checked.get(v)) on.push(v);
+			} else {
+				// 本次结果新出现的选项 → 默认勾选
+				on.push(v);
+			}
+		}
+		if (!on.length) return new Set([NONE]);
+		if (on.length === available.length) return new Set();
+		return new Set(on);
+	};
+
+	const collectFilePathsFromTree = (nodes: SearchTreeNode[]): string[] => {
+		const out: string[] = [];
+		const walk = (list: SearchTreeNode[]) => {
+			for (const n of list) {
+				if (n.kind === 'file') out.push(n.path);
+				else walk(n.children);
+			}
 		};
-		rightFormat = new Set();
-		rightFolder = new Set();
+		walk(nodes);
+		return out;
+	};
+
+	/**
+	 * 按当前 hits 刷新右侧结果筛选。
+	 * - preserve=true（默认，每次搜索）：不重置勾选，只去掉本次没有的项、加上新项
+	 * - preserve=false（点「重置」）：全部恢复为全选
+	 */
+	const updateRightFromHits = (
+		hits: SearchHit[],
+		opts?: { preserve?: boolean },
+	) => {
+		const preserve = opts?.preserve !== false;
+		const hasPanel = Boolean(
+			rightBody.querySelector('input[data-facet], input[data-scope]'),
+		);
+
+		// 搜索前快照（仅 preserve 且面板已有内容时）
+		let prevMethod: Set<string> | null = null;
+		let prevScopes: SearchScopes | null = null;
+		let prevFormat: ReturnType<typeof readFacetCheckMap> = null;
+		let prevFile: ReturnType<typeof readFacetCheckMap> = null;
+		if (preserve && hasPanel) {
+			prevMethod = readFacetSelection(rightBody, 'method');
+			if (rightBody.querySelector('input[data-scope]')) {
+				prevScopes = readScopesFrom(rightBody);
+			}
+			prevFormat = readFacetCheckMap(rightBody, 'format');
+			prevFile = readFacetCheckMap(rightBody, 'file');
+		}
+
 		if (!input.value.trim() || !hits.length) {
+			// 无结果：清空可选项 UI，但保留内存中的勾选偏好，下次有结果时再用
+			if (!preserve) {
+				rightScopes = { ...DEFAULT_SCOPES };
+				rightFormat = new Set();
+				rightFolder = new Set();
+				rightMethod = new Set();
+			} else if (prevMethod) {
+				rightMethod = prevMethod;
+			}
+			if (prevScopes) rightScopes = prevScopes;
 			rightBody.innerHTML = `<p class="ms-panel-empty">搜索后显示可筛选项</p>`;
 			return;
 		}
+
+		const {
+			scopeAvail,
+			scopeCounts,
+			pureKeyword,
+			pureVector,
+			dual,
+			formats,
+			fileTree,
+		} = buildRightOptions(hits);
+		const formatKeys = formats.map(([k]) => k);
+		const filePaths = collectFilePathsFromTree(fileTree);
+		const showDualMethod = dual > 0;
+		// 有纯向量结果时才展示「向量搜索」筛选项
+		const showVectorMethod = pureVector > 0;
+		const visibleMethodKeys = [
+			'keyword',
+			...(showVectorMethod ? (['vector'] as const) : []),
+			...(showDualMethod ? (['dual'] as const) : []),
+		];
+
+		if (!preserve) {
+			// 重置：范围仅打开「当前结果里有的」项；格式/文件/方式全选
+			rightScopes = {
+				folder: !!scopeAvail.folder,
+				file: !!scopeAvail.file,
+				title: !!scopeAvail.title,
+				abstract: !!scopeAvail.abstract,
+				body: !!scopeAvail.body,
+			};
+			rightFormat = new Set();
+			rightFolder = new Set();
+			rightMethod = new Set();
+		} else {
+			// 搜索方式：优先 DOM 快照，缺省项保留内存偏好
+			if (prevMethod) {
+				rightMethod = mergeMethodSelectionFromDom(
+					prevMethod,
+					rightMethod,
+					rightBody,
+				);
+			}
+			// 范围：保留用户对各 scope 的勾选；展示时仅显示 available
+			if (prevScopes) {
+				rightScopes = { ...prevScopes };
+			}
+			rightScopes = {
+				folder: rightScopes.folder,
+				file: rightScopes.file,
+				title: rightScopes.title,
+				abstract: rightScopes.abstract,
+				body: rightScopes.body,
+			};
+			rightFormat = mergeFacetSelection(formatKeys, prevFormat, false);
+			rightFolder = mergeFacetSelection(filePaths, prevFile, false);
+		}
+
+		// 展示用 method：只渲染当前可见项，内存 rightMethod 可含隐藏偏好
+		const methodForUi = projectMethodForVisible(
+			rightMethod,
+			visibleMethodKeys,
+		);
+
+		// 结果中新出现「文件夹」命中且 DOM 尚无该项时：默认勾选以便可见
+		if (
+			scopeAvail.folder &&
+			!rightBody.querySelector('input[data-scope="folder"]')
+		) {
+			rightScopes.folder = true;
+		}
+		const scopesForUi: SearchScopes = {
+			folder: scopeAvail.folder ? rightScopes.folder : false,
+			file: scopeAvail.file ? rightScopes.file : false,
+			title: scopeAvail.title ? rightScopes.title : false,
+			abstract: scopeAvail.abstract ? rightScopes.abstract : false,
+			body: scopeAvail.body ? rightScopes.body : false,
+		};
+
+		// 勾选状态就绪后再算分子（受范围·格式·文件影响）
+		const methodVis = computeMethodVisibleCounts(hits);
+
 		rightBody.innerHTML =
-			scopeBlockHtml(rightScopes, scopeAvail) +
+			methodBlockHtml(methodForUi, {
+				dualVisible: methodVis.dualVisible,
+				dualTotal: dual,
+				keywordVisible: methodVis.pureKeywordVisible,
+				keywordTotal: pureKeyword,
+				vectorVisible: methodVis.pureVectorVisible,
+				vectorTotal: pureVector,
+				showDual: showDualMethod,
+				showVector: showVectorMethod,
+			}) +
+			scopeBlockHtml(scopesForUi, scopeAvail, scopeCounts) +
 			facetBlockHtml('right', '格式', 'format', formats, rightFormat) +
 			filesBlockHtml(fileTree, rightFolder);
 		const tree = rightBody.querySelector<HTMLElement>('[data-ms-file-tree]');
@@ -1142,9 +1424,162 @@ export function mountSearch(mount: HTMLElement) {
 		syncIndeterminate(rightBody);
 	};
 
+	/** 兼容：强制全选刷新（右侧「重置」） */
+	const resetRightFromHits = (hits: SearchHit[]) =>
+		updateRightFromHits(hits, { preserve: false });
+
+	/** 结果筛选：搜索方式（keyword / dual / vector），空 Set = 全选 */
+	let rightMethod = new Set<string>();
+
+	const methodPrefOn = (sel: Set<string>, key: string): boolean => {
+		if (sel.has(NONE)) return false;
+		if (sel.size === 0) return true;
+		return sel.has(key);
+	};
+
+	/** 将偏好投影到当前可见勾选框（不改内存） */
+	const projectMethodForVisible = (
+		sel: Set<string>,
+		visible: string[],
+	): Set<string> => {
+		if (sel.has(NONE)) return new Set([NONE]);
+		if (sel.size === 0) return new Set(); // 全选可见项
+		const on = visible.filter((k) => sel.has(k));
+		if (!on.length) return new Set([NONE]);
+		if (on.length === visible.length) return new Set();
+		return new Set(on);
+	};
+
+	/**
+	 * 从 DOM 读搜索方式；对当前未渲染的项（如无纯向量时无 vector 框）保留 oldPref。
+	 */
+	const mergeMethodSelectionFromDom = (
+		fromDom: Set<string>,
+		oldPref: Set<string>,
+		panel: HTMLElement,
+	): Set<string> => {
+		const boxes = [
+			...panel.querySelectorAll<HTMLInputElement>(
+				'input[data-facet="method"]',
+			),
+		];
+		const present = new Set(
+			boxes.map((b) => b.dataset.value!).filter(Boolean),
+		);
+		if (!present.size) return oldPref;
+		// DOM 上三项都在 → 直接用 DOM
+		if (
+			present.has('keyword') &&
+			present.has('dual') &&
+			present.has('vector')
+		) {
+			return fromDom;
+		}
+		const kw = present.has('keyword')
+			? methodPrefOn(fromDom, 'keyword')
+			: methodPrefOn(oldPref, 'keyword');
+		const dual = present.has('dual')
+			? methodPrefOn(fromDom, 'dual')
+			: methodPrefOn(oldPref, 'dual');
+		const vec = present.has('vector')
+			? methodPrefOn(fromDom, 'vector')
+			: methodPrefOn(oldPref, 'vector');
+		if (!kw && !dual && !vec) return new Set([NONE]);
+		if (kw && dual && vec) return new Set();
+		const next = new Set<string>();
+		if (kw) next.add('keyword');
+		if (dual) next.add('dual');
+		if (vec) next.add('vector');
+		return next;
+	};
+
+	const methodBlockHtml = (
+		selected: Set<string>,
+		opts: {
+			/** 分子：下方范围/格式/文件勾选后可显示数 */
+			dualVisible: number;
+			/** 分母：该类结果总数（旧「分子」语义） */
+			dualTotal: number;
+			keywordVisible: number;
+			keywordTotal: number;
+			vectorVisible: number;
+			vectorTotal: number;
+			showDual: boolean;
+			showVector: boolean;
+		},
+	) => {
+		const allOn = selected.size === 0;
+		type MethodRow = {
+			val: string;
+			label: string;
+			/** 展示用计数文案，已含括号 */
+			countText: string;
+			title: string;
+		};
+		const pair = (vis: number, total: number) =>
+			`(${Math.min(vis, total)}/${total})`;
+		const tip = (vis: number, total: number, kind: string) =>
+			`${kind}：可显示 ${Math.min(vis, total)} / 共 ${total}（受下方范围·格式·文件勾选影响）`;
+		// 顺序：双方式 → 关键字 → 向量
+		const rows: MethodRow[] = [];
+		if (opts.showDual) {
+			rows.push({
+				val: 'dual',
+				label: '双方式搜索',
+				countText: pair(opts.dualVisible, opts.dualTotal),
+				title: tip(opts.dualVisible, opts.dualTotal, '双方式'),
+			});
+		}
+		rows.push({
+			val: 'keyword',
+			label: '关键字搜索',
+			countText: pair(opts.keywordVisible, opts.keywordTotal),
+			title: tip(opts.keywordVisible, opts.keywordTotal, '纯关键字'),
+		});
+		if (opts.showVector) {
+			rows.push({
+				val: 'vector',
+				label: '向量搜索',
+				countText: pair(opts.vectorVisible, opts.vectorTotal),
+				title: tip(opts.vectorVisible, opts.vectorTotal, '纯向量'),
+			});
+		}
+		const body = rows
+			.map(({ val, label, countText, title }) => {
+				const checked = selected.has(NONE)
+					? false
+					: allOn || selected.has(val);
+				return `<label class="ms-filter-value" title="${title}">
+					<input type="checkbox" data-facet="method" data-value="${val}" ${checked ? 'checked' : ''} />
+					<span class="ms-filter-label">${label}<span class="ms-filter-count">${countText}</span></span>
+				</label>`;
+			})
+			.join('');
+		const nOn = selected.has(NONE)
+			? 0
+			: allOn
+				? rows.length
+				: rows.filter((r) => selected.has(r.val)).length;
+		const swChecked = nOn === rows.length && rows.length > 0;
+		const swIndet = nOn > 0 && nOn < rows.length;
+		return `
+		<div class="ms-filter-block is-open" data-group="method">
+			<div class="ms-filter-head">
+				<input type="checkbox" class="ms-group-switch" ${swChecked ? 'checked' : ''} ${swIndet ? 'data-indeterminate' : ''} title="全选 / 全取消" />
+				<button type="button" class="ms-filter-collapse" aria-expanded="true">
+					<span class="ms-filter-title">搜索方式</span>
+					<span class="ms-chevron" aria-hidden="true"></span>
+				</button>
+			</div>
+			<div class="ms-filter-group">
+				${body}
+			</div>
+		</div>`;
+	};
+
 	const projectHitForRight = (h: SearchHit): SearchHit => {
 		if (
-			rightScopes.file &&
+			(rightScopes.folder || rightScopes.file) &&
 			!rightScopes.title &&
 			!rightScopes.abstract &&
 			!rightScopes.body
@@ -1170,35 +1605,114 @@ export function mountSearch(mount: HTMLElement) {
 		return { ...h, sections };
 	};
 
-	const applyRightFilter = (hits: SearchHit[]): SearchHit[] => {
+	/**
+	 * 范围 / 格式 / 文件（不含搜索方式）是否仍可展示。
+	 * 与 applyRightFilter 一致。
+	 */
+	const hitPassesRightMeta = (h: SearchHit): boolean => {
+		const src = h.sources || { keyword: true, vector: false };
+		const pureVec = src.vector && !src.keyword;
+		if (rightFormat.has(NONE) || rightFolder.has(NONE)) return false;
+		if (rightFormat.size && !rightFormat.has(h.format)) return false;
+		if (rightFolder.size && !filePathMatchesSelection(h.id, rightFolder))
+			return false;
+		if (pureVec) return true;
 		const scopeOn =
+			rightScopes.folder ||
 			rightScopes.file ||
 			rightScopes.title ||
 			rightScopes.abstract ||
 			rightScopes.body;
+		if (!scopeOn) return false;
+		const scopeOk =
+			(rightScopes.folder && h.match.folder) ||
+			(rightScopes.file && h.match.file) ||
+			(rightScopes.title && h.match.title) ||
+			(rightScopes.abstract && h.match.abstract) ||
+			(rightScopes.body && h.match.body);
+		if (!scopeOk) return false;
+		const projected = projectHitForRight(h);
+		if (rightScopes.folder && h.match.folder) return true;
+		if (rightScopes.file && h.match.file) return true;
+		return projected.sections.some(
+			(s) => s.headingHtml || (s.prose && s.prose.length),
+		);
+	};
+
+	/** 分母=该类总数；分子=下方筛选后可显示数（≤分母） */
+	const computeMethodVisibleCounts = (hits: SearchHit[]) => {
+		let pureKeyword = 0;
+		let pureVector = 0;
+		let dual = 0;
+		let pureKeywordVisible = 0;
+		let pureVectorVisible = 0;
+		let dualVisible = 0;
+		for (const h of hits) {
+			const kind = hitMethodKind(h);
+			if (!kind) continue;
+			const vis = hitPassesRightMeta(h);
+			if (kind === 'keyword') {
+				pureKeyword++;
+				if (vis) pureKeywordVisible++;
+			} else if (kind === 'vector') {
+				pureVector++;
+				if (vis) pureVectorVisible++;
+			} else {
+				dual++;
+				if (vis) dualVisible++;
+			}
+		}
+		return {
+			pureKeyword,
+			pureVector,
+			dual,
+			pureKeywordVisible: Math.min(pureKeywordVisible, pureKeyword),
+			pureVectorVisible: Math.min(pureVectorVisible, pureVector),
+			dualVisible: Math.min(dualVisible, dual),
+		};
+	};
+
+	/** 只刷新搜索方式后的 (分子/分母)，不重建勾选 */
+	const refreshMethodCountLabels = (hits: SearchHit[]) => {
+		const c = computeMethodVisibleCounts(hits);
+		const setCount = (val: string, visible: number, total: number) => {
+			const input = rightBody.querySelector<HTMLInputElement>(
+				`input[data-facet="method"][data-value="${val}"]`,
+			);
+			const label = input?.closest('label');
+			const el = label?.querySelector<HTMLElement>('.ms-filter-count');
+			if (el) {
+				el.textContent = `(${visible}/${total})`;
+				label?.setAttribute(
+					'title',
+					`当前可显示 ${visible} / 该类共 ${total}（受范围·格式·文件勾选影响）`,
+				);
+			}
+		};
+		setCount('dual', c.dualVisible, c.dual);
+		setCount('keyword', c.pureKeywordVisible, c.pureKeyword);
+		setCount('vector', c.pureVectorVisible, c.pureVector);
+	};
+
+	const applyRightFilter = (hits: SearchHit[]): SearchHit[] => {
+		// 搜索方式：空=全选；NONE=全不选；
+		// keyword=纯关键字；dual=双命中；vector=纯向量（互不重叠）
+		if (rightMethod.has(NONE)) return [];
+		const methodAll = rightMethod.size === 0;
+		const wantKw = methodAll || rightMethod.has('keyword');
+		const wantDual = methodAll || rightMethod.has('dual');
+		const wantVec = methodAll || rightMethod.has('vector');
 		return hits
 			.filter((h) => {
-				if (!scopeOn) return false;
-				const scopeOk =
-					(rightScopes.file && h.match.file) ||
-					(rightScopes.title && h.match.title) ||
-					(rightScopes.abstract && h.match.abstract) ||
-					(rightScopes.body && h.match.body);
-				if (!scopeOk) return false;
-				if (rightFormat.has(NONE) || rightFolder.has(NONE)) return false;
-				if (rightFormat.size && !rightFormat.has(h.format)) return false;
-				if (
-					rightFolder.size &&
-					!filePathMatchesSelection(h.id, rightFolder)
-				)
-					return false;
-				return true;
+				const kind = hitMethodKind(h);
+				const methodOk =
+					(wantKw && kind === 'keyword') ||
+					(wantDual && kind === 'dual') ||
+					(wantVec && kind === 'vector');
+				if (!methodOk) return false;
+				return hitPassesRightMeta(h);
 			})
-			.map((h) => projectHitForRight(h))
-			.filter((h) => {
-				if (rightScopes.file && h.match.file) return true;
-				return h.sections.some((s) => s.headingHtml || s.prose.length);
-			});
+			.map((h) => projectHitForRight(h));
 	};
 
 	/** 渲染结果列表；标题 (可展示/结果文件总数) 与列表同源 */
@@ -1262,55 +1776,104 @@ export function mountSearch(mount: HTMLElement) {
 								})
 								.join('')}</div>`
 						: '';
-				return `<li class="ms-hit"><div class="ms-hit-card"><a class="ms-hit-path-link" href="${escapeAttr(h.href)}"><div class="ms-hit-path">${pathLine}</div></a>${sectionsHtml}</div></li>`;
+				const src = h.sources || { keyword: true, vector: false };
+				const pureVec = src.vector && !src.keyword;
+				const dual = src.keyword && src.vector;
+				const hitCls = pureVec
+					? 'ms-hit is-vector-only'
+					: dual
+						? 'ms-hit is-hybrid'
+						: 'ms-hit is-keyword-only';
+				const badge = pureVec
+					? `<span class="ms-hit-badge ms-hit-badge--vector" title="纯向量命中">向</span>`
+					: dual
+						? `<span class="ms-hit-badge ms-hit-badge--hybrid" title="关键字 + 向量双命中">双</span>`
+						: `<span class="ms-hit-badge ms-hit-badge--keyword" title="关键字命中">关</span>`;
+				return `<li class="${hitCls}"><div class="ms-hit-card"><a class="ms-hit-path-link" href="${escapeAttr(h.href)}"><div class="ms-hit-path">${badge}<span class="ms-hit-path__text">${pathLine}</span></div></a>${sectionsHtml}</div></li>`;
 			})
 			.join('');
 	};
 
+	const vectorEnableEl = () =>
+		root.querySelector<HTMLInputElement>('[data-vector-enable]');
+
+	const isVectorEnabled = () => vectorEnableEl()?.checked !== false;
+
 	const runLeftSearch = () => {
-		if (!service.isReady) {
-			statusEl.textContent = '';
-			statusEl.title = '索引加载中…';
-			return;
-		}
-		const q = matchMode === 'strict' ? input.value : input.value.trim();
-		if (!q) {
-			lastBaseHits = [];
-			rightBody.innerHTML = `<p class="ms-panel-empty">搜索后显示可筛选项</p>`;
-			renderResults([], '');
-			return;
-		}
-		if (leftBody.querySelector('input[data-scope]')) {
-			leftScopes = readScopesFrom(leftBody);
-		} else {
-			leftScopes = { ...DEFAULT_SCOPES };
-		}
-		leftFormat = readFacetSelection(leftBody, 'format');
-		leftFolder = readFilePathSelection(leftBody);
-		const lTree = leftBody.querySelector<HTMLElement>('[data-ms-file-tree]');
-		if (lTree) syncFileTreeChecks(lTree);
-		if (leftFormat.has(NONE) || leftFolder.has(NONE)) {
-			lastBaseHits = [];
-			resetRightFromHits([]);
-			renderResults([], q);
-			return;
-		}
-		lastBaseHits = service.search({
-			q,
-			scopes: leftScopes,
-			facets: { format: [...leftFormat], folder: [...leftFolder] },
-			// 不人为截断：列表与右侧文件树按完整结果建
-			limit: 10000,
-			fuzzy: matchMode === 'fuzzy',
-			combine: combineMode,
-			strict: matchMode === 'strict',
-			caseSensitive: caseMode === 'sensitive',
-			wholeWord: tokenMode === 'word',
-		});
-		// 先铺右侧文件树（全勾选），再按勾选过滤列表；计数与右侧「文件」同源
-		resetRightFromHits(lastBaseHits);
-		rightFolder = readFilePathSelection(rightBody);
-		renderResults(getFilteredHits(), q);
+		void (async () => {
+			if (!service.isReady) {
+				statusEl.textContent = '';
+				statusEl.title = '索引加载中…';
+				return;
+			}
+			const q = matchMode === 'strict' ? input.value : input.value.trim();
+			if (!q) {
+				lastBaseHits = [];
+				rightBody.innerHTML = `<p class="ms-panel-empty">搜索后显示可筛选项</p>`;
+				renderResults([], '');
+				return;
+			}
+			if (leftBody.querySelector('input[data-scope]')) {
+				leftScopes = readScopesFrom(leftBody);
+			} else {
+				leftScopes = { ...DEFAULT_SCOPES };
+			}
+			leftFormat = readFacetSelection(leftBody, 'format');
+			leftFolder = readFilePathSelection(leftBody);
+			const lTree = leftBody.querySelector<HTMLElement>('[data-ms-file-tree]');
+			if (lTree) syncFileTreeChecks(lTree);
+			if (leftFormat.has(NONE) || leftFolder.has(NONE)) {
+				lastBaseHits = [];
+				updateRightFromHits([], { preserve: true });
+				renderResults([], q);
+				return;
+			}
+			const vectorOn = isVectorEnabled();
+			if (vectorOn) {
+				statusEl.textContent = '…';
+				statusEl.title =
+					'向量检索准备中（e5-small，同源 /models 或镜像；首次较慢）…';
+			}
+			try {
+				lastBaseHits = await service.search({
+					q,
+					scopes: leftScopes,
+					facets: { format: [...leftFormat], folder: [...leftFolder] },
+					vectorEnabled: vectorOn,
+					limit: 10000,
+					fuzzy: matchMode === 'fuzzy',
+					combine: combineMode,
+					strict: matchMode === 'strict',
+					caseSensitive: caseMode === 'sensitive',
+					wholeWord: tokenMode === 'word',
+				});
+			} catch (e) {
+				console.warn('[search] failed', e);
+				lastBaseHits = [];
+			}
+			if (vectorOn) {
+				const diag = getLastVectorDiag();
+				if (!diag.ok && diag.reason) {
+					console.warn('[search] vector inactive:', diag.reason);
+					statusEl.title = `向量未生效：${diag.reason}（结果可能仅有关键词）`;
+				}
+			}
+			// 保留右侧勾选（含搜索方式），仅增删本次结果中的选项
+			updateRightFromHits(lastBaseHits, { preserve: true });
+			rightFormat = readFacetSelection(rightBody, 'format');
+			rightFolder = readFilePathSelection(rightBody);
+			// 搜索方式：勿在左侧重搜后用「不完整 DOM」覆盖内存（关向量时没有向量勾选框）
+			syncRightMethodFromDomPreserveVectorPref();
+			if (rightBody.querySelector('input[data-scope]')) {
+				const fromDom = readScopesFrom(rightBody);
+				for (const k of scopeLabels.map((s) => s.key)) {
+					if (rightBody.querySelector(`input[data-scope="${k}"]`)) {
+						rightScopes[k] = fromDom[k];
+					}
+				}
+			}
+			renderResults(getFilteredHits(), q);
+		})();
 	};
 
 	const runRightFilterOnly = () => {
@@ -1320,6 +1883,8 @@ export function mountSearch(mount: HTMLElement) {
 			return;
 		}
 		const scopeDom = readScopesFrom(rightBody);
+		if (rightBody.querySelector('input[data-scope="folder"]'))
+			rightScopes.folder = scopeDom.folder;
 		if (rightBody.querySelector('input[data-scope="file"]')) rightScopes.file = scopeDom.file;
 		if (rightBody.querySelector('input[data-scope="title"]'))
 			rightScopes.title = scopeDom.title;
@@ -1328,12 +1893,30 @@ export function mountSearch(mount: HTMLElement) {
 		if (rightBody.querySelector('input[data-scope="body"]')) rightScopes.body = scopeDom.body;
 		rightFormat = readFacetSelection(rightBody, 'format');
 		rightFolder = readFilePathSelection(rightBody);
+		syncRightMethodFromDomPreserveVectorPref();
 		const rTree = rightBody.querySelector<HTMLElement>('[data-ms-file-tree]');
 		if (rTree) syncFileTreeChecks(rTree);
 		updateFilesSummary(rightBody);
 		syncIndeterminate(rightBody);
-		// 列表按右筛过滤；标题 (n/m) 与右侧「文件」一致（updateFilesSummary 已 sync）
+		// 范围/格式/文件变化 → 刷新搜索方式 (可显示/该类总数)
+		refreshMethodCountLabels(lastBaseHits);
 		renderResults(getFilteredHits(), q);
+	};
+
+	/** 从右侧 DOM 同步搜索方式；缺失的 dual/vector 勾选框保留内存偏好 */
+	const syncRightMethodFromDomPreserveVectorPref = () => {
+		const boxes = [
+			...rightBody.querySelectorAll<HTMLInputElement>(
+				'input[data-facet="method"]',
+			),
+		];
+		if (!boxes.length) return;
+		const fromDom = readFacetSelection(rightBody, 'method');
+		rightMethod = mergeMethodSelectionFromDom(
+			fromDom,
+			rightMethod,
+			rightBody,
+		);
 	};
 
 	const scheduleLeft = () => {
@@ -1345,6 +1928,10 @@ export function mountSearch(mount: HTMLElement) {
 	};
 
 	input.addEventListener('input', () => scheduleLeft());
+	// 向量开关：改后立刻重搜（首次勾选会拉模型，状态栏提示）
+	root
+		.querySelector('[data-vector-enable]')
+		?.addEventListener('change', () => scheduleLeft());
 
 	const syncMsTreeAccordionBtn = (side: Side) => {
 		const btn = root.querySelector<HTMLButtonElement>(
@@ -1522,6 +2109,8 @@ export function mountSearch(mount: HTMLElement) {
 			} else if (!t.matches('input[data-scope], input[data-facet]')) {
 				return;
 			}
+			// 子项勾选变化后，刷新各组「全选/半选/全不选」组开关
+			syncIndeterminate(panel);
 			if (side === 'left') scheduleLeft();
 			else runRightFilterOnly();
 		});
@@ -1626,6 +2215,10 @@ export function mountSearch(mount: HTMLElement) {
 		tokenMode = next;
 		syncTokenModeBtn();
 		scheduleLeft();
+	});
+	methodSortEl()?.addEventListener('change', () => {
+		if (!input.value.trim() || !lastBaseHits.length) return;
+		renderResults(getFilteredHits(), input.value.trim());
 	});
 	pathSortBtn.addEventListener('click', (e) => {
 		e.preventDefault();

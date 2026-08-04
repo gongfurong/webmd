@@ -32,9 +32,10 @@
 | 7 | **[formats.md](./formats.md)** | 全格式状态与方案（原 catalog + 摘要 matrix） |
 | 8 | **[diagrams.md](./diagrams.md)** | 图示族细节与导出约定 |
 | 9 | **[development.md](./development.md)** | 命令、dev/build、调试、扩展检查清单 |
-| 10 | **[conventions.md](./conventions.md)** | 命名、路径、文档与 AI 协作规范 |
-| 11 | **[roadmap.md](./roadmap.md)** | 进度、已做/未做、优先级 |
-| 12 | **[deployment.md](./deployment.md)** | Cloudflare Pages 部署 |
+| 10 | **[search.md](./search.md)** | 关键字 + 本地向量混合、模型来源与缓存 |
+| 11 | **[conventions.md](./conventions.md)** | 命名、路径、文档与 AI 协作规范 |
+| 12 | **[roadmap.md](./roadmap.md)** | 进度、已做/未做、优先级 |
+| 13 | **[deployment.md](./deployment.md)** | Cloudflare Pages 部署 |
 
 ### 按角色跳转
 
@@ -45,6 +46,7 @@
 | **加一种预览类型** | preview-framework → formats → diagrams（若图示）→ development 扩展清单 |
 | **改 content 结构** | content-model → conventions |
 | **上线** | deployment → development 构建节 |
+| **搜索/向量** | search → features §7 → deployment 缓存节 |
 
 ## 2. 仓库结构（代码 + 内容）
 
@@ -99,4 +101,6 @@ WebMD/
 路径栏 info/树定位/伪全屏；软导航缓存+SWR；表格 `mode:read`；默认铺满；构建版本号；`_headers` 分层缓存。  
 
 **续（布局 + 表格）**：三栏 1px 分割线（收起仍见线 + 灰竖条）；全屏无左右/线；侧栏内容白/顶底灰；表格无加载文案、重载无确认、铺满中栏、滚动条分区、压 moreResize 右上白洞。  
+
+**续（搜索混合）**：e5-small 向量；`public/models` 同源优先；`vector-index` v2；关/双/向规则与方式计数 `(可显示/总数)`、文件夹范围、路径分段高亮；见 **search.md**。  
 
