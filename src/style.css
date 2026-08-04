@@ -1733,19 +1733,22 @@ body.is-col-resizing .webmd-ms-search .ms-gutter.is-dragging {
 	width: 1.125rem;
 	height: 1.125rem;
 }
-/* 折叠在最左：闭=右指 ▶，开=下指 ▼（与主页树一致） */
+/* 折叠在最左：加大热区，避免难点 */
 .webmd-ms-search .ms-folder-twist,
 .webmd-ms-search .ms-folder-twist-spacer {
 	flex-shrink: 0;
-	width: 1.15rem;
-	height: 1.15rem;
-	margin: 0 0.1rem 0 0;
+	width: 1.4rem;
+	height: 1.4rem;
+	min-width: 1.4rem;
+	margin: 0 0.12rem 0 0;
 	padding: 0;
 	border: 0;
 	background: transparent;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	position: relative;
+	z-index: 1;
 }
 .webmd-ms-search .ms-folder-twist {
 	cursor: pointer;
@@ -1754,15 +1757,16 @@ body.is-col-resizing .webmd-ms-search .ms-gutter.is-dragging {
 }
 .webmd-ms-search .ms-folder-chevron {
 	display: block;
-	width: 0.55rem;
-	height: 0.55rem;
+	width: 0.5rem;
+	height: 0.5rem;
 	position: relative;
 	box-sizing: border-box;
+	pointer-events: none;
 }
 .webmd-ms-search .ms-folder-chevron::before {
 	content: '';
 	position: absolute;
-	inset: 0.05rem;
+	inset: 0;
 	border-right: 1.75px solid currentColor;
 	border-bottom: 1.75px solid currentColor;
 	transform: rotate(-45deg); /* ▶ 收起，指向右 */
@@ -4393,30 +4397,46 @@ body.is-sheet-app-page .markdown-body .webmd-code.sheet-block.sheet-app {
 	min-width: max-content;
 	flex: 0 1 auto;
 }
-/* 折叠箭头：文件夹行最左 */
+/* 折叠箭头：最左；加大热区（focus 左边条不盖点击，见下方 is-tree-focus） */
 .tree-chevron {
 	flex-shrink: 0;
-	width: 0.9rem;
-	height: 0.9rem;
-	margin-inline-end: 0.12rem;
+	/* 热区约 28px，比视觉箭头大一圈，易点 */
+	width: 1.35rem;
+	height: 1.35rem;
+	margin-inline-end: 0.06rem;
 	margin-inline-start: 0;
 	position: relative;
+	z-index: 1;
 	color: var(--nav-count);
-	opacity: 0.85;
+	opacity: 0.9;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 0.25rem;
 }
 .tree-chevron::before {
 	content: '';
 	position: absolute;
-	inset: 0.15rem;
-	border-right: 1.4px solid currentColor;
-	border-bottom: 1.4px solid currentColor;
+	/* 箭头图形居中，约 0.55rem */
+	width: 0.5rem;
+	height: 0.5rem;
+	left: 50%;
+	top: 50%;
+	margin: -0.22rem 0 0 -0.28rem;
+	border-right: 1.5px solid currentColor;
+	border-bottom: 1.5px solid currentColor;
 	transform: rotate(-45deg);
 	transition: transform 0.12s ease;
-	opacity: 0.75;
+	opacity: 0.8;
+	pointer-events: none;
 }
 .tree-dir[open] > .tree-dir__summary .tree-chevron::before {
 	transform: rotate(45deg);
-	margin-top: -0.06rem;
+	margin-top: -0.28rem;
+}
+.tree-dir > .tree-dir__summary:hover .tree-chevron {
+	background: color-mix(in srgb, var(--fg) 6%, transparent);
+	color: var(--fg);
 }
 
 .tree-dir {
@@ -4467,10 +4487,22 @@ body.is-sheet-app-page .markdown-body .webmd-code.sheet-block.sheet-app {
 }
 .tree-dir.is-tree-focus > .tree-dir__summary {
 	background: color-mix(in srgb, var(--accent) 10%, transparent);
-	box-shadow: inset 3px 0 0 var(--accent);
+	/*
+	 * 左边强调用 border，不用 inset 阴影压在箭头上（阴影不抢点击，但视觉会像盖住热区）。
+	 * 左侧留出箭头列宽，条画在箭头右侧。
+	 */
+	box-shadow: none;
+	border-left: 3px solid var(--accent);
+	/* 原 padding-inline 与 3px 边对齐，避免整行跳动过大 */
+	padding-inline-start: calc(var(--nav-item-px, 0.4rem) - 1px);
 }
 .tree-dir.is-on-path.is-tree-focus > .tree-dir__summary {
 	background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.tree-dir.is-tree-focus > .tree-dir__summary .tree-chevron {
+	/* focus 时箭头仍可辨、可点 */
+	color: var(--accent);
+	opacity: 1;
 }
 .tree-dir > summary::-webkit-details-marker {
 	display: none;

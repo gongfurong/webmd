@@ -769,11 +769,21 @@ function syncTreeAccordionBtn() {
  * 进入（is-on-path）：当前打开的文件祖先目录
  * focus（is-tree-focus）：用户点文件夹，或打开文件时 focus 到文件所在目录
  * 单开：仅展开「进入链 ∪ focus 链」；多开：保证这两条链展开，其余不强制关
+ * 用户主动折叠：记入 treeUserCollapsed，apply 时不再强制拉开（否则像点不到折叠）
  */
 /** content 相对路径：当前 focus 的文件夹（至多一个） */
 let treeFocusDirPath = '';
 /** 程序改 open 时跳过 toggle 监听，避免循环 */
 let treeStateApplying = false;
+/** 用户点 summary 收起的目录 path（下次 focus/打开文件时会清掉相关项） */
+const treeUserCollapsed = new Set<string>();
+
+/** 打开某目录链时清掉用户折叠标记，保证能再次展开 */
+function clearTreeUserCollapsedAlong(dirPath: string): void {
+	for (const d of dirAncestorChain(dirPath)) {
+		treeUserCollapsed.delete(d);
+	}
+}
 
 function normalizeTreeRel(path: string): string {
 	return (path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
@@ -848,16 +858,20 @@ function applyTreeOpenState(opts?: {
 		}
 
 		// —— open ——
+		// 注意：用户主动收起的 path 在 treeUserCollapsed 内，不要再强制 d.open=true
+		// （否则 focus/进入链上的夹一点折叠就弹回，像按钮失灵）
 		const accordion = getTreeAccordion();
 		tree.querySelectorAll<HTMLDetailsElement>('details.tree-dir').forEach((d) => {
 			const p = d.dataset.path || '';
+			const wantOpen = mustOpen.has(p) && !treeUserCollapsed.has(p);
 			if (accordion) {
-				// 单开：不在「进入∪focus」链上的一律折叠
-				d.open = mustOpen.has(p);
-			} else if (mustOpen.has(p)) {
-				// 多开：只保证链上展开，不关用户已开的其它夹
+				// 单开：链上且用户未手动收起 → 开；其余关
+				d.open = wantOpen;
+			} else if (wantOpen) {
+				// 多开：只保证链上展开（尊重用户折叠）
 				d.open = true;
 			}
+			// 多开 + 非 wantOpen：保持用户当前 open 状态
 		});
 	} finally {
 		treeStateApplying = false;
@@ -922,6 +936,8 @@ function setTreeFocusDir(
 	opts?: { scroll?: boolean; flash?: boolean },
 ): void {
 	treeFocusDirPath = normalizeTreeRel(dirPath);
+	// 主动定位到此夹：清掉链上用户折叠，否则 open 仍被挡住
+	clearTreeUserCollapsedAlong(treeFocusDirPath);
 	applyTreeOpenState({
 		scroll: opts?.scroll ?? true,
 		flash: opts?.flash ?? true,
@@ -1123,7 +1139,7 @@ function bindFileTreeSort() {
 		},
 	);
 
-	// 用户点 summary 展开/折叠 → 改 focus（进入态只由当前文件决定）
+	// 用户点 summary 展开/折叠 → 改 focus；收起必须尊重用户（勿再强制拉开）
 	tree.addEventListener(
 		'toggle',
 		(ev) => {
@@ -1135,12 +1151,16 @@ function bindFileTreeSort() {
 			const path = normalizeTreeRel(t.dataset.path || '');
 			if (!path) return;
 			if (t.open) {
-				// 点开文件夹 = focus 到该目录
+				// 点开 = focus + 清掉本链用户折叠
+				treeUserCollapsed.delete(path);
+				clearTreeUserCollapsedAlong(path);
 				treeFocusDirPath = path;
 				applyTreeOpenState();
 			} else {
-				// 用户收起：若收的是 focus 夹则清 focus；进入链仍由 apply 强制展开（单开）
-				if (normalizeTreeRel(treeFocusDirPath) === path) {
+				// 用户收起：记下，apply 时不得再 open=true
+				treeUserCollapsed.add(path);
+				const focus = normalizeTreeRel(treeFocusDirPath);
+				if (focus === path || (focus && focus.startsWith(path + '/'))) {
 					treeFocusDirPath = '';
 				}
 				applyTreeOpenState();
@@ -3626,8 +3646,12 @@ function syncTreeActiveFromDoc(doc: Document) {
 		return;
 	}
 	link.classList.add('is-active');
-	// 打开新文件 ≡ focus 到该文件所在目录
+	// 打开新文件 ≡ focus 到该文件所在目录；清掉路径链上用户折叠以便展开
 	treeFocusDirPath = parentDirOfFile(path);
+	clearTreeUserCollapsedAlong(treeFocusDirPath);
+	for (const d of dirAncestorChain(treeFocusDirPath)) {
+		treeUserCollapsed.delete(d);
+	}
 	applyTreeOpenState();
 }
 
