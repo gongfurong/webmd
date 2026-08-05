@@ -142,6 +142,10 @@
 | `scripts/lib/search-index.ts` | 关键字索引；body **不**塞完整 path |
 | `scripts/lib/vector-index.ts` | Node 建索引；embed 文本不含 path |
 | `scripts/download-vector-models.ts` | 下载权重到 public |
+| `scripts/upload-models-r2.ts` | 增量上传 R2；写 `.r2-upload-manifest.json` |
+| `scripts/strip-pages-oversized.ts` | dist 去掉 >24 MiB（Pages 限制） |
+| `functions/models/[[path]].ts` | 线上 `/models/*` → R2 |
+| `scripts/ops.ts` / `ops/*` | 一键 dev / r2 / git / ship |
 
 ---
 
