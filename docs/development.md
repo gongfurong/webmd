@@ -57,7 +57,7 @@ content/
   → [dev] 按 URL renderFilePage
   → [build] Vite assets + 每文件 pages/**/index.html + cp content→dist/content
   → tree.json / search-index.json / vector-index.json
-  →（可选独立）vector-models → public/models/
+  → vector-models → public/models/（构建 vector-index 与本地搜索共用，不再用 .cache/transformers）
 ```
 
 | 阶段 | 写 content 源？ | 写 `_Res_*`？ |

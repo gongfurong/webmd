@@ -79,7 +79,7 @@ dist/
   tree.json
   search-index.json
   vector-index.json    # 文档 embedding（e5-small，version=2）
-  models/              # 推荐：e5 量化权重（与 public/models 同步）
+  models/              # 仅小文件（onnx strip）；完整权重 R2
   _headers
 ```
 

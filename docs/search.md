@@ -120,7 +120,7 @@
 构建:
   content → search-index.json（MiniSearch 文档）
          → vector-index.json（e5 passage 向量，跳过图片等噪声）
-  public/models/...（可选但推荐部署）
+  public/models/...（本地/构建必填；线上完整权重在 R2）
 
 浏览器:
   打开搜索 → 拉 search-index +（若开向量）vector-index

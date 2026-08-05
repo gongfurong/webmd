@@ -1,5 +1,6 @@
 /**
- * 下载 multilingual-e5-small 量化权重到 public/models/（浏览器同源加载）
+ * 下载 multilingual-e5-small 量化权重到 public/models/
+ * （本地浏览器 + 本机构建 vector-index 共用；线上再 models:r2-upload）
  * npm run vector-models
  *
  * 优先 hf-mirror.com，失败再试 huggingface.co
@@ -60,7 +61,9 @@ async function main() {
 		}
 		if (lastErr) throw lastErr;
 	}
-	console.log('[vector-models] done. Browser will load from /models/' + VECTOR_MODEL_ID);
+	console.log(
+		'[vector-models] done. Local: public/models + vector-index build; online: npm run models:r2-upload',
+	);
 }
 
 main().catch((e) => {

@@ -136,7 +136,7 @@ async function loadTransformers(): Promise<TransformersMod> {
 	return mod as unknown as TransformersMod;
 }
 
-/** 同源是否已托管 public/models/...（部署到 CF 时用 npm run vector-models 放入） */
+/** 同源是否已托管 /models/...（本地 public/models；线上 R2 + Function） */
 async function sameOriginModelsReady(modelId: string): Promise<boolean> {
 	try {
 		const url = `${window.location.origin}/models/${modelId}/config.json`;
