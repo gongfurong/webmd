@@ -131,7 +131,7 @@ const SHELL = `
 								<span class="ms-panel-label-title">搜索筛选</span>
 							</div>
 							<div class="ms-panel-label-end">
-								<button type="button" class="${MS_TEXT_BTN}" data-reset-left title="重置本栏筛选：全部勾选" aria-label="重置">重置</button>
+								<button type="button" class="${MS_TEXT_BTN}" data-reset-left title="重置本栏筛选：恢复默认（文件夹默认不勾）" aria-label="重置">重置</button>
 								<button type="button" class="${MS_TEXT_BTN} ms-tree-accordion-btn is-on" data-ms-tree-accordion="left" data-on="1" aria-pressed="true" title="单开：同层只展开一个文件夹（点击切换为多开）" aria-label="文件夹展开：单开"><span class="ms-tree-accordion-btn__label">单开</span></button>
 								${scrollEdgeHtml('left')}
 								<button type="button" class="ms-pane-collapse" data-ms-collapse="left" title="收起搜索筛选" aria-label="收起搜索筛选"><span aria-hidden="true">«</span></button>
@@ -173,7 +173,7 @@ const SHELL = `
 								<span class="ms-panel-label-title">结果筛选</span>
 							</div>
 							<div class="ms-panel-label-end">
-								<button type="button" class="${MS_TEXT_BTN}" data-reset-right title="重置本栏筛选：全部勾选" aria-label="重置">重置</button>
+								<button type="button" class="${MS_TEXT_BTN}" data-reset-right title="重置本栏筛选：恢复默认（范围与默认一致）" aria-label="重置">重置</button>
 								<button type="button" class="${MS_TEXT_BTN} ms-tree-accordion-btn is-on" data-ms-tree-accordion="right" data-on="1" aria-pressed="true" title="单开：同层只展开一个文件夹（点击切换为多开）" aria-label="文件夹展开：单开"><span class="ms-tree-accordion-btn__label">单开</span></button>
 								${scrollEdgeHtml('right')}
 								<button type="button" class="ms-pane-collapse" data-ms-collapse="right" title="收起结果筛选" aria-label="收起结果筛选"><span aria-hidden="true">»</span></button>
@@ -1345,13 +1345,13 @@ export function mountSearch(mount: HTMLElement) {
 		];
 
 		if (!preserve) {
-			// 重置：范围仅打开「当前结果里有的」项；格式/文件/方式全选
+			// 重置：范围 = 默认勾选 ∩ 当前结果可用项（文件夹默认关，不因「有命中」强行打开）
 			rightScopes = {
-				folder: !!scopeAvail.folder,
-				file: !!scopeAvail.file,
-				title: !!scopeAvail.title,
-				abstract: !!scopeAvail.abstract,
-				body: !!scopeAvail.body,
+				folder: !!scopeAvail.folder && DEFAULT_SCOPES.folder,
+				file: !!scopeAvail.file && DEFAULT_SCOPES.file,
+				title: !!scopeAvail.title && DEFAULT_SCOPES.title,
+				abstract: !!scopeAvail.abstract && DEFAULT_SCOPES.abstract,
+				body: !!scopeAvail.body && DEFAULT_SCOPES.body,
 			};
 			rightFormat = new Set();
 			rightFolder = new Set();
@@ -1386,12 +1386,12 @@ export function mountSearch(mount: HTMLElement) {
 			visibleMethodKeys,
 		);
 
-		// 结果中新出现「文件夹」命中且 DOM 尚无该项时：默认勾选以便可见
+		// 结果中新出现「文件夹」项时：按默认策略（DEFAULT_SCOPES.folder，当前为关）
 		if (
 			scopeAvail.folder &&
 			!rightBody.querySelector('input[data-scope="folder"]')
 		) {
-			rightScopes.folder = true;
+			rightScopes.folder = DEFAULT_SCOPES.folder;
 		}
 		const scopesForUi: SearchScopes = {
 			folder: scopeAvail.folder ? rightScopes.folder : false,
@@ -2133,11 +2133,12 @@ export function mountSearch(mount: HTMLElement) {
 	root.querySelector('[data-reset-left]')?.addEventListener('click', (e) => {
 		e.preventDefault();
 		e.stopPropagation();
+		// 恢复默认：范围用 DEFAULT_SCOPES（文件夹默认关），格式/文件空 Set = 全选
+		// 勿 checkAllIn：会把「文件夹」强行勾上
 		leftScopes = { ...DEFAULT_SCOPES };
 		leftFormat = new Set();
 		leftFolder = new Set();
 		renderLeft();
-		checkAllIn(leftBody);
 		scheduleLeft();
 	});
 	root.querySelector('[data-reset-right]')?.addEventListener('click', (e) => {
