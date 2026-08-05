@@ -54,7 +54,7 @@ Pages **单文件 ≤ 25 MiB**（[Limits](https://developers.cloudflare.com/page
 | R2+git | `npm run ops:ship -- -m "说明"` |
 | build+R2+git | `npm run ops:all -- -m "说明"` |
 
-**R2 去重：** 本地 `.cache/r2-upload-manifest.json`（sha256）；未变则 **不 put**。Cloudflare **不会**自动忽略相同文件。Git 与 R2 **分开**；`ship` 只是脚本顺序执行。
+**R2 去重：** `public/models/.r2-upload-manifest.json`（**进 Git**）：记录各文件 size/sha256；未变则 **不 put**。Cloudflare **不会**自动忽略相同文件。Git 与 R2 **分开**；`ship` 只是脚本顺序执行。
 
 ### 1.1 缓存：控制台要不要再设？
 

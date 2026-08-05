@@ -19,14 +19,14 @@ macOS 首次：`chmod +x ops/*.command`，若无法打开：系统设置 → 隐
 
 | 方式 | 说明 |
 |------|------|
-| **默认增量** | 算本地文件 **SHA-256**，与 `.cache/r2-upload-manifest.json` 对比；相同则 **skip**，**不调用** `wrangler put` |
+| **默认增量** | 算本地文件 **SHA-256**，与 **`public/models/.r2-upload-manifest.json`** 对比；相同则 **skip**，**不调用** `wrangler put` |
 | **Cloudflare 会不会自己忽略相同？** | **不会**。每次 put 都是一次 **Class A** 操作 |
 | **会不会按 git diff 推 R2？** | **不会自动**。R2 与 git **解耦**；`ship`/`all` 只是脚本里先 r2 再 git |
 | **强制上传** | `--force` 或 `r2:force` |
 
-manifest 在 **本机** `.cache/`（已 gitignore）。换电脑首次会当作「未上传」而 put 一次；属正常。
+manifest **请提交 Git**（与模型同目录），换机/他人 clone 后也能 skip。不是 Cloudflare 权威状态；若有人手动改了 R2，需 `--force` 或更新 manifest。
 
-远端对比（HeadObject）未默认开启，避免额外 Class B；当前策略已够省 Put。
+远端 Head 对比默认不做（少 Class B）。
 
 ## 和 Cloudflare 自动部署的关系
 

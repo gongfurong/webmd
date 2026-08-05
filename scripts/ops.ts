@@ -122,7 +122,7 @@ WebMD ops — 一键运维（跨平台）
 双击（仓库根目录 ops/）：
   Windows: *.cmd    macOS: *.command
 
-R2 跳过逻辑：.cache/r2-upload-manifest.json（本地 sha256，不上传则不产生 Class A）
+R2 跳过：public/models/.r2-upload-manifest.json（建议 git 提交；sha256 一致则不 Put）
 强制：npm run models:r2-upload -- --force
 `);
 }
