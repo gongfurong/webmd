@@ -41,6 +41,21 @@ Pages **单文件 ≤ 25 MiB**（[Limits](https://developers.cloudflare.com/page
 
 **换模保证最新：** 优先换路径/版本（如新型号目录）+ 短缓存 `config.json`（Function 内 60s）；同名覆盖后可 **Purge** `/models/*`。大 onnx 默认长缓存（7 天 SWR）。
 
+### 1.0.1 一键脚本（不经 AI）
+
+见仓库 **`ops/README.md`** 与 `npm run ops -- help`。
+
+| 场景 | 命令 / 双击 |
+|------|-------------|
+| 本地 dev | `npm run ops:dev` · `ops/01-local-dev.*` |
+| **增量**上传 R2（推荐） | `npm run ops:r2` · `ops/02-r2-upload.*` |
+| 强制全量 R2 | `npm run ops:r2:force`（少用） |
+| git 提交推送 | `npm run ops:git -- -m "说明"` |
+| R2+git | `npm run ops:ship -- -m "说明"` |
+| build+R2+git | `npm run ops:all -- -m "说明"` |
+
+**R2 去重：** 本地 `.cache/r2-upload-manifest.json`（sha256）；未变则 **不 put**。Cloudflare **不会**自动忽略相同文件。Git 与 R2 **分开**；`ship` 只是脚本顺序执行。
+
 ### 1.1 缓存：控制台要不要再设？
 
 **一般不用。** 仓库 `public/_headers` 进 `dist` 后，Pages 会按路径加 `Cache-Control`。  

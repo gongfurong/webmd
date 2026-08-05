@@ -16,6 +16,13 @@
     "vector-assets": "tsx scripts/ensure-vector-assets.ts",
     "models:r2-upload": "tsx scripts/upload-models-r2.ts",
     "models:r2-create-bucket": "npx wrangler r2 bucket create webmd-models",
+    "ops": "tsx scripts/ops.ts",
+    "ops:dev": "tsx scripts/ops.ts dev",
+    "ops:r2": "tsx scripts/ops.ts r2",
+    "ops:r2:force": "tsx scripts/ops.ts r2:force",
+    "ops:git": "tsx scripts/ops.ts git",
+    "ops:ship": "tsx scripts/ops.ts ship",
+    "ops:all": "tsx scripts/ops.ts all",
     "preview": "tsx scripts/ensure-port.ts && vite preview",
     "scan": "tsx scripts/scan-content.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"
