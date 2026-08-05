@@ -57,16 +57,39 @@ export function docToEmbedText(doc: SearchDoc): string {
 
 export async function buildVectorIndexFromSearchDocs(
 	docs: SearchDoc[],
-	opts?: { cacheDir?: string },
+	opts?: {
+		/** 本地模型根目录（含 Xenova/...），默认 public/models；只读，不往 .cache 再下一份 */
+		localModelsDir?: string;
+	},
 ): Promise<VectorIndexFile> {
 	const { pipeline, env } = await import('@xenova/transformers');
-	if (opts?.cacheDir) env.cacheDir = opts.cacheDir;
+	// 强制只用 public/models（与浏览器/R2 同源布局），禁止再写入 .cache/transformers
+	const localModelsDir =
+		opts?.localModelsDir ||
+		path.join(process.cwd(), 'public', 'models');
+	const modelDir = path.join(localModelsDir, ...VECTOR_MODEL_ID.split('/'));
+	const onnx = path.join(modelDir, 'onnx', 'model_quantized.onnx');
+	if (!fs.existsSync(onnx)) {
+		throw new Error(
+			`[vector] missing local model: ${path.relative(process.cwd(), onnx)}. Run: npm run vector-models`,
+		);
+	}
+	// transformers.js：localModelPath + model id → {localModelPath}/{id}/...
+	env.localModelPath = localModelsDir.endsWith(path.sep)
+		? localModelsDir
+		: localModelsDir + path.sep;
 	env.allowLocalModels = true;
+	env.allowRemoteModels = false;
+	// 避免库再往默认 cache 写权重；仅可能留下可忽略的空目录
+	env.cacheDir = path.join(process.cwd(), '.cache', 'transformers-noop');
 
-	console.log(`[vector] loading model ${VECTOR_MODEL_ID} (quantized) …`);
+	console.log(
+		`[vector] loading model ${VECTOR_MODEL_ID} (quantized) from ${path.relative(process.cwd(), modelDir)} …`,
+	);
 	const extractor = await pipeline('feature-extraction', VECTOR_MODEL_ID, {
 		quantized: true,
-	});
+		local_files_only: true,
+	} as { quantized: boolean; local_files_only?: boolean });
 
 	const eligible = docs.filter(isVectorWorthyDoc);
 	const skipped = docs.length - eligible.length;
@@ -156,10 +179,9 @@ export async function buildAndWriteVectorIndex(
 		console.log('[vector] WEBMD_VECTOR_SKIP=1 → skip');
 		return;
 	}
-	const cacheDir = path.join(process.cwd(), '.cache', 'transformers');
-	fs.mkdirSync(cacheDir, { recursive: true });
+	const localModelsDir = path.join(publicDir, 'models');
 	const index = await buildVectorIndexFromSearchDocs(searchIndex.docs || [], {
-		cacheDir,
+		localModelsDir,
 	});
 	const outs = [path.join(publicDir, 'vector-index.json')];
 	if (distDir) outs.push(path.join(distDir, 'vector-index.json'));

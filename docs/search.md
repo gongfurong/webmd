@@ -65,8 +65,7 @@
 ### 3.3 构建期（Node）
 
 `npm run vector-index` 在 **本机 Node** 用同一模型生成 `vector-index.json`。  
-权重缓存目录：项目 **`.cache/transformers/`**（已 gitignore）。  
-首次会从网络拉模型到该缓存；之后离线可重建索引（缓存仍在时）。
+构建期模型：**只读 `public/models/`**（与浏览器/R2 同一套文件），`allowRemoteModels=false`，**不再**往 `.cache/transformers` 下载第二份。缺文件时请先 `npm run vector-models`。
 
 ---
 
@@ -81,7 +80,7 @@
 | **transformers 模型缓存** | 浏览器（`env.useBrowserCache = true`） | Cache API / 浏览器存储，**无固定「N 天过期」**；关站数据/硬清缓存会丢 | 用户清站点数据；或部署新路径迫使 miss |
 | **transformers 内存** | 页内 | 单页会话内复用 pipeline | 刷新页面重建 |
 | **vector-index 内存** | 页内 | 加载一次解码 base64→Float32 | 刷新页面重拉 JSON |
-| **构建期模型** | `.cache/transformers` | 磁盘长期 | 删 `.cache` 后下次重建会重下 |
+| **构建期模型** | 只读 `public/models` | 不另存第二份 | 缺则 `vector-models` |
 
 ### 4.2 「有更新能否及时替换？」
 
