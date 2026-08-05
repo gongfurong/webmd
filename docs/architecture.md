@@ -61,7 +61,8 @@
 | `src/previews/*` | 图示 bind |
 | `src/excel-viewer.ts` | 表格 bind（只读文本 + 显示向操作） |
 | `src/search/*` | 关键字 + 混合向量 UI/服务（见 [search.md](./search.md)） |
-| `public/models/` | 可选：浏览器同源 embedding 权重（`npm run vector-models`） |
+| `public/models/` | 本地 embedding 权重（LFS）；线上完整权重在 **R2**，Function 同源 `/models/*` |
+| `functions/models/` | Pages Function → R2 binding `MODELS` |
 | `scripts/lib/*` | 扫盘、渲染、shell、prepare、向量索引、`version.ts` |
 | `config/*` · `site.config.ts` | 配置 |
 | `docs/` | 项目元文档 |
@@ -99,7 +100,7 @@ dist/
 3. **dev**：请求 → `matchFileByUrl` → `renderFilePage`  
 4. **build**：Vite 打 client → 对每个文件 `pageOutDir` 写 `index.html` → `cp content → dist/content`  
 5. 写 tree / search-index / **vector-index**（可 `WEBMD_VECTOR_SKIP=1` 跳过）/ 404  
-6. 部署前建议已有 `public/models/...`（`npm run vector-models`），否则浏览器回退远程拉模  
+6. 线上：R2 已上传模型 + Pages 绑定 `MODELS`；本地：`public/models`。否则回退 HF/镜像  
 
 客户端：软导航替换中栏 → 再 bind PDF/表/图示/复制等；文件树 `applyTreeOpenState` 同步进入+focus。  
 搜索：MiniSearch ∪ 可选本地向量（同源 `/models` 优先），详见 [search.md](./search.md)。

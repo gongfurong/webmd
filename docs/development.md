@@ -28,10 +28,11 @@ npm install
 | `npm run typecheck` | `tsc` 双项目 |
 | `npm run search-index` | 仅重建 **关键字** 索引到 public |
 | `npm run vector-index` | 重建 **向量** 索引 `vector-index.json`（e5-small） |
-| `npm run vector-models` | 下载 e5-small 量化到 `public/models/`（仓库跟踪 + LFS） |
+| `npm run vector-models` | 下载 e5-small 到 `public/models/`（Git LFS） |
 | `npm run vector-assets` | 缺模型时自动下载；`build` 已内置调用 |
-| `npm run models:r2-create-bucket` | 创建 R2 桶 `webmd-models`（需 wrangler login） |
-| `npm run models:r2-upload` | 上传 `public/models` → R2，供线上 `/models` Function |
+| `npm run models:r2-create-bucket` | 创建 R2 桶 `webmd-models` |
+| `npm run models:r2-upload` | **增量**上传 → R2；写 `public/models/.r2-upload-manifest.json`（**请 commit**） |
+| `npm run ops` / `ops:*` | 一键运维，见 [ops/README.md](../ops/README.md) |
 
 向量专题 → [search.md](./search.md)。
 
@@ -87,7 +88,10 @@ content/
 | `src/search/*` | 关键字 + 混合向量搜索 |
 | `scripts/lib/vector-index.ts` | Node 建向量索引 |
 | `scripts/download-vector-models.ts` | 下载 embedding 到 public/models |
-| `public/models/` | 浏览器同源模型（gitignore，CI/本机 `vector-models`） |
+| `scripts/upload-models-r2.ts` | R2 增量上传 + manifest |
+| `public/models/` | 本地/LFS 模型；线上经 R2+Function 同源 |
+| `public/models/.r2-upload-manifest.json` | 已上传内容哈希（进 Git，供 skip Put） |
+| `functions/models/` | Pages Function：`/models/*` → R2 |
 | `public/_headers` | Cloudflare Pages 缓存头 |
 | `site.config.ts` + `config/*` | 配置 |
 

@@ -75,11 +75,13 @@ Pages **单文件 ≤ 25 MiB**（[Limits](https://developers.cloudflare.com/page
 dist/
   index.html / 404.html / _headers
   tree.json / search-index.json / vector-index.json
-  models/          # 推荐：e5-small 量化（构建前 npm run vector-models）
+  models/          # 仅小文件（onnx 已被 strip）；完整权重在 R2
   assets/          # JS/CSS
   content/         # 原 content 拷贝（含 _Res_*）
   pages/           # 预览 HTML
 ```
+
+仓库另有：`public/models/`（含 onnx + **`.r2-upload-manifest.json`**）、`functions/models/`、`ops/` 一键脚本。
 
 线上：
 

@@ -93,8 +93,8 @@
 
 **实践建议：**
 
-- 换 embedding 模型：改 `src/search/vector-shared.ts` → 升 `VECTOR_INDEX_VERSION` → `vector-models` + `vector-index` → 部署并 purge `/models/*` 与 `/vector-index.json`。  
-- 仅改 content：重建 `vector-index.json` 即可，不必重下模型。
+- 换 embedding 模型：改 `vector-shared` → 升 `VECTOR_INDEX_VERSION` → `vector-models` + **`models:r2-upload`** + `vector-index` → git 提交 **`.r2-upload-manifest.json`** → push；必要时 purge `/models/*`。  
+- 仅改 content：重建 `vector-index.json` 即可，不必重传 R2 模型。
 
 ---
 
@@ -148,14 +148,14 @@
 ## 7. 命令速查
 
 ```bash
-npm run vector-models   # 下载 e5-small 量化到 public/models（部署推荐）
+npm run vector-models   # 下载 e5-small 到 public/models（本地/LFS）
+npm run models:r2-upload # 增量上传 R2（哈希未变则 skip；manifest 进 Git）
 npm run vector-index    # 重建 vector-index.json
-npm run search-index    # 仅关键字索引
-npm run build           # 含 SSG + 默认写向量索引（可 WEBMD_VECTOR_SKIP=1）
+npm run build           # ensure 模型 → SSG → strip >24MiB → vector-index
+npm run ops -- help     # 一键 dev / r2 / git / ship / all
 ```
 
-开发：确保 `public/models/.../onnx/model_quantized.onnx` 可访问；Console 应见  
-`[vector] model source: same-origin /models/` 与 `embedder ready via same`。
+本地：`public/models` 由 Vite 提供。线上：R2 + Function。Console：`same-origin /models/` + `embedder ready via same`。
 
 ---
 
@@ -163,10 +163,11 @@ npm run build           # 含 SSG + 默认写向量索引（可 WEBMD_VECTOR_SKI
 
 | 项 | 建议 |
 |----|------|
-| 产物 | `dist` 含 `vector-index.json`；**务必**带上 `models/`（若 gitignore 了 public/models，CI 需 `vector-models`） |
-| 体积 | 模型约 **110MB+**，注意 Pages 体积与带宽 |
-| 无服务端 | 全部在访客浏览器推理；弱网首次开向量会慢 |
-| Purge | 换模后 purge `/models/*` 与 `/vector-index.json` |
+| 产物 | `dist` 含 `vector-index.json`；**不含**超 25 MiB 的 onnx（构建 strip）；完整权重在 **R2**，由 Function 同源 `/models/*` 提供 |
+| 体积 | onnx ≈113 MB → **R2**；Pages 只托管小文件 |
+| 无对话服务端 | embedding 在访客浏览器；首次下模型约 110MB |
+| Purge / 换模 | 升路径或 purge `/models/*`；上传后更新并 **git commit** `public/models/.r2-upload-manifest.json` |
+| 一键运维 | `ops/`、`npm run ops -- help` → [deployment.md](./deployment.md) §1.0.1、[ops/README.md](../ops/README.md) |
 
 ---
 

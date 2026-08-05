@@ -40,7 +40,8 @@ npm run preview
 | `build` | typecheck + Vite + SSG（含 vector-index，可 `WEBMD_VECTOR_SKIP=1`） |
 | `vector-models` | 下载 e5-small 到 `public/models/`（本地 / LFS） |
 | `vector-index` | 重建向量索引 |
-| `models:r2-upload` | 上传 models → Cloudflare R2（线上 `/models`，绕过 Pages 25 MiB） |
+| `models:r2-upload` | **增量**上传 → R2（哈希未变 skip；`public/models/.r2-upload-manifest.json` 进 Git） |
+| `ops` / `ops:*` | 一键 dev / r2 / git / ship / all（双击见 `ops/`） |
 | `search-index` | 重建关键字索引 |
 | `scan` | 树 + 可选预生成旁路资源 |
 | `typecheck` | TypeScript |

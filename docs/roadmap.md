@@ -18,7 +18,7 @@
 - [x] 中栏全屏：桌面 Fullscreen API + **手机伪全屏**  
 - [x] 下载 PC/手机分流、URL 复制（可读/转义/相对）  
 - [x] MiniSearch 站内搜索  
-- [x] **混合检索**：关键字 + 浏览器本地向量（`multilingual-e5-small`）；`vector-index` / `vector-models`；关·双·向与方式序（见 [search.md](./search.md)）  
+- [x] **混合检索**：关键字 + 浏览器向量（e5-small）；Pages+R2 同源 `/models`；增量 R2 与 `ops/` 一键脚本；关·双·向（见 [search.md](./search.md)、[deployment.md](./deployment.md)）  
 - [x] SSG + Vite；dist 分区 **content / pages / assets**  
 - [x] 预览 URL `/pages/` 对齐 content；去掉 `f/`  
 - [x] 软导航：连点只跟最后一次、会话 HTML 缓存 + SWR、路径上 loading 条  

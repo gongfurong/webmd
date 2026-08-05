@@ -102,5 +102,5 @@ WebMD/
 
 **续（布局 + 表格）**：三栏 1px 分割线（收起仍见线 + 灰竖条）；全屏无左右/线；侧栏内容白/顶底灰；表格无加载文案、重载无确认、铺满中栏、滚动条分区、压 moreResize 右上白洞。  
 
-**续（搜索混合）**：e5-small 向量；`public/models` 同源优先；`vector-index` v2；关/双/向规则与方式计数 `(可显示/总数)`、文件夹范围、路径分段高亮；见 **search.md**。  
+**续（搜索混合）**：e5-small；本地 `public/models` + 线上 **R2+Function**；manifest 进 Git；`ops/` 一键运维；关/双/向与方式计数；见 **search.md**、**deployment.md** §1.0、**ops/README.md**。  
 
