@@ -14,9 +14,32 @@
 | Node | **`22.22.2`**（`NODE_VERSION` + `.nvmrc`） |
 
 构建机通常**无** LibreOffice / ffmpeg → Word/PPT 预览与视频封面依赖仓库已有 `_Res_*`。  
-向量：**`public/models` 与 `vector-index.json` 进仓库**（onnx 走 Git LFS）。`npm run build` 会 `ensure-vector-assets` 并写入 `dist/models/`。克隆后若 LFS 未拉全，执行 `git lfs pull` 或 `npm run vector-models`。  
 
-**Cloudflare Pages 单文件限制**：量化 onnx ≈113MB，免费档常 **25MB/文件** 会拒收。若 deploy 失败，将 `/models` 放到 **R2** 并用 Worker/路由同源提供，或确认套餐文件上限。
+### 1.0 向量模型：Pages + R2（官方大文件路径）
+
+Pages **单文件 ≤ 25 MiB**（[Limits](https://developers.cloudflare.com/pages/platform/limits/)），e5-small 量化 ≈113 MiB **不能**进 `dist`。
+
+| 层级 | 作用 |
+|------|------|
+| **Pages `dist`** | 站点 + `vector-index.json` + 小资源；构建末 **strip >24 MiB** |
+| **R2 桶 `webmd-models`** | 完整 `public/models/**`（含 onnx） |
+| **Pages Function** `functions/models/[[path]].ts` | 同源 **`/models/*` → R2**（binding 名 **`MODELS`**） |
+| **本地 dev** | 仍读 `public/models`（不经过 Function） |
+
+**一次性配置（Cloudflare 控制台 + 本机）：**
+
+1. 开通 R2（[定价/免费额度](https://developers.cloudflare.com/r2/pricing/)：存储 10 GB-month 等免费档；超额才计费；Egress 官方写 Free）。  
+2. 创建桶：`npm run models:r2-create-bucket` 或控制台建 **`webmd-models`**。  
+3. 登录：`npx wrangler login`  
+4. 上传模型：`npm run vector-models`（若本地没有）→ **`npm run models:r2-upload`**  
+5. Pages 项目 **Settings → Bindings → R2**：  
+   - Variable name: **`MODELS`**  
+   - R2 bucket: **`webmd-models`**  
+   （仓库 `wrangler.toml` 已声明同名绑定，Git 集成时请与控制台一致。）  
+6. 重新部署 Pages（push 或 Retry deployment）。  
+7. 验收：`https://你的域名/models/Xenova/multilingual-e5-small/config.json` → **200**；搜索 Console：`same-origin /models/`。
+
+**换模保证最新：** 优先换路径/版本（如新型号目录）+ 短缓存 `config.json`（Function 内 60s）；同名覆盖后可 **Purge** `/models/*`。大 onnx 默认长缓存（7 天 SWR）。
 
 ### 1.1 缓存：控制台要不要再设？
 

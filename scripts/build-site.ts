@@ -103,21 +103,34 @@ async function main() {
 		`[ssg] wrote home + ${count} content pages + 404.html + search-index (${searchIdx.docs.length} docs, minisearch) → dist/`,
 	);
 
-	// 同源 embedding 权重：确保 dist/models 与 public 一致（vite 已拷 public，再兜底一次）
+	// models：小文件可进 dist；>24MiB 的 onnx 由 strip-pages 删除，线上走 R2+Function
 	const modelsSrc = path.join(publicDir, 'models');
 	const modelsDst = path.join(distDir, 'models');
 	if (fs.existsSync(modelsSrc)) {
 		fs.cpSync(modelsSrc, modelsDst, { recursive: true });
-		console.log('[ssg] models/ → dist/models/（同源向量模型，手机可直接用）');
+		console.log(
+			'[ssg] models/ → dist/models/（大文件随后 strip，R2 提供完整权重）',
+		);
 	} else {
 		console.warn(
-			'[ssg] 缺少 public/models — 请 npm run vector-models；否则访客只能回退 HF',
+			'[ssg] 缺少 public/models — 本地请 npm run vector-models；线上需 R2',
 		);
 	}
 
 	// 本地向量索引（embedding 小模型；WEBMD_VECTOR_SKIP=1 可跳过）
 	const { buildAndWriteVectorIndex } = await import('./lib/vector-index');
 	await buildAndWriteVectorIndex(searchIdx, publicDir, distDir);
+
+	// Cloudflare Pages 25 MiB 限制
+	const { spawnSync } = await import('node:child_process');
+	const strip = spawnSync(
+		'npx',
+		['tsx', path.join(root, 'scripts/strip-pages-oversized.ts')],
+		{ cwd: root, stdio: 'inherit', shell: true },
+	);
+	if (strip.status !== 0) {
+		throw new Error('[ssg] strip-pages-oversized failed');
+	}
 }
 
 main().catch((e) => {

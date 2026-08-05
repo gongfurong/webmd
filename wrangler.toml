@@ -1,0 +1,12 @@
+# Cloudflare Pages + R2：大模型不进 dist，由 Functions 从 R2 同源提供 /models/*
+# https://developers.cloudflare.com/pages/functions/bindings/#r2-buckets
+name = "webmd"
+compatibility_date = "2025-03-01"
+pages_build_output_dir = "dist"
+
+# 控制台创建Pages 项目 → Settings → Bindings → R2：binding 名必须是 MODELS
+# 桶名默认 webmd-models（可用 WEBMD_R2_BUCKET 上传脚本覆盖）
+[[r2_buckets]]
+binding = "MODELS"
+bucket_name = "webmd-models"
+preview_bucket_name = "webmd-models"

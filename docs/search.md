@@ -41,15 +41,16 @@
 
 ## 3. 模型从哪里来？（站内 vs 远程）
 
-### 3.1 站内同源（默认、仓库内自带）
+### 3.1 站内同源（本地 public + 线上 R2）
 
-1. **`public/models/` 纳入 Git**（大文件 `*.onnx` 用 **Git LFS**）；`npm run build` 前会 `ensure-vector-assets`（缺则自动下载）。  
-2. 构建把模型拷到 **`dist/models/`**，Cloudflare 部署后手机从  
-   `https://你的站/models/Xenova/multilingual-e5-small/...`  
-   **同源加载**（优先不走 Hugging Face）。  
-3. 浏览器探测 `GET /models/.../config.json` 成功 → Console：`model source: same-origin /models/`。  
+| 环境 | 模型从哪来 |
+|------|------------|
+| **本地 dev** | `public/models/`（Git LFS / `npm run vector-models`） |
+| **Cloudflare** | **R2 桶** + Pages Function **`/models/*`**（绕过 Pages **25 MiB** 限制） |
+| **浏览器** | 仍请求 **同源** `/models/...`；探测 config 成功 → `same-origin /models/` |
 
-**注意 Cloudflare Pages 单文件体积上限**（免费档常见 **25MB**）：e5-small 量化 onnx 约 **113MB**，可能无法直接放 Pages 免费静态托管。若部署报文件过大，请：用 **R2 + 自定义域名/Workers 反代 `/models/*`**，或升级套餐后确认平台单文件限制。本地与「产物里带 models」的意图不变。
+构建：`ensure-vector-assets` → 站点写入 dist → **strip >24 MiB**（onnx 不进 Pages）。  
+上传 R2：`npm run models:r2-upload`。步骤见 [deployment.md](./deployment.md) §1.0。
 
 ### 3.2 回退：远程（仅同源不可用时）
 

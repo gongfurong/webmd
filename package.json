@@ -14,6 +14,8 @@
     "vector-index": "tsx scripts/build-vector-index.ts",
     "vector-models": "tsx scripts/download-vector-models.ts",
     "vector-assets": "tsx scripts/ensure-vector-assets.ts",
+    "models:r2-upload": "tsx scripts/upload-models-r2.ts",
+    "models:r2-create-bucket": "npx wrangler r2 bucket create webmd-models",
     "preview": "tsx scripts/ensure-port.ts && vite preview",
     "scan": "tsx scripts/scan-content.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json"

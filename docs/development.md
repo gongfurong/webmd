@@ -30,6 +30,8 @@ npm install
 | `npm run vector-index` | 重建 **向量** 索引 `vector-index.json`（e5-small） |
 | `npm run vector-models` | 下载 e5-small 量化到 `public/models/`（仓库跟踪 + LFS） |
 | `npm run vector-assets` | 缺模型时自动下载；`build` 已内置调用 |
+| `npm run models:r2-create-bucket` | 创建 R2 桶 `webmd-models`（需 wrangler login） |
+| `npm run models:r2-upload` | 上传 `public/models` → R2，供线上 `/models` Function |
 
 向量专题 → [search.md](./search.md)。
 
