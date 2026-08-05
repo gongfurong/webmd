@@ -38,8 +38,9 @@ npm run preview
 |------|------|
 | `dev` | 开发；预览 `/pages/...`，原件 `/content/...` |
 | `build` | typecheck + Vite + SSG（含 vector-index，可 `WEBMD_VECTOR_SKIP=1`） |
-| `vector-models` | 下载 e5-small 到 `public/models/`（浏览器同源，部署推荐） |
+| `vector-models` | 下载 e5-small 到 `public/models/`（本地 / LFS） |
 | `vector-index` | 重建向量索引 |
+| `models:r2-upload` | 上传 models → Cloudflare R2（线上 `/models`，绕过 Pages 25 MiB） |
 | `search-index` | 重建关键字索引 |
 | `scan` | 树 + 可选预生成旁路资源 |
 | `typecheck` | TypeScript |
@@ -82,6 +83,7 @@ dist/
 ## 部署
 
 Build：`npm run build` · Output：`dist` · Node：`22.22.2`  
+向量大模型：R2 桶 `webmd-models` + Function `/models/*`（见 `docs/deployment.md` §1.0）；构建会 strip >24 MiB 文件以便 Pages 通过校验。  
 → [docs/deployment.md](./docs/deployment.md)
 
 ---
