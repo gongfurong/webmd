@@ -290,7 +290,8 @@ export class SearchService {
 		const fields = scopesToFields(scopes);
 		// 关键词侧：范围全关则不做关键词检索（仍可走向量）
 		const keywordWanted = fields.length > 0;
-		const vectorWanted = query.vectorEnabled !== false;
+		// 仅当 UI 明确打开向量时启用（默认关；需模型加载成功后才勾选）
+		const vectorWanted = query.vectorEnabled === true;
 
 		const formatSet = new Set(query.facets?.format || []);
 		const folderSet = new Set(query.facets?.folder || []);

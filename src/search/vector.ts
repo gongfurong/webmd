@@ -368,7 +368,23 @@ export async function vectorSearch(
 	return { hits: top, queryVec };
 }
 
-export async function warmupVector(loadModel: boolean): Promise<void> {
+/** 模型 pipeline 是否已在内存就绪（可直接勾选启用） */
+export function isVectorEmbedderReady(): boolean {
+	return Boolean(embedder);
+}
+
+/**
+ * 预热：拉索引 + 可选加载 embedding 模型。
+ * @returns 需要模型时是否加载成功
+ */
+export async function warmupVector(loadModel: boolean): Promise<boolean> {
 	await loadVectorIndex();
-	if (loadModel) await getEmbedder();
+	if (!loadModel) return true;
+	const ex = await getEmbedder();
+	return Boolean(ex);
+}
+
+/** 确保索引 + 模型可用（供 UI 首次勾选） */
+export async function ensureVectorEmbedder(): Promise<boolean> {
+	return warmupVector(true);
 }

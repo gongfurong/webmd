@@ -4,7 +4,11 @@
  */
 import { getSearchService } from './service';
 import type { SearchHit, SearchScopes } from './types';
-import { getLastVectorDiag } from './vector';
+import {
+	ensureVectorEmbedder,
+	getLastVectorDiag,
+	isVectorEmbedderReady,
+} from './vector';
 import {
 	DEFAULT_SCOPES,
 	buildSearchFileTree,
@@ -116,8 +120,8 @@ const SHELL = `
 		</header>
 		<div class="search-shell">
 			<div class="search-input-row">
-				<label class="ms-vector-enable" title="启用浏览器内多语向量检索（multilingual-e5-small，约 118MB 首次下载；中英语义；与关键词混合）。取消则仅关键词。">
-					<input type="checkbox" data-vector-enable checked />
+				<label class="ms-vector-enable" title="默认关闭。首次勾选将加载模型（约 118MB，同源 /models 或镜像）；加载成功后才启用向量检索。">
+					<input type="checkbox" data-vector-enable />
 					<span class="ms-vector-enable__text">向量搜索</span>
 				</label>
 				<input type="search" class="ms-input" data-search-input placeholder="搜索文档…" autocomplete="off" enterkeyhint="search" />
@@ -1796,8 +1800,43 @@ export function mountSearch(mount: HTMLElement) {
 
 	const vectorEnableEl = () =>
 		root.querySelector<HTMLInputElement>('[data-vector-enable]');
+	const vectorEnableLabel = () =>
+		root.querySelector<HTMLLabelElement>('.ms-vector-enable');
+	const vectorEnableText = () =>
+		root.querySelector<HTMLElement>('.ms-vector-enable__text');
 
-	const isVectorEnabled = () => vectorEnableEl()?.checked !== false;
+	/** 仅勾选且模型已就绪时才真正开向量 */
+	const isVectorEnabled = () => {
+		const el = vectorEnableEl();
+		return Boolean(el?.checked && !el.disabled && isVectorEmbedderReady());
+	};
+
+	let vectorLoadInFlight = false;
+
+	const setVectorControlLoading = (loading: boolean) => {
+		const label = vectorEnableLabel();
+		const cb = vectorEnableEl();
+		const text = vectorEnableText();
+		if (!label || !cb || !text) return;
+		vectorLoadInFlight = loading;
+		label.classList.toggle('is-loading', loading);
+		cb.disabled = loading;
+		text.textContent = loading ? '加载模型' : '向量搜索';
+		label.title = loading
+			? '正在加载向量模型，请稍候…'
+			: '默认关闭。首次勾选将加载模型（约 118MB）；成功后才启用向量检索。';
+	};
+
+	const showVectorLoadError = (reason: string) => {
+		const msg = reason || '向量模型加载失败';
+		statusEl.textContent = '向量模型加载失败';
+		statusEl.title = msg;
+		try {
+			window.alert(`向量模型加载失败\n\n${msg}`);
+		} catch {
+			/* ignore */
+		}
+	};
 
 	const runLeftSearch = () => {
 		void (async () => {
@@ -1928,10 +1967,58 @@ export function mountSearch(mount: HTMLElement) {
 	};
 
 	input.addEventListener('input', () => scheduleLeft());
-	// 向量开关：改后立刻重搜（首次勾选会拉模型，状态栏提示）
+	// 向量开关：默认关；首次勾选先加载模型（按钮「加载模型」+ 置灰），成功才打钩启用
 	root
-		.querySelector('[data-vector-enable]')
-		?.addEventListener('change', () => scheduleLeft());
+		.querySelector<HTMLInputElement>('[data-vector-enable]')
+		?.addEventListener('click', (e) => {
+			const cb = e.currentTarget as HTMLInputElement;
+			if (vectorLoadInFlight) {
+				e.preventDefault();
+				return;
+			}
+			// click 时浏览器已切换 checked：true=用户想打开，false=想关闭
+			if (!cb.checked) {
+				// 关闭：立即仅关键字
+				scheduleLeft();
+				return;
+			}
+			// 想打开
+			if (isVectorEmbedderReady()) {
+				scheduleLeft();
+				return;
+			}
+			// 尚未加载：先取消勾选，加载完成再勾选
+			e.preventDefault();
+			cb.checked = false;
+			void (async () => {
+				setVectorControlLoading(true);
+				statusEl.textContent = '…';
+				statusEl.title =
+					'正在加载向量模型（e5-small，约 118MB；同源 /models 或镜像）…';
+				try {
+					const ok = await ensureVectorEmbedder();
+					setVectorControlLoading(false);
+					if (ok && isVectorEmbedderReady()) {
+						cb.checked = true;
+						statusEl.textContent = '';
+						statusEl.title = '向量模型已就绪';
+						scheduleLeft();
+					} else {
+						cb.checked = false;
+						const diag = getLastVectorDiag();
+						showVectorLoadError(
+							diag.reason || '无法加载 embedding 模型，请检查 /models 或网络',
+						);
+					}
+				} catch (err) {
+					setVectorControlLoading(false);
+					cb.checked = false;
+					showVectorLoadError(
+						err instanceof Error ? err.message : String(err),
+					);
+				}
+			})();
+		});
 
 	const syncMsTreeAccordionBtn = (side: Side) => {
 		const btn = root.querySelector<HTMLButtonElement>(
@@ -2119,22 +2206,10 @@ export function mountSearch(mount: HTMLElement) {
 	bindPanel(leftBody, 'left');
 	bindPanel(rightBody, 'right');
 
-	const checkAllIn = (panel: HTMLElement) => {
-		panel
-			.querySelectorAll<HTMLInputElement>(
-				'input[data-scope], input[data-facet], .ms-group-switch',
-			)
-			.forEach((box) => {
-				box.checked = true;
-				box.indeterminate = false;
-			});
-	};
-
 	root.querySelector('[data-reset-left]')?.addEventListener('click', (e) => {
 		e.preventDefault();
 		e.stopPropagation();
 		// 恢复默认：范围用 DEFAULT_SCOPES（文件夹默认关），格式/文件空 Set = 全选
-		// 勿 checkAllIn：会把「文件夹」强行勾上
 		leftScopes = { ...DEFAULT_SCOPES };
 		leftFormat = new Set();
 		leftFolder = new Set();

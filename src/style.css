@@ -819,12 +819,24 @@ html[data-theme='dark'] .webmd-ms-search .ms-caption-btn {
 .webmd-ms-search .ms-vector-enable:hover {
 	background: var(--bg-subtle, #eaeef2);
 }
+.webmd-ms-search .ms-vector-enable.is-loading {
+	opacity: 0.55;
+	cursor: wait;
+	pointer-events: none;
+	filter: grayscale(0.35);
+}
+.webmd-ms-search .ms-vector-enable.is-loading input {
+	cursor: wait;
+}
 .webmd-ms-search .ms-vector-enable input {
 	margin: 0;
 	width: 1rem;
 	height: 1rem;
 	accent-color: var(--accent, var(--accent-fg, #0969da));
 	cursor: pointer;
+}
+.webmd-ms-search .ms-vector-enable input:disabled {
+	cursor: wait;
 }
 .webmd-ms-search .ms-vector-enable__text {
 	font-weight: 550;
@@ -836,6 +848,9 @@ html[data-theme='dark'] .webmd-ms-search .ms-vector-enable {
 }
 html[data-theme='dark'] .webmd-ms-search .ms-vector-enable:hover {
 	background: var(--bg-muted, #30363d);
+}
+html[data-theme='dark'] .webmd-ms-search .ms-vector-enable.is-loading {
+	opacity: 0.5;
 }
 .webmd-ms-search .search-input-row .ms-input {
 	flex: 1 1 auto;
